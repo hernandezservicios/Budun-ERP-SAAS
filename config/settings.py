@@ -13,7 +13,6 @@ Reglas del proyecto (ver CLAUDE.md):
   nunca hardcodeada ni commiteada.
 """
 
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -23,9 +22,13 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Las apps propias del proyecto viven en apps/ (products, inventory, sales,
-# pos, tenants, etc. se irán agregando fase a fase). Se añade al path para
-# poder referenciarlas por su nombre corto (p. ej. "core") en INSTALLED_APPS.
-sys.path.insert(0, str(BASE_DIR / "apps"))
+# pos, tenants, etc. se irán agregando fase a fase) y se referencian en
+# INSTALLED_APPS con su ruta completa ("apps.<nombre>"). Django deriva
+# automáticamente la etiqueta corta ("tenants", "accounts", "core") del
+# último segmento de esa ruta, así que AUTH_USER_MODEL, related_name, etc.
+# siguen usando el nombre corto. (No se inserta apps/ en sys.path: hacerlo
+# junto con apps/__init__.py provoca que Django importe cada módulo por dos
+# rutas distintas y el registro de apps deje de reconocerlo.)
 
 # Carga variables desde .env (no versionado). En desarrollo Windows se crea
 # a partir de .env.example siguiendo docs/setup/windows-postgresql-pgadmin-step-by-step.md.
@@ -71,8 +74,14 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "core",
+    "apps.accounts",
+    "apps.tenants",
+    "apps.core",
 ]
+
+# Custom User Model (FASE 3). Debe fijarse antes de la primera migración
+# real de la app "auth"; ver apps/accounts/models.py para el porqué.
+AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -80,6 +89,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Requiere que AuthenticationMiddleware ya haya resuelto request.user.
+    "apps.tenants.middleware.TenantMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
