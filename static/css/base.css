@@ -1,0 +1,39 @@
+/*
+  Estilos base mínimos de FASE 1 (fundación).
+  El sistema de diseño completo (tipografía, componentes, tema azul/verde
+  definitivo) se construye en FASE 5 — Design System.
+*/
+
+:root {
+    --color-azul: #1d4ed8;
+    --color-verde: #15803d;
+    --color-texto: #1f2937;
+    --color-fondo: #f8fafc;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--color-texto);
+    background-color: var(--color-fondo);
+}
+
+.pagina-fundacion {
+    max-width: 640px;
+    margin: 10vh auto;
+    padding: 2rem;
+    text-align: center;
+}
+
+.pagina-fundacion h1 {
+    color: var(--color-azul);
+}
+
+.pagina-fundacion .nota {
+    color: var(--color-verde);
+    font-size: 0.9rem;
+}
