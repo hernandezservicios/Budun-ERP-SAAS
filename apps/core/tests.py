@@ -1,13 +1,15 @@
-from django.test import SimpleTestCase
+from django.test import TestCase
 from django.urls import reverse
 
 
-class HomePageTests(SimpleTestCase):
-    """Smoke tests de fundación (FASE 1).
+class HomePageTests(TestCase):
+    """Smoke tests de fundación, ahora contra PostgreSQL real (FASE 2).
 
-    Se usa SimpleTestCase (no TestCase) porque la vista `home` no accede a
-    la base de datos y esta fase no requiere una conexión PostgreSQL real
-    todavía (eso es alcance de FASE 2 — PostgreSQL Foundation).
+    Se usa TestCase (no SimpleTestCase) a propósito: Django crea y destruye
+    una base de datos de prueba real en PostgreSQL (usando el rol
+    erp_saas_app, que tiene privilegio CREATEDB) en cada corrida, lo que
+    verifica el ciclo de vida completo de la conexión PostgreSQL, no solo
+    la vista.
     """
 
     def test_home_page_responde_200(self):
