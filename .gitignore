@@ -1,0 +1,16 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+staticfiles/
+media-private/
+*.dump
+*.sql
+.DS_Store
+.vscode/
+.idea/
