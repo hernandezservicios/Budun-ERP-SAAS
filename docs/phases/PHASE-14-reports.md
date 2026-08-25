@@ -55,6 +55,34 @@ cliente" y "compras por proveedor" pedidos para esta fase deben:
   (ya filtran por `is_active=True` y por tenant) — no hace falta ningún
   cálculo adicional.
 
+## Nota de FASE 10 — Interfaz del motor comercial a consumir
+
+FASE 10 agregó el motor comercial completo (`apps/sales`, ver
+`docs/sales.md`). Los reportes pedidos para esta fase deben reutilizar,
+no recalcular:
+
+- **Ventas por cliente/producto/serial/vendedor**: agregar `SaleItem`
+  (`sale__customer`, `product`, `inventory_unit`, `sale__salesperson`
+  respectivamente) filtrado por `sale__status = CONFIRMED` (o
+  `RETURNED`/`PARTIALLY_RETURNED` si el reporte quiere neto de
+  devoluciones) — cada línea ya tiene su snapshot histórico
+  (`unit_price`, `tax_rate`, `total`), así que el reporte nunca necesita
+  volver a leer `Product` para calcular importes históricos.
+- **Cotizaciones/conversiones/proformas/facturas**: contar/agrupar por
+  `status` de `Quotation`/`ProformaInvoice`/`Sale` respectivamente;
+  "tasa de conversión" = cotizaciones en `CONVERTED` sobre el total no
+  `CANCELED`/`EXPIRED`.
+- **Pagos**: agregar `Payment` (`status=CONFIRMED`) por `method`/fecha;
+  usar `Sale.payment_status` (ya calculado, ver `docs/payments.md`) para
+  "ventas pendientes de cobro" sin recalcular la suma de pagos.
+- **Devoluciones**: agregar `ReturnItem`/`Return` — nunca inventar un
+  cálculo de "devuelto" distinto al que ya usa
+  `services._is_full_return`.
+- **Descuentos e impuestos**: ya están en el snapshot de cada línea
+  (`discount_amount`, `tax_amount`) — un reporte de "descuentos
+  otorgados" o "impuesto recaudado" es una agregación directa sobre
+  `SaleItem`, sin recalcular nada.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

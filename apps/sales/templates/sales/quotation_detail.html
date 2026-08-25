@@ -1,0 +1,216 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ quotation.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'sales:quotation_list' %}">Cotizaciones</a></li>
+        <li aria-current="page">{{ quotation.number }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ quotation.number }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {% if quotation.customer %}{{ quotation.customer.display_name }}{% else %}Consumidor final{% endif %}
+            · Emitida {{ quotation.issue_date|date:"d M Y" }}
+            {% if quotation.expiry_date %} · Vence {{ quotation.expiry_date|date:"d M Y" }}{% endif %}
+            · <span class="badge badge--azul">{{ quotation.get_status_display }}</span>
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'sales:quotation_print' quotation.pk %}" target="_blank">Imprimir</a>
+        <form action="{% url 'sales:quotation_duplicate' quotation.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Duplicar</button>
+        </form>
+        {% if quotation.status == "draft" %}
+        <form action="{% url 'sales:quotation_status' quotation.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}<input type="hidden" name="accion" value="send">
+            <button type="submit" class="btn btn--primario">Enviar</button>
+        </form>
+        {% endif %}
+        {% if quotation.status == "sent" %}
+        <form action="{% url 'sales:quotation_status' quotation.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}<input type="hidden" name="accion" value="accept">
+            <button type="submit" class="btn btn--primario">Aceptar</button>
+        </form>
+        <form action="{% url 'sales:quotation_status' quotation.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}<input type="hidden" name="accion" value="reject">
+            <button type="submit" class="btn btn--contorno">Rechazar</button>
+        </form>
+        {% endif %}
+        {% if quotation.status == "draft" or quotation.status == "sent" or quotation.status == "accepted" %}
+        <form action="{% url 'sales:quotation_status' quotation.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cancelar esta cotización?');">
+            {% csrf_token %}<input type="hidden" name="accion" value="cancel">
+            <button type="submit" class="btn btn--contorno">Cancelar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if quotation.status == "draft" or quotation.status == "sent" or quotation.status == "accepted" %}
+<div class="acciones-rapidas" style="margin-bottom: var(--espacio-6);">
+    {% if not converted_proforma %}
+    <form action="{% url 'sales:quotation_convert_proforma' quotation.pk %}" method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--secundario">Convertir a proforma</button>
+    </form>
+    {% endif %}
+    {% if not converted_sale %}
+    <form action="{% url 'sales:quotation_convert_sale' quotation.pk %}" method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--secundario">Convertir a venta directa</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if converted_proforma %}
+<div class="alerta alerta--info" role="status">Convertida a la proforma <a href="{% url 'sales:proforma_detail' converted_proforma.pk %}">{{ converted_proforma.number }}</a>.</div>
+{% endif %}
+{% if converted_sale %}
+<div class="alerta alerta--info" role="status">Convertida a la venta <a href="{% url 'sales:sale_detail' converted_sale.pk %}">{{ converted_sale.number }}</a>.</div>
+{% endif %}
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones de la cotización">
+        <button class="tabs__boton" role="tab" id="tab-lineas" aria-controls="panel-lineas" aria-selected="true" tabindex="0">Líneas</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ attachments|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-lineas" role="tabpanel" aria-labelledby="tab-lineas" class="tabs__panel">
+        {% if items %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Descripción</th>
+                        <th>Cantidad</th>
+                        <th>Precio unitario</th>
+                        <th>Descuento</th>
+                        <th>Impuesto</th>
+                        <th>Total</th>
+                        {% if quotation.status == "draft" %}<th><span class="visualmente-oculto">Acciones</span></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.description }} ({{ item.sku_snapshot }}){% if item.inventory_unit %} — {% firstof item.inventory_unit.serial item.inventory_unit.imei_1 %}{% endif %}</td>
+                        <td>{{ item.quantity|floatformat:"-3" }}</td>
+                        <td>${{ item.unit_price }}</td>
+                        <td>${{ item.discount_amount }}</td>
+                        <td>${{ item.tax_amount }}</td>
+                        <td>${{ item.total }}</td>
+                        {% if quotation.status == "draft" %}
+                        <td>
+                            <form action="{% url 'sales:quotation_item_delete' quotation.pk item.pk %}" method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta">
+            <div class="estado-vacio__icono" aria-hidden="true">🧾</div>
+            <h3>Sin líneas todavía</h3>
+        </div>
+        {% endif %}
+
+        <div class="kpi-grid" style="margin: var(--espacio-6) 0;">
+            <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor">${{ quotation.subtotal }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor">${{ quotation.discount_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor">${{ quotation.tax_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Total</p><p class="kpi__valor">${{ quotation.total }}</p></div>
+        </div>
+
+        {% if quotation.status == "draft" %}
+        <div class="tarjeta">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Agregar línea</h3>
+                <form method="post" action="{% url 'sales:quotation_item_add' quotation.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in item_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Agregar</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        <div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'sales:quotation_attachment_upload' quotation.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% for field in attachment_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+        {% if attachments %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Archivo</th><th>Categoría</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for adjunto in attachments %}
+                    <tr>
+                        <td>{{ adjunto.original_filename }}</td>
+                        <td>{{ adjunto.get_category_display }}</td>
+                        <td>{{ adjunto.uploaded_at|date:"d M Y" }}</td>
+                        <td>
+                            <a class="btn btn--contorno btn--sm" href="{% url 'sales:quotation_attachment_download' quotation.pk adjunto.pk %}">Descargar</a>
+                            <form action="{% url 'sales:quotation_attachment_delete' quotation.pk adjunto.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos todavía</h3></div>
+        {% endif %}
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Acción</th><th>Detalles</th><th>Usuario</th><th>Fecha</th></tr></thead>
+                <tbody>
+                    {% for evento in activity_log %}
+                    <tr>
+                        <td>{{ evento.get_action_display }}</td>
+                        <td>{{ evento.details|default:"—" }}</td>
+                        <td>{% firstof evento.user.get_full_name evento.user.email "—" %}</td>
+                        <td>{{ evento.created_at|date:"d M Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕓</div><h3>Sin actividad registrada</h3></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -21,6 +21,17 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
 - [ ] Git commit creado.
 
+## Nota de FASE 10 — Revisado, sin cambios de diseño necesarios
+
+FASE 10 agregó el motor comercial de los TENANTS (`apps/sales`, ventas
+de cada empresa cliente del SaaS) — conceptualmente distinto del
+Billing del propio SaaS (lo que Budun ERP le cobra a cada tenant por
+usar la plataforma). Revisado explícitamente: no hay ninguna relación
+directa; esta fase no necesita consumir `apps.sales`. Si en el futuro
+se quisiera facturar a un tenant basándose en su volumen de ventas
+(p. ej. un plan por transacción), sería una agregación de solo lectura
+sobre `Sale`/`Payment`, nunca una dependencia estructural.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

@@ -1,0 +1,215 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ proforma.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'sales:proforma_list' %}">Proformas</a></li>
+        <li aria-current="page">{{ proforma.number }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ proforma.number }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {% if proforma.customer %}{{ proforma.customer.display_name }}{% else %}Consumidor final{% endif %}
+            · Emitida {{ proforma.issue_date|date:"d M Y" }}
+            {% if proforma.expiry_date %} · Vence {{ proforma.expiry_date|date:"d M Y" }}{% endif %}
+            · <span class="badge badge--azul">{{ proforma.get_status_display }}</span>
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'sales:proforma_print' proforma.pk %}" target="_blank">Imprimir</a>
+        {% if proforma.status == "draft" %}
+        <form action="{% url 'sales:proforma_status' proforma.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}<input type="hidden" name="accion" value="issue">
+            <button type="submit" class="btn btn--primario">Emitir</button>
+        </form>
+        {% endif %}
+        {% if proforma.status == "draft" or proforma.status == "issued" %}
+        <form action="{% url 'sales:proforma_status' proforma.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cancelar esta proforma? Se liberará cualquier reserva activa.');">
+            {% csrf_token %}<input type="hidden" name="accion" value="cancel">
+            <button type="submit" class="btn btn--contorno">Cancelar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if proforma.status == "issued" %}
+<div class="acciones-rapidas" style="margin-bottom: var(--espacio-6);">
+    <form action="{% url 'sales:proforma_reserve_stock' proforma.pk %}" method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--secundario">Reservar stock</button>
+    </form>
+    {% if not converted_sale %}
+    <form action="{% url 'sales:proforma_convert_sale' proforma.pk %}" method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--secundario">Convertir a venta</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if proforma.source_quotation %}
+<div class="alerta alerta--info" role="status">Originada en la cotización <a href="{% url 'sales:quotation_detail' proforma.source_quotation.pk %}">{{ proforma.source_quotation.number }}</a>.</div>
+{% endif %}
+{% if converted_sale %}
+<div class="alerta alerta--info" role="status">Convertida a la venta <a href="{% url 'sales:sale_detail' converted_sale.pk %}">{{ converted_sale.number }}</a>.</div>
+{% endif %}
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones de la proforma">
+        <button class="tabs__boton" role="tab" id="tab-lineas" aria-controls="panel-lineas" aria-selected="true" tabindex="0">Líneas</button>
+        <button class="tabs__boton" role="tab" id="tab-reservas" aria-controls="panel-reservas" aria-selected="false" tabindex="-1">Reservas ({{ reservations|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ attachments|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-lineas" role="tabpanel" aria-labelledby="tab-lineas" class="tabs__panel">
+        {% if items %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Impuesto</th><th>Total</th>
+                        {% if proforma.status == "draft" %}<th><span class="visualmente-oculto">Acciones</span></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.description }} ({{ item.sku_snapshot }}){% if item.inventory_unit %} — {% firstof item.inventory_unit.serial item.inventory_unit.imei_1 %}{% endif %}</td>
+                        <td>{{ item.quantity|floatformat:"-3" }}</td>
+                        <td>${{ item.unit_price }}</td>
+                        <td>${{ item.discount_amount }}</td>
+                        <td>${{ item.tax_amount }}</td>
+                        <td>${{ item.total }}</td>
+                        {% if proforma.status == "draft" %}
+                        <td>
+                            <form action="{% url 'sales:proforma_item_delete' proforma.pk item.pk %}" method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin líneas todavía</h3></div>
+        {% endif %}
+
+        <div class="kpi-grid" style="margin: var(--espacio-6) 0;">
+            <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor">${{ proforma.subtotal }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor">${{ proforma.discount_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor">${{ proforma.tax_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Total</p><p class="kpi__valor">${{ proforma.total }}</p></div>
+        </div>
+
+        {% if proforma.status == "draft" %}
+        <div class="tarjeta">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Agregar línea</h3>
+                <form method="post" action="{% url 'sales:proforma_item_add' proforma.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in item_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Agregar</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-reservas" role="tabpanel" aria-labelledby="tab-reservas" class="tabs__panel" hidden>
+        {% if reservations %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Producto</th><th>Cantidad / unidad</th><th>Estado</th><th>Creada</th></tr></thead>
+                <tbody>
+                    {% for reserva in reservations %}
+                    <tr>
+                        <td>{{ reserva.product.name }}</td>
+                        <td>{% if reserva.inventory_unit %}{% firstof reserva.inventory_unit.serial reserva.inventory_unit.imei_1 %}{% else %}{{ reserva.quantity|floatformat:"-3" }}{% endif %}</td>
+                        <td><span class="badge badge--azul">{{ reserva.get_status_display }}</span></td>
+                        <td>{{ reserva.created_at|date:"d M Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📦</div><h3>Sin reservas todavía</h3><p>Emite la proforma y usa «Reservar stock».</p></div>
+        {% endif %}
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        <div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'sales:proforma_attachment_upload' proforma.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% for field in attachment_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+        {% if attachments %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Archivo</th><th>Categoría</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for adjunto in attachments %}
+                    <tr>
+                        <td>{{ adjunto.original_filename }}</td>
+                        <td>{{ adjunto.get_category_display }}</td>
+                        <td>{{ adjunto.uploaded_at|date:"d M Y" }}</td>
+                        <td>
+                            <a class="btn btn--contorno btn--sm" href="{% url 'sales:proforma_attachment_download' proforma.pk adjunto.pk %}">Descargar</a>
+                            <form action="{% url 'sales:proforma_attachment_delete' proforma.pk adjunto.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos todavía</h3></div>
+        {% endif %}
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Acción</th><th>Detalles</th><th>Usuario</th><th>Fecha</th></tr></thead>
+                <tbody>
+                    {% for evento in activity_log %}
+                    <tr>
+                        <td>{{ evento.get_action_display }}</td>
+                        <td>{{ evento.details|default:"—" }}</td>
+                        <td>{% firstof evento.user.get_full_name evento.user.email "—" %}</td>
+                        <td>{{ evento.created_at|date:"d M Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕓</div><h3>Sin actividad registrada</h3></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Nueva devolución — {{ sale.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'sales:sale_list' %}">Ventas</a></li>
+        <li><a href="{% url 'sales:sale_detail' sale.pk %}">{{ sale.number }}</a></li>
+        <li aria-current="page">Nueva devolución</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Registrar devolución</h1>
+    <p class="encabezado-pagina__descripcion">
+        Marca las líneas a devolver. Para productos serializados se devuelve la unidad completa; para productos por
+        cantidad, indica cuánto se devuelve.
+    </p>
+</div>
+
+<div class="tarjeta">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ formset.management_form }}
+            <div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+                <table class="tabla">
+                    <thead>
+                        <tr>
+                            <th>Devolver</th>
+                            <th>Línea</th>
+                            <th>Cantidad vendida</th>
+                            <th>Cantidad a devolver</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item, form in filas %}
+                        <tr>
+                            <td>{{ form.include }}{{ form.sale_item_id }}</td>
+                            <td>{{ item.description }} ({{ item.sku_snapshot }}){% if item.inventory_unit %} — {% firstof item.inventory_unit.serial item.inventory_unit.imei_1 %}{% endif %}</td>
+                            <td>{{ item.quantity|floatformat:"-3" }}</td>
+                            <td>
+                                {% if item.inventory_unit %}
+                                <span class="campo__ayuda">Unidad completa</span>
+                                {% else %}
+                                {{ form.quantity_returned }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if form.errors %}
+                        <tr><td colspan="4"><ul class="errores">{% for campo, errores in form.errors.items %}{% for error in errores %}<li>{{ error }}</li>{% endfor %}{% endfor %}</ul></td></tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% include "customers/_campo.html" with field=reason_form.reason %}
+
+            <button type="submit" class="btn btn--primario">Registrar devolución</button>
+            <a class="btn btn--contorno" href="{% url 'sales:sale_detail' sale.pk %}">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

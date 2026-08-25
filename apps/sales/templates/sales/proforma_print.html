@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}{{ proforma.number }} — Imprimir{% endblock %}
+
+{% block body %}
+<style>
+    .documento-imprimible { max-width: 800px; margin: var(--espacio-8) auto; padding: 0 var(--espacio-4); }
+    @media print {
+        .no-imprimir { display: none !important; }
+        .documento-imprimible { margin: 0; max-width: none; }
+    }
+</style>
+<div class="documento-imprimible">
+    <div class="no-imprimir" style="margin-bottom: var(--espacio-4); display:flex; gap: var(--espacio-2);">
+        <button type="button" class="btn btn--primario" onclick="window.print()">Imprimir / Guardar PDF</button>
+        <a class="btn btn--contorno" href="{% url 'sales:proforma_detail' proforma.pk %}">Volver</a>
+    </div>
+
+    <h1>Proforma {{ proforma.number }}</h1>
+    <p>
+        <strong>Cliente:</strong> {% if proforma.customer %}{{ proforma.customer.display_name }}{% else %}Consumidor final{% endif %}<br>
+        <strong>Fecha de emisión:</strong> {{ proforma.issue_date|date:"d M Y" }}<br>
+        {% if proforma.expiry_date %}<strong>Válida hasta:</strong> {{ proforma.expiry_date|date:"d M Y" }}<br>{% endif %}
+        <strong>Condiciones de pago:</strong> {{ proforma.get_payment_terms_display }}
+    </p>
+
+    <div class="tabla-envoltorio">
+        <table class="tabla">
+            <thead><tr><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Impuesto</th><th>Total</th></tr></thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.description }} ({{ item.sku_snapshot }})</td>
+                    <td>{{ item.quantity|floatformat:"-3" }}</td>
+                    <td>${{ item.unit_price }}</td>
+                    <td>${{ item.discount_amount }}</td>
+                    <td>${{ item.tax_amount }}</td>
+                    <td>${{ item.total }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <p style="text-align:right; margin-top: var(--espacio-4);">
+        Subtotal: ${{ proforma.subtotal }}<br>
+        Descuento: ${{ proforma.discount_total }}<br>
+        Impuesto: ${{ proforma.tax_total }}<br>
+        <strong>Total: ${{ proforma.total }} {{ proforma.currency }}</strong>
+    </p>
+
+    {% if proforma.notes %}<p><strong>Notas:</strong> {{ proforma.notes|linebreaksbr }}</p>{% endif %}
+    {% if proforma.terms %}<p><strong>Términos y condiciones:</strong> {{ proforma.terms|linebreaksbr }}</p>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}{{ quotation.number }} — Imprimir{% endblock %}
+
+{% block body %}
+<style>
+    .documento-imprimible { max-width: 800px; margin: var(--espacio-8) auto; padding: 0 var(--espacio-4); }
+    @media print {
+        .no-imprimir { display: none !important; }
+        .documento-imprimible { margin: 0; max-width: none; }
+    }
+</style>
+<div class="documento-imprimible">
+    <div class="no-imprimir" style="margin-bottom: var(--espacio-4); display:flex; gap: var(--espacio-2);">
+        <button type="button" class="btn btn--primario" onclick="window.print()">Imprimir / Guardar PDF</button>
+        <a class="btn btn--contorno" href="{% url 'sales:quotation_detail' quotation.pk %}">Volver</a>
+    </div>
+
+    <h1>Cotización {{ quotation.number }}</h1>
+    <p>
+        <strong>Cliente:</strong> {% if quotation.customer %}{{ quotation.customer.display_name }}{% else %}Consumidor final{% endif %}<br>
+        <strong>Fecha de emisión:</strong> {{ quotation.issue_date|date:"d M Y" }}<br>
+        {% if quotation.expiry_date %}<strong>Válida hasta:</strong> {{ quotation.expiry_date|date:"d M Y" }}<br>{% endif %}
+        <strong>Condiciones de pago:</strong> {{ quotation.get_payment_terms_display }}
+    </p>
+
+    <div class="tabla-envoltorio">
+        <table class="tabla">
+            <thead><tr><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Impuesto</th><th>Total</th></tr></thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.description }} ({{ item.sku_snapshot }})</td>
+                    <td>{{ item.quantity|floatformat:"-3" }}</td>
+                    <td>${{ item.unit_price }}</td>
+                    <td>${{ item.discount_amount }}</td>
+                    <td>${{ item.tax_amount }}</td>
+                    <td>${{ item.total }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <p style="text-align:right; margin-top: var(--espacio-4);">
+        Subtotal: ${{ quotation.subtotal }}<br>
+        Descuento: ${{ quotation.discount_total }}<br>
+        Impuesto: ${{ quotation.tax_total }}<br>
+        <strong>Total: ${{ quotation.total }} {{ quotation.currency }}</strong>
+    </p>
+
+    {% if quotation.notes %}<p><strong>Notas:</strong> {{ quotation.notes|linebreaksbr }}</p>{% endif %}
+    {% if quotation.terms %}<p><strong>Términos y condiciones:</strong> {{ quotation.terms|linebreaksbr }}</p>{% endif %}
+</div>
+{% endblock %}

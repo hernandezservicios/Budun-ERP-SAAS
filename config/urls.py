@@ -1,17 +1,20 @@
 """
 URLs raíz del proyecto.
 
-FASE 8 agregó Productos e Inventario (`/inventario/...`). FASE 9 agrega
+FASE 8 agregó Productos e Inventario (`/inventario/...`). FASE 9 agregó
 Clientes y Proveedores (`/clientes/...`, `/proveedores/...`, montado en
 la raíz porque el propio `apps.customers.urls` ya define esos prefijos).
-Cada fase futura agregará sus propias rutas (p. ej. `/api/v1/` en
-FASE 15) sin anticiparlas aquí.
+FASE 10 agrega el motor comercial (`/cotizaciones/...`, `/proformas/...`,
+`/ventas/...`, `/reservas/...`, mismo patrón de montaje en la raíz). Cada
+fase futura agregará sus propias rutas (p. ej. `/api/v1/` en FASE 15)
+sin anticiparlas aquí.
 
 Deliberadamente NO se sirve `MEDIA_URL`/`MEDIA_ROOT` aquí (ni en
-desarrollo ni en producción): los documentos de Clientes/Proveedores
-solo se descargan a través de una vista protegida (tenant + login +
-pertenencia verificados), nunca como archivo estático público — ver
-`apps/customers/views.py` y `docs/customer-documents.md`.
+desarrollo ni en producción): los documentos de Clientes/Proveedores y
+los adjuntos de Cotizaciones/Proformas/Ventas solo se descargan a través
+de una vista protegida (tenant + login + pertenencia verificados), nunca
+como archivo estático público — ver `apps/customers/views.py`,
+`apps/sales/views.py` y `docs/customer-documents.md`.
 """
 
 from django.contrib import admin
@@ -23,5 +26,6 @@ urlpatterns = [
     path("panel/", include("apps.dashboard.urls")),
     path("inventario/", include("apps.inventory.urls")),
     path("", include("apps.customers.urls")),
+    path("", include("apps.sales.urls")),
     path("", include("apps.core.urls")),
 ]

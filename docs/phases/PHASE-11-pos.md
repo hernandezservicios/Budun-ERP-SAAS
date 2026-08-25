@@ -61,6 +61,46 @@ búsqueda ni consultar `Customer` directamente sin pasar por
 contado) debe seguir siendo válida: `Sale.customer` en FASE 10 debería
 ser opcional para ese caso.
 
+## Nota de FASE 10 — El POS es una interfaz sobre el motor comercial, no un motor propio
+
+FASE 10 construyó el motor comercial completo (`apps/sales`, ver
+`docs/sales.md`) explícitamente para que este POS sea una interfaz
+operacional sobre él — "el POS no debe tener su propio motor de
+ventas". Reutilizar tal cual:
+
+- **Buscar cliente**: `apps.customers.services.list_customers`/
+  `get_active_customers` (ya lo anticipaba la nota de FASE 9 arriba).
+- **Buscar producto / IMEI / serie**: `apps.inventory.services.search_catalog`
+  (ya lo anticipaba la nota de FASE 8 arriba) — el resultado
+  (`SearchResult`) ya indica si hace falta pedir IMEI/serie
+  (`requires_unit_selection`) o si ya resolvió una unidad concreta.
+- **Agregar al carrito**: el "carrito" del POS es, en términos de FASE 10,
+  una `Sale` en estado `DRAFT` — cada producto agregado es
+  `services.add_sale_item(sale, product=..., quantity=..., inventory_unit=...)`.
+  No inventar una estructura de carrito paralela en memoria/sesión que
+  luego haya que traducir a `Sale`; usar la `Sale` en `DRAFT` como el
+  carrito real desde el primer clic evita esa traducción y hereda
+  gratis el cálculo de totales con snapshot (`docs/sales.md`).
+- **Reservar**: `services.create_reservation` (opcional, cuando el POS
+  quiera apartar stock antes de cobrar — no es obligatorio en el flujo
+  de mostrador típico).
+- **Confirmar / cobrar**: `services.confirm_sale` seguido de uno o más
+  `services.record_payment` (efectivo + tarjeta, ver `docs/payments.md`)
+  — el "cambio" a entregar es `pago_recibido − sale.total`, calculado
+  en la vista/plantilla del POS, no en `apps.sales`.
+- **Imprimir recibo**: reutilizar `sale_receipt.html`/la vista
+  `SaleReceiptView` de FASE 10 (ver `docs/invoice-documents.md`), no
+  crear una segunda plantilla de recibo.
+- **Cancelar**: `services.cancel_sale` (solo válido en `DRAFT`, es decir,
+  antes de confirmar/cobrar — igual que el resto del sistema).
+- **Devolver**: `services.create_return` (ver `docs/returns.md`).
+- **No duplicados**: el mismo `SaleItem`/`InventoryUnit` no debe poder
+  agregarse dos veces al carrito — la máquina de estados de FASE 8
+  (`EN_STOCK`/`RESERVADO` → `VENDIDO`) ya lo impide a nivel de
+  inventario al confirmar; el POS además debe evitar agregar la misma
+  unidad dos veces al carrito EN PANTALLA (antes de confirmar), por
+  UX, revisando `unit.pk` en el estado del carrito.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

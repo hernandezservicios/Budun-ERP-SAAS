@@ -1,0 +1,121 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Ventas — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Ventas</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Ventas</h1>
+        <p class="encabezado-pagina__descripcion">Transacciones comerciales definitivas — confirmar aplica efectos reales en inventario.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'sales:reservation_list' %}">Reservas</a>
+        <a class="btn btn--primario" href="{% url 'sales:sale_create' %}">Nueva venta directa</a>
+    </div>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);" role="search" aria-label="Buscar y filtrar ventas">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        <div class="campo" style="flex:2; min-width:200px; margin-bottom:0;">
+            <label for="id_q">Buscar por número</label>
+            <input type="text" id="id_q" name="q" class="input" value="{{ query }}">
+        </div>
+        <div class="campo" style="min-width:180px; margin-bottom:0;">
+            <label for="id_estado">Estado</label>
+            <select id="id_estado" name="estado" class="select">
+                <option value="">Todos</option>
+                {% for valor, etiqueta in estados %}
+                <option value="{{ valor }}" {% if estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="campo" style="min-width:180px; margin-bottom:0;">
+            <label for="id_estado_pago">Estado de pago</label>
+            <select id="id_estado_pago" name="estado_pago" class="select">
+                <option value="">Todos</option>
+                {% for valor, etiqueta in estados_pago %}
+                <option value="{{ valor }}" {% if estado_pago == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+{% if sales %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Número</th>
+                <th>Cliente</th>
+                <th>Fecha</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Pago</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sale in sales %}
+            <tr>
+                <td><a href="{% url 'sales:sale_detail' sale.pk %}">{{ sale.number }}</a></td>
+                <td>{% if sale.customer %}{{ sale.customer.display_name }}{% else %}Consumidor final{% endif %}</td>
+                <td>{{ sale.issue_date|date:"d M Y" }}</td>
+                <td>${{ sale.total }}</td>
+                <td>
+                    {% if sale.status == "confirmed" %}
+                    <span class="badge badge--verde">{{ sale.get_status_display }}</span>
+                    {% elif sale.status == "canceled" %}
+                    <span class="badge badge--peligro">{{ sale.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge--neutro">{{ sale.get_status_display }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if sale.payment_status == "paid" %}
+                    <span class="badge badge--verde">{{ sale.get_payment_status_display }}</span>
+                    {% elif sale.payment_status == "unpaid" %}
+                    <span class="badge badge--peligro">{{ sale.get_payment_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge--advertencia">{{ sale.get_payment_status_display }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if is_paginated %}
+<nav class="paginacion" aria-label="Paginación de ventas">
+    {% if page_obj.has_previous %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}estado={{ estado }}&estado_pago={{ estado_pago }}&page={{ page_obj.previous_page_number }}">&laquo; Anterior</a>
+    {% else %}
+    <span class="deshabilitado">&laquo; Anterior</span>
+    {% endif %}
+    <span class="actual">{{ page_obj.number }}</span>
+    <span>de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}estado={{ estado }}&estado_pago={{ estado_pago }}&page={{ page_obj.next_page_number }}">Siguiente &raquo;</a>
+    {% else %}
+    <span class="deshabilitado">Siguiente &raquo;</span>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">🧾</div>
+    <h3>Todavía no tienes ventas</h3>
+    <p>Crea una venta directa o convierte una cotización/proforma.</p>
+    <a class="btn btn--primario" href="{% url 'sales:sale_create' %}">Nueva venta directa</a>
+</div>
+{% endif %}
+{% endblock %}

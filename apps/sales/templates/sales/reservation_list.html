@@ -1,0 +1,88 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Reservas — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'sales:sale_list' %}">Ventas</a></li>
+        <li aria-current="page">Reservas</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Reservas</h1>
+        <p class="encabezado-pagina__descripcion">Stock apartado por una proforma u operación manual — nunca reduce el inventario real.</p>
+    </div>
+</div>
+
+{% if reservations %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Cantidad / unidad</th>
+                <th>Cliente</th>
+                <th>Origen</th>
+                <th>Estado</th>
+                <th>Creada</th>
+                <th><span class="visualmente-oculto">Acciones</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for reserva in reservations %}
+            <tr>
+                <td>{{ reserva.product.name }}</td>
+                <td>{% if reserva.inventory_unit %}{% firstof reserva.inventory_unit.serial reserva.inventory_unit.imei_1 %}{% else %}{{ reserva.quantity|floatformat:"-3" }}{% endif %}</td>
+                <td>{% if reserva.customer %}{{ reserva.customer.display_name }}{% else %}—{% endif %}</td>
+                <td>{{ reserva.get_source_type_display }}</td>
+                <td>
+                    {% if reserva.status == "active" %}
+                    <span class="badge badge--azul">{{ reserva.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge--neutro">{{ reserva.get_status_display }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ reserva.created_at|date:"d M Y H:i" }}</td>
+                <td>
+                    {% if reserva.status == "active" %}
+                    <form action="{% url 'sales:reservation_release' reserva.pk %}" method="post" onsubmit="return confirm('¿Liberar esta reserva?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--contorno btn--sm">Liberar</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if is_paginated %}
+<nav class="paginacion" aria-label="Paginación de reservas">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}">&laquo; Anterior</a>
+    {% else %}
+    <span class="deshabilitado">&laquo; Anterior</span>
+    {% endif %}
+    <span class="actual">{{ page_obj.number }}</span>
+    <span>de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}">Siguiente &raquo;</a>
+    {% else %}
+    <span class="deshabilitado">Siguiente &raquo;</span>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">📦</div>
+    <h3>Sin reservas todavía</h3>
+    <p>Emite una proforma y usa «Reservar stock» para apartar inventario.</p>
+</div>
+{% endif %}
+{% endblock %}

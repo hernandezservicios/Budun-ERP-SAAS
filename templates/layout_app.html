@@ -31,6 +31,24 @@
                 </a>
             </li>
             <li>
+                <a class="sidebar__enlace" href="{% url 'sales:quotation_list' %}"
+                   {% if request.resolver_match.url_name|slice:":9" == "quotation" %}aria-current="page"{% endif %}>
+                    Cotizaciones
+                </a>
+            </li>
+            <li>
+                <a class="sidebar__enlace" href="{% url 'sales:proforma_list' %}"
+                   {% if request.resolver_match.url_name|slice:":8" == "proforma" %}aria-current="page"{% endif %}>
+                    Proformas
+                </a>
+            </li>
+            <li>
+                <a class="sidebar__enlace" href="{% url 'sales:sale_list' %}"
+                   {% if request.resolver_match.url_name|slice:":4" == "sale" %}aria-current="page"{% endif %}>
+                    Ventas
+                </a>
+            </li>
+            <li>
                 <a class="sidebar__enlace" href="{% url 'accounts:perfil' %}"
                    {% if request.resolver_match.url_name == 'perfil' %}aria-current="page"{% endif %}>
                     Mi perfil

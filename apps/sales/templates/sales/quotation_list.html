@@ -1,0 +1,95 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Cotizaciones — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Cotizaciones</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Cotizaciones</h1>
+        <p class="encabezado-pagina__descripcion">Propuestas comerciales sin compromiso, previas a una proforma o venta.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--primario" href="{% url 'sales:quotation_create' %}">Nueva cotización</a>
+    </div>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);" role="search" aria-label="Buscar y filtrar cotizaciones">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        <div class="campo" style="flex:2; min-width:200px; margin-bottom:0;">
+            <label for="id_q">Buscar por número</label>
+            <input type="text" id="id_q" name="q" class="input" value="{{ query }}">
+        </div>
+        <div class="campo" style="min-width:180px; margin-bottom:0;">
+            <label for="id_estado">Estado</label>
+            <select id="id_estado" name="estado" class="select">
+                <option value="">Todos</option>
+                {% for valor, etiqueta in estados %}
+                <option value="{{ valor }}" {% if estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+{% if quotations %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Número</th>
+                <th>Cliente</th>
+                <th>Fecha</th>
+                <th>Vencimiento</th>
+                <th>Total</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for quotation in quotations %}
+            <tr>
+                <td><a href="{% url 'sales:quotation_detail' quotation.pk %}">{{ quotation.number }}</a></td>
+                <td>{% if quotation.customer %}{{ quotation.customer.display_name }}{% else %}Consumidor final{% endif %}</td>
+                <td>{{ quotation.issue_date|date:"d M Y" }}</td>
+                <td>{% if quotation.expiry_date %}{{ quotation.expiry_date|date:"d M Y" }}{% else %}—{% endif %}</td>
+                <td>${{ quotation.total }}</td>
+                <td><span class="badge badge--azul">{{ quotation.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if is_paginated %}
+<nav class="paginacion" aria-label="Paginación de cotizaciones">
+    {% if page_obj.has_previous %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}estado={{ estado }}&page={{ page_obj.previous_page_number }}">&laquo; Anterior</a>
+    {% else %}
+    <span class="deshabilitado">&laquo; Anterior</span>
+    {% endif %}
+    <span class="actual">{{ page_obj.number }}</span>
+    <span>de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}estado={{ estado }}&page={{ page_obj.next_page_number }}">Siguiente &raquo;</a>
+    {% else %}
+    <span class="deshabilitado">Siguiente &raquo;</span>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">📄</div>
+    <h3>Todavía no tienes cotizaciones</h3>
+    <p>Crea tu primera cotización para empezar el flujo comercial.</p>
+    <a class="btn btn--primario" href="{% url 'sales:quotation_create' %}">Nueva cotización</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -63,6 +63,24 @@ reinventarla:
   proveedor: la pestaña "Historial" del detalle de proveedor (FASE 9)
   hoy muestra un estado vacío explícito esperando esta fase.
 
+## Nota de FASE 10 — Interfaz del motor comercial a consumir (trazabilidad, no ventas)
+
+FASE 10 construyó `apps/sales` (ver `docs/sales.md`). Compras no
+necesita la mayoría de ese motor (Cotizaciones/Proformas/Pagos son
+conceptos de venta, no de compra), pero sí debe respetar:
+
+- **No duplicar numeración**: si Compras necesita su propio número
+  comercial, reutilizar el patrón de `DocumentSequence`/
+  `generate_document_number` (agregando un `DocumentType.PURCHASE`), no
+  inventar un esquema de numeración distinto.
+- **`InventoryUnit.purchase_origin`** (texto libre provisional desde
+  FASE 8) debería reemplazarse por una FK real de `Purchase`/
+  `PurchaseItem` hacia `InventoryUnit` — ya anticipado en la nota de
+  FASE 8 arriba, sigue vigente sin cambios.
+- El `salesperson`/comprador responsable de una compra puede seguir el
+  mismo patrón que `Sale.salesperson` (FK a usuario, `SET_NULL`) para
+  consistencia, aunque es una decisión de esta fase.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

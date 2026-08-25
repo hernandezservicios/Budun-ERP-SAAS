@@ -1,0 +1,95 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Proformas — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Proformas</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Proformas</h1>
+        <p class="encabezado-pagina__descripcion">Documento intermedio: puede reservar stock y convertirse en venta.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--primario" href="{% url 'sales:proforma_create' %}">Nueva proforma</a>
+    </div>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);" role="search" aria-label="Buscar y filtrar proformas">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        <div class="campo" style="flex:2; min-width:200px; margin-bottom:0;">
+            <label for="id_q">Buscar por número</label>
+            <input type="text" id="id_q" name="q" class="input" value="{{ query }}">
+        </div>
+        <div class="campo" style="min-width:180px; margin-bottom:0;">
+            <label for="id_estado">Estado</label>
+            <select id="id_estado" name="estado" class="select">
+                <option value="">Todos</option>
+                {% for valor, etiqueta in estados %}
+                <option value="{{ valor }}" {% if estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+{% if proformas %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Número</th>
+                <th>Cliente</th>
+                <th>Fecha</th>
+                <th>Vencimiento</th>
+                <th>Total</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for proforma in proformas %}
+            <tr>
+                <td><a href="{% url 'sales:proforma_detail' proforma.pk %}">{{ proforma.number }}</a></td>
+                <td>{% if proforma.customer %}{{ proforma.customer.display_name }}{% else %}Consumidor final{% endif %}</td>
+                <td>{{ proforma.issue_date|date:"d M Y" }}</td>
+                <td>{% if proforma.expiry_date %}{{ proforma.expiry_date|date:"d M Y" }}{% else %}—{% endif %}</td>
+                <td>${{ proforma.total }}</td>
+                <td><span class="badge badge--azul">{{ proforma.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if is_paginated %}
+<nav class="paginacion" aria-label="Paginación de proformas">
+    {% if page_obj.has_previous %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}estado={{ estado }}&page={{ page_obj.previous_page_number }}">&laquo; Anterior</a>
+    {% else %}
+    <span class="deshabilitado">&laquo; Anterior</span>
+    {% endif %}
+    <span class="actual">{{ page_obj.number }}</span>
+    <span>de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}estado={{ estado }}&page={{ page_obj.next_page_number }}">Siguiente &raquo;</a>
+    {% else %}
+    <span class="deshabilitado">Siguiente &raquo;</span>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">🧾</div>
+    <h3>Todavía no tienes proformas</h3>
+    <p>Crea una proforma directamente o convierte una cotización aceptada.</p>
+    <a class="btn btn--primario" href="{% url 'sales:proforma_create' %}">Nueva proforma</a>
+</div>
+{% endif %}
+{% endblock %}

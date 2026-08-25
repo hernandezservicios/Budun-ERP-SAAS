@@ -21,6 +21,27 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
 - [ ] Git commit creado.
 
+## Nota de FASE 10 — Interfaz de Pagos a consumir sin acoplar `Sale` a PayPal
+
+FASE 10 preparó explícitamente `apps.sales.services.record_payment`
+como el único punto de entrada para registrar un pago (ver
+`docs/payments.md`), con `Payment.method` extensible (`CASH`/`CARD`/
+`TRANSFER`/`OTHER`) precisamente para no acoplar `Sale`/`Payment` a
+ningún proveedor concreto. Esta fase debe:
+
+- Agregar el flujo `Django → Payment Service → PayPal` (o equivalente)
+  como una capa que, al confirmar un pago de PayPal (vía webhook
+  verificado), llame a `services.record_payment(sale, method=...,
+  amount=..., idempotency_key=<id de la transacción de PayPal>, ...)`
+  — la `idempotency_key` ya existente es exactamente el mecanismo
+  pensado para que un webhook reintentado nunca duplique el pago.
+- `Refund.status` ya prevé `PENDING`/`FAILED` (no solo `COMPLETED`) para
+  cuando un reembolso de PayPal sea asíncrono — usarlos en vez de
+  agregar un campo de estado paralelo.
+- Nunca registrar un pago directamente en `Payment` desde el código de
+  integración con PayPal: siempre a través de
+  `apps.sales.services.record_payment`/`record_refund`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

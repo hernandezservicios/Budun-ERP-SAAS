@@ -38,6 +38,16 @@ formal), reutilizando `apps.customers.services.get_active_suppliers`
 para el selector, en vez de reimplementar la consulta o duplicar datos
 de proveedor dentro de `apps.expenses`.
 
+## Nota de FASE 10 — Motor comercial (revisado, sin cambios de diseño necesarios)
+
+FASE 10 agregó el motor comercial (`apps/sales`, ver `docs/sales.md`).
+Revisado explícitamente: Gastos no tiene relación directa con
+Cotizaciones/Proformas/Ventas/Pagos — no se requiere ningún cambio de
+diseño en esta fase por ese motivo. Si en el futuro un gasto necesitara
+un número comercial propio, reutilizar el patrón de `DocumentSequence`
+(agregando su propio `DocumentType`) en vez de inventar un esquema de
+numeración paralelo.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

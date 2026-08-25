@@ -1,0 +1,246 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ sale.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'sales:sale_list' %}">Ventas</a></li>
+        <li aria-current="page">{{ sale.number }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ sale.number }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {% if sale.customer %}{{ sale.customer.display_name }}{% else %}Consumidor final{% endif %}
+            · {{ sale.issue_date|date:"d M Y" }}
+            · <span class="badge badge--azul">{{ sale.get_status_display }}</span>
+            · <span class="badge badge--advertencia">{{ sale.get_payment_status_display }}</span>
+        </p>
+        {% if sale.source_quotation %}<p class="campo__ayuda">Origen: cotización <a href="{% url 'sales:quotation_detail' sale.source_quotation.pk %}">{{ sale.source_quotation.number }}</a></p>{% endif %}
+        {% if sale.source_proforma %}<p class="campo__ayuda">Origen: proforma <a href="{% url 'sales:proforma_detail' sale.source_proforma.pk %}">{{ sale.source_proforma.number }}</a></p>{% endif %}
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'sales:sale_receipt' sale.pk %}" target="_blank">Recibo</a>
+        {% if sale.status == "draft" %}
+        <form action="{% url 'sales:sale_confirm' sale.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Confirmar esta venta? Se aplicarán los efectos en inventario.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primario">Confirmar</button>
+        </form>
+        <form action="{% url 'sales:sale_cancel' sale.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cancelar esta venta en borrador?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Cancelar</button>
+        </form>
+        {% endif %}
+        {% if sale.status == "confirmed" or sale.status == "partially_returned" %}
+        <a class="btn btn--secundario" href="{% url 'sales:sale_return_create' sale.pk %}">Registrar devolución</a>
+        {% endif %}
+    </div>
+</div>
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones de la venta">
+        <button class="tabs__boton" role="tab" id="tab-lineas" aria-controls="panel-lineas" aria-selected="true" tabindex="0">Líneas</button>
+        <button class="tabs__boton" role="tab" id="tab-pagos" aria-controls="panel-pagos" aria-selected="false" tabindex="-1">Pagos ({{ payments|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-devoluciones" aria-controls="panel-devoluciones" aria-selected="false" tabindex="-1">Devoluciones ({{ returns|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ attachments|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-lineas" role="tabpanel" aria-labelledby="tab-lineas" class="tabs__panel">
+        {% if items %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Impuesto</th><th>Total</th>
+                        {% if sale.status == "draft" %}<th><span class="visualmente-oculto">Acciones</span></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.description }} ({{ item.sku_snapshot }}){% if item.inventory_unit %} — {% firstof item.inventory_unit.serial item.inventory_unit.imei_1 %}{% endif %}</td>
+                        <td>{{ item.quantity|floatformat:"-3" }}</td>
+                        <td>${{ item.unit_price }}</td>
+                        <td>${{ item.discount_amount }}</td>
+                        <td>${{ item.tax_amount }}</td>
+                        <td>${{ item.total }}</td>
+                        {% if sale.status == "draft" %}
+                        <td>
+                            <form action="{% url 'sales:sale_item_delete' sale.pk item.pk %}" method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin líneas todavía</h3></div>
+        {% endif %}
+
+        <div class="kpi-grid" style="margin: var(--espacio-6) 0;">
+            <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor">${{ sale.subtotal }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor">${{ sale.discount_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor">${{ sale.tax_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Total</p><p class="kpi__valor">${{ sale.total }}</p></div>
+        </div>
+
+        {% if sale.status == "draft" %}
+        <div class="tarjeta">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Agregar línea</h3>
+                <form method="post" action="{% url 'sales:sale_item_add' sale.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in item_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Agregar</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-pagos" role="tabpanel" aria-labelledby="tab-pagos" class="tabs__panel" hidden>
+        {% if sale.status == "confirmed" or sale.status == "partially_returned" or sale.status == "returned" %}
+        <div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Registrar pago</h3>
+                <form method="post" action="{% url 'sales:sale_payment_add' sale.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in payment_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Registrar pago</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        {% if payments %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Método</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Usuario</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for pago in payments %}
+                    <tr>
+                        <td>{{ pago.get_method_display }}</td>
+                        <td>${{ pago.amount }}</td>
+                        <td>{{ pago.reference|default:"—" }}</td>
+                        <td>
+                            {% if pago.status == "confirmed" %}<span class="badge badge--verde">Confirmado</span>{% else %}<span class="badge badge--neutro">Anulado</span>{% endif %}
+                        </td>
+                        <td>{% firstof pago.user.get_full_name pago.user.email "—" %}</td>
+                        <td>{{ pago.created_at|date:"d M Y H:i" }}</td>
+                        <td>
+                            {% if pago.status == "confirmed" %}
+                            <form action="{% url 'sales:sale_payment_void' sale.pk pago.pk %}" method="post" onsubmit="return confirm('¿Anular este pago?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Anular</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💳</div><h3>Sin pagos todavía</h3></div>
+        {% endif %}
+    </div>
+
+    <div id="panel-devoluciones" role="tabpanel" aria-labelledby="tab-devoluciones" class="tabs__panel" hidden>
+        {% if returns %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Número</th><th>Motivo</th><th>Usuario</th><th>Fecha</th></tr></thead>
+                <tbody>
+                    {% for devolucion in returns %}
+                    <tr>
+                        <td>{{ devolucion.number }}</td>
+                        <td>{{ devolucion.reason|default:"—" }}</td>
+                        <td>{% firstof devolucion.user.get_full_name devolucion.user.email "—" %}</td>
+                        <td>{{ devolucion.created_at|date:"d M Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">↩️</div><h3>Sin devoluciones todavía</h3></div>
+        {% endif %}
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        <div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'sales:sale_attachment_upload' sale.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% for field in attachment_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+        {% if attachments %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Archivo</th><th>Categoría</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for adjunto in attachments %}
+                    <tr>
+                        <td>{{ adjunto.original_filename }}</td>
+                        <td>{{ adjunto.get_category_display }}</td>
+                        <td>{{ adjunto.uploaded_at|date:"d M Y" }}</td>
+                        <td>
+                            <a class="btn btn--contorno btn--sm" href="{% url 'sales:sale_attachment_download' sale.pk adjunto.pk %}">Descargar</a>
+                            <form action="{% url 'sales:sale_attachment_delete' sale.pk adjunto.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos todavía</h3></div>
+        {% endif %}
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Acción</th><th>Detalles</th><th>Usuario</th><th>Fecha</th></tr></thead>
+                <tbody>
+                    {% for evento in activity_log %}
+                    <tr>
+                        <td>{{ evento.get_action_display }}</td>
+                        <td>{{ evento.details|default:"—" }}</td>
+                        <td>{% firstof evento.user.get_full_name evento.user.email "—" %}</td>
+                        <td>{{ evento.created_at|date:"d M Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕓</div><h3>Sin actividad registrada</h3></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

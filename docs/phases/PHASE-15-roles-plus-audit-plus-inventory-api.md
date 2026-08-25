@@ -71,6 +71,27 @@ de FASE 15:
   (`customers:read`, `suppliers:read`, etc.), nunca reutilizar los
   scopes de inventario para datos de un módulo distinto.
 
+## Nota de FASE 10 — Ventas: auditoría y scopes futuros
+
+FASE 10 agregó otra bitácora **mínima y acotada a su propio módulo**
+(`apps.sales.models.SalesActivityLog`, ver `docs/sales.md`) — mismo
+patrón que `apps.customers.models.ActivityLog` (FASE 9), explícitamente
+NO el audit log transversal que esta fase debe construir. Al
+implementarlo:
+
+- Evaluar igual que con `apps.customers.models.ActivityLog` si
+  `SalesActivityLog` se generaliza/reemplaza o se deja como bitácora
+  especializada que alimenta al audit log global.
+- No exponer datos de Cotizaciones/Proformas/Ventas/Pagos sin permisos
+  explícitos.
+- Si la futura API expone datos de ventas, preparar scopes propios
+  (`sales:read`, `quotations:read`, ver el punto 40 del mensaje de
+  autorización de FASE 10), nunca reutilizar los scopes de inventario.
+- Los "permisos por rol para descuentos altos" (mencionados
+  explícitamente en el alcance de FASE 10, no implementados allí — ver
+  `docs/sales.md`) son responsabilidad de esta fase: decidir el umbral
+  y qué rol puede autorizar un descuento por encima de él.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
