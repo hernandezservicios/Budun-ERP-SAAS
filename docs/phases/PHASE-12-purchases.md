@@ -43,6 +43,26 @@ SERIALIZADO, esta fase debe:
   preservan las constraints de unicidad por tenant y las validaciones
   (IMEI 1 ≠ IMEI 2, al menos un identificador) en un único punto.
 
+## Nota de FASE 9 — Interfaz de Proveedores a consumir
+
+FASE 9 agregó `apps/customers` (`Supplier`, ver `docs/suppliers.md`).
+Esta fase debe integrarse con esa interfaz ya existente, sin
+reinventarla:
+
+- `Purchase`/`PurchaseItem` deben referenciar a `Supplier` mediante su
+  propia FK (`Purchase.supplier`, `on_delete=PROTECT` recomendado), no
+  al revés.
+- Reutilizar `apps.customers.services.get_active_suppliers(tenant)`
+  para poblar cualquier selector de proveedor.
+- Los campos comerciales de `Supplier` (`payment_terms`, `credit_days`,
+  `credit_enabled`, `currency`) ya están preparados desde FASE 9 sin
+  ningún motor financiero detrás — esta fase (o una fase de cuentas por
+  pagar) es responsable de calcular cualquier saldo/deuda real y de
+  decidir cómo aplicar esas condiciones a una compra concreta.
+- Registrar aquí cualquier evento de compra en el historial del
+  proveedor: la pestaña "Historial" del detalle de proveedor (FASE 9)
+  hoy muestra un estado vacío explícito esperando esta fase.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

@@ -1,0 +1,60 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{% if object %}Editar proveedor{% else %}Nuevo proveedor{% endif %} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'customers:supplier_list' %}">Proveedores</a></li>
+        <li aria-current="page">{% if object %}Editar{% else %}Nuevo{% endif %}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>{% if object %}Editar proveedor{% else %}Nuevo proveedor{% endif %}</h1>
+</div>
+
+<div class="tarjeta" style="max-width: 720px;">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alerta alerta--peligro" role="alert">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <h2 class="panel-seccion__titulo">Identidad</h2>
+            {% include "customers/_campo.html" with field=form.party_type %}
+            {% include "customers/_campo.html" with field=form.legal_name %}
+            {% include "customers/_campo.html" with field=form.trade_name %}
+            {% include "customers/_campo.html" with field=form.identification_type %}
+            {% include "customers/_campo.html" with field=form.identification_number %}
+
+            <h2 class="panel-seccion__titulo">Contacto</h2>
+            {% include "customers/_campo.html" with field=form.email %}
+            {% include "customers/_campo.html" with field=form.phone %}
+            {% include "customers/_campo.html" with field=form.address %}
+            {% include "customers/_campo.html" with field=form.city %}
+            {% include "customers/_campo.html" with field=form.state_province %}
+            {% include "customers/_campo.html" with field=form.country %}
+
+            <h2 class="panel-seccion__titulo">Datos comerciales</h2>
+            <p class="campo__ayuda" style="margin-top:0;">
+                Configuración preparatoria: todavía no existe un motor financiero de cuentas por pagar
+                (llegará con Compras/Billing). Estos valores quedan listos para cuando lo haya.
+            </p>
+            {% include "customers/_campo.html" with field=form.payment_terms %}
+            {% include "customers/_campo.html" with field=form.credit_days %}
+            {% include "customers/_campo.html" with field=form.credit_enabled %}
+            {% include "customers/_campo.html" with field=form.currency %}
+
+            <h2 class="panel-seccion__titulo">Notas y estado</h2>
+            {% include "customers/_campo.html" with field=form.notes %}
+            {% include "customers/_campo.html" with field=form.is_active %}
+
+            <button type="submit" class="btn btn--primario">Guardar</button>
+            <a class="btn btn--contorno" href="{% url 'customers:supplier_list' %}">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

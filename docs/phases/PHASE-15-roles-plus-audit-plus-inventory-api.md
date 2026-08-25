@@ -50,6 +50,27 @@ para el resto de la API:
 - Reutilizar `services.search_catalog`/`services.get_current_stock` como
   la fuente de datos de estos endpoints, no reimplementar las consultas.
 
+## Nota de FASE 9 — Clientes/Proveedores: auditoría y permisos futuros
+
+FASE 9 agregó una bitácora **mínima y acotada** a su propio módulo
+(`apps.customers.models.ActivityLog`, ver `docs/customers.md`) —
+explícitamente NO es el sistema de auditoría transversal que esta fase
+debe construir para todo el proyecto. Al implementar el audit log real
+de FASE 15:
+
+- Evaluar si `ActivityLog` de `apps.customers` se generaliza/reemplaza
+  por el sistema transversal, o si se deja como una bitácora
+  especializada que además alimenta al audit log global — decisión de
+  diseño de esta fase, no anticipada aquí.
+- No exponer datos de clientes/proveedores (incluyendo sus documentos)
+  sin permisos explícitos: los roles/permisos de esta fase deben poder
+  restringir el acceso a Clientes/Proveedores igual que a cualquier
+  otro módulo de negocio.
+- Si la API de Inventario se extiende para exponer datos de
+  clientes/proveedores en el futuro, debe preparar scopes propios
+  (`customers:read`, `suppliers:read`, etc.), nunca reutilizar los
+  scopes de inventario para datos de un módulo distinto.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

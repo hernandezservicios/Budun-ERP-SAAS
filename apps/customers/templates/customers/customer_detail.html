@@ -1,0 +1,172 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ customer.display_name }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'customers:customer_list' %}">Clientes</a></li>
+        <li aria-current="page">{{ customer.display_name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ customer.display_name }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ customer.get_party_type_display }}
+            {% if customer.identification_number %} · {{ customer.get_identification_type_display }}: {{ customer.identification_number }}{% endif %}
+            {% if customer.is_active %}
+            <span class="badge badge--verde">Activo</span>
+            {% else %}
+            <span class="badge badge--neutro">Inactivo</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'customers:customer_update' customer.pk %}">Editar</a>
+        {% if customer.is_active %}
+        <form action="{% url 'customers:customer_status' customer.pk %}" method="post"
+              onsubmit="return confirm('¿Desactivar «{{ customer.display_name }}»?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Desactivar</button>
+        </form>
+        {% else %}
+        <form action="{% url 'customers:customer_status' customer.pk %}" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="reactivar">
+            <button type="submit" class="btn btn--primario">Reactivar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones del cliente">
+        <button class="tabs__boton" role="tab" id="tab-datos" aria-controls="panel-datos" aria-selected="true" tabindex="0">Datos</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ documents|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-historial" aria-controls="panel-historial" aria-selected="false" tabindex="-1">Historial</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-datos" role="tabpanel" aria-labelledby="tab-datos" class="tabs__panel">
+        <div class="tarjeta">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Contacto</h3>
+                <p><strong>Correo:</strong> {{ customer.email|default:"—" }}{% if customer.alternate_email %} · alterno: {{ customer.alternate_email }}{% endif %}</p>
+                <p><strong>Teléfono:</strong> {{ customer.phone|default:"—" }}{% if customer.secondary_phone %} · secundario: {{ customer.secondary_phone }}{% endif %}</p>
+                <p><strong>Dirección:</strong> {{ customer.address|default:"—" }}</p>
+                <p><strong>Ciudad / Provincia / País:</strong> {{ customer.city|default:"—" }} / {{ customer.state_province|default:"—" }} / {{ customer.country|default:"—" }}{% if customer.postal_code %} ({{ customer.postal_code }}){% endif %}</p>
+
+                <h3 class="panel-seccion__titulo">Datos comerciales <span class="badge badge--neutro">preparación</span></h3>
+                <p><strong>Condiciones de pago:</strong> {{ customer.get_payment_terms_display }} ({{ customer.credit_days }} días)</p>
+                <p><strong>Crédito habilitado:</strong> {% if customer.credit_enabled %}Sí{% else %}No{% endif %} — límite {{ customer.credit_limit }} {{ customer.currency }}</p>
+                {% if customer.commercial_notes %}<p><strong>Notas comerciales:</strong> {{ customer.commercial_notes }}</p>{% endif %}
+
+                {% if customer.notes %}
+                <h3 class="panel-seccion__titulo">Notas</h3>
+                <p>{{ customer.notes|linebreaksbr }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        <div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'customers:customer_document_upload' customer.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% include "customers/_campo.html" with field=document_form.category %}
+                    {% include "customers/_campo.html" with field=document_form.file %}
+                    {% include "customers/_campo.html" with field=document_form.notes %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+
+        {% if documents %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Archivo</th>
+                        <th>Categoría</th>
+                        <th>Tamaño</th>
+                        <th>Subido por</th>
+                        <th>Fecha</th>
+                        <th><span class="visualmente-oculto">Acciones</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for documento in documents %}
+                    <tr>
+                        <td>{{ documento.original_filename }}</td>
+                        <td>{{ documento.get_category_display }}</td>
+                        <td>{{ documento.size_bytes|filesizeformat }}</td>
+                        <td>{% firstof documento.uploaded_by.get_full_name documento.uploaded_by.email "—" %}</td>
+                        <td><time datetime="{{ documento.uploaded_at|date:'c' }}">{{ documento.uploaded_at|date:"d M Y H:i" }}</time></td>
+                        <td>
+                            <a class="btn btn--contorno btn--sm" href="{% url 'customers:customer_document_download' customer.pk documento.pk %}">Descargar</a>
+                            <form action="{% url 'customers:customer_document_delete' customer.pk documento.pk %}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('¿Eliminar «{{ documento.original_filename }}»?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta">
+            <div class="estado-vacio__icono" aria-hidden="true">📎</div>
+            <h3>Sin documentos todavía</h3>
+            <p>Sube el primer documento de este cliente (identificación, contrato, comprobante, etc.).</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-historial" role="tabpanel" aria-labelledby="tab-historial" class="tabs__panel" hidden>
+        <div class="estado-vacio tarjeta">
+            <div class="estado-vacio__icono" aria-hidden="true">🧾</div>
+            <h3>Sin historial de ventas todavía</h3>
+            <p>El historial de ventas y pagos de este cliente estará disponible desde FASE 10 — Ventas.</p>
+        </div>
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Acción</th>
+                        <th>Detalles</th>
+                        <th>Usuario</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for evento in activity_log %}
+                    <tr>
+                        <td>{{ evento.get_action_display }}</td>
+                        <td>{{ evento.details|default:"—" }}</td>
+                        <td>{% firstof evento.user.get_full_name evento.user.email "—" %}</td>
+                        <td><time datetime="{{ evento.created_at|date:'c' }}">{{ evento.created_at|date:"d M Y H:i" }}</time></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta">
+            <div class="estado-vacio__icono" aria-hidden="true">🕓</div>
+            <h3>Sin actividad registrada</h3>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

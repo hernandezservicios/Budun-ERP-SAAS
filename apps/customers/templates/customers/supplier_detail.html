@@ -1,0 +1,171 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ supplier.display_name }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'customers:supplier_list' %}">Proveedores</a></li>
+        <li aria-current="page">{{ supplier.display_name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ supplier.display_name }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ supplier.get_party_type_display }}
+            {% if supplier.identification_number %} · {{ supplier.get_identification_type_display }}: {{ supplier.identification_number }}{% endif %}
+            {% if supplier.is_active %}
+            <span class="badge badge--verde">Activo</span>
+            {% else %}
+            <span class="badge badge--neutro">Inactivo</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'customers:supplier_update' supplier.pk %}">Editar</a>
+        {% if supplier.is_active %}
+        <form action="{% url 'customers:supplier_status' supplier.pk %}" method="post"
+              onsubmit="return confirm('¿Desactivar «{{ supplier.display_name }}»?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Desactivar</button>
+        </form>
+        {% else %}
+        <form action="{% url 'customers:supplier_status' supplier.pk %}" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="reactivar">
+            <button type="submit" class="btn btn--primario">Reactivar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones del proveedor">
+        <button class="tabs__boton" role="tab" id="tab-datos" aria-controls="panel-datos" aria-selected="true" tabindex="0">Datos</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ documents|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-historial" aria-controls="panel-historial" aria-selected="false" tabindex="-1">Historial</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-datos" role="tabpanel" aria-labelledby="tab-datos" class="tabs__panel">
+        <div class="tarjeta">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Contacto</h3>
+                <p><strong>Correo:</strong> {{ supplier.email|default:"—" }}</p>
+                <p><strong>Teléfono:</strong> {{ supplier.phone|default:"—" }}</p>
+                <p><strong>Dirección:</strong> {{ supplier.address|default:"—" }}</p>
+                <p><strong>Ciudad / Provincia / País:</strong> {{ supplier.city|default:"—" }} / {{ supplier.state_province|default:"—" }} / {{ supplier.country|default:"—" }}</p>
+
+                <h3 class="panel-seccion__titulo">Datos comerciales <span class="badge badge--neutro">preparación</span></h3>
+                <p><strong>Condiciones de pago:</strong> {{ supplier.get_payment_terms_display }} ({{ supplier.credit_days }} días)</p>
+                <p><strong>Crédito habilitado:</strong> {% if supplier.credit_enabled %}Sí{% else %}No{% endif %} — moneda {{ supplier.currency }}</p>
+
+                {% if supplier.notes %}
+                <h3 class="panel-seccion__titulo">Notas</h3>
+                <p>{{ supplier.notes|linebreaksbr }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        <div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'customers:supplier_document_upload' supplier.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% include "customers/_campo.html" with field=document_form.category %}
+                    {% include "customers/_campo.html" with field=document_form.file %}
+                    {% include "customers/_campo.html" with field=document_form.notes %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+
+        {% if documents %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Archivo</th>
+                        <th>Categoría</th>
+                        <th>Tamaño</th>
+                        <th>Subido por</th>
+                        <th>Fecha</th>
+                        <th><span class="visualmente-oculto">Acciones</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for documento in documents %}
+                    <tr>
+                        <td>{{ documento.original_filename }}</td>
+                        <td>{{ documento.get_category_display }}</td>
+                        <td>{{ documento.size_bytes|filesizeformat }}</td>
+                        <td>{% firstof documento.uploaded_by.get_full_name documento.uploaded_by.email "—" %}</td>
+                        <td><time datetime="{{ documento.uploaded_at|date:'c' }}">{{ documento.uploaded_at|date:"d M Y H:i" }}</time></td>
+                        <td>
+                            <a class="btn btn--contorno btn--sm" href="{% url 'customers:supplier_document_download' supplier.pk documento.pk %}">Descargar</a>
+                            <form action="{% url 'customers:supplier_document_delete' supplier.pk documento.pk %}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('¿Eliminar «{{ documento.original_filename }}»?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta">
+            <div class="estado-vacio__icono" aria-hidden="true">📎</div>
+            <h3>Sin documentos todavía</h3>
+            <p>Sube el primer documento de este proveedor (identificación, contrato, comprobante, etc.).</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-historial" role="tabpanel" aria-labelledby="tab-historial" class="tabs__panel" hidden>
+        <div class="estado-vacio tarjeta">
+            <div class="estado-vacio__icono" aria-hidden="true">🧾</div>
+            <h3>Sin historial de compras todavía</h3>
+            <p>El historial de compras y pagos a este proveedor estará disponible desde FASE 12 — Compras.</p>
+        </div>
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Acción</th>
+                        <th>Detalles</th>
+                        <th>Usuario</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for evento in activity_log %}
+                    <tr>
+                        <td>{{ evento.get_action_display }}</td>
+                        <td>{{ evento.details|default:"—" }}</td>
+                        <td>{% firstof evento.user.get_full_name evento.user.email "—" %}</td>
+                        <td><time datetime="{{ evento.created_at|date:'c' }}">{{ evento.created_at|date:"d M Y H:i" }}</time></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta">
+            <div class="estado-vacio__icono" aria-hidden="true">🕓</div>
+            <h3>Sin actividad registrada</h3>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

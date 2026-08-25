@@ -38,6 +38,23 @@ homogénea:
   campo anotado `current_stock`) en vez de recalcular el stock con una
   consulta propia — evita una tercera fuente de verdad.
 
+## Nota de FASE 9 — Interfaz de Clientes/Proveedores a consumir
+
+FASE 9 agregó `apps/customers` (`Customer`/`Supplier`, ver
+`docs/customers.md`/`docs/suppliers.md`). Los reportes "ventas por
+cliente" y "compras por proveedor" pedidos para esta fase deben:
+
+- Agregar `SaleItem`/`PurchaseItem` (FASE 10/12) agrupados por
+  `customer`/`supplier`, reutilizando
+  `services.list_customers`/`list_suppliers`/`get_active_customers`/
+  `get_active_suppliers` como fuente de la lista de clientes/proveedores
+  — nunca reimplementar esa consulta ni duplicar datos de contacto en
+  el módulo de reportes.
+- "Clientes activos"/"proveedores activos" (pedido explícitamente) se
+  obtienen directamente de `get_active_customers`/`get_active_suppliers`
+  (ya filtran por `is_active=True` y por tenant) — no hace falta ningún
+  cálculo adicional.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

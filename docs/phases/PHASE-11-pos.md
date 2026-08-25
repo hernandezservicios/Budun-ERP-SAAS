@@ -50,6 +50,17 @@ unificada y el flujo de carrito que este POS debe usar tal cual (ver
   mezcla resultados de otro tenant — el POS debe seguir pasando siempre
   `request.tenant`, nunca un tenant elegido por el cliente.
 
+## Nota de FASE 9 — Interfaz de Clientes a consumir
+
+El POS debe poder seleccionar un cliente durante la venta reutilizando
+`apps.customers.services.list_customers`/`get_active_customers`
+(búsqueda por nombre/empresa/identificación/correo/teléfono ya
+implementada, ver `docs/customers.md`) — nunca reimplementar esa
+búsqueda ni consultar `Customer` directamente sin pasar por
+`services.py`. La venta sin cliente seleccionado (venta anónima/al
+contado) debe seguir siendo válida: `Sale.customer` en FASE 10 debería
+ser opcional para ese caso.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

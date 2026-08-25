@@ -1,0 +1,115 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Proveedores — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Proveedores</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Proveedores</h1>
+        <p class="encabezado-pagina__descripcion">Gestiona los proveedores de tu empresa.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'customers:customer_list' %}">Clientes</a>
+        <a class="btn btn--primario" href="{% url 'customers:supplier_create' %}">Nuevo proveedor</a>
+    </div>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);" role="search" aria-label="Buscar y filtrar proveedores">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        <div class="campo" style="flex:2; min-width:220px; margin-bottom:0;">
+            <label for="id_q">Buscar</label>
+            <input type="text" id="id_q" name="q" class="input" placeholder="Razón social, nombre comercial, identificación, correo o teléfono" value="{{ query }}">
+        </div>
+        <div class="campo" style="min-width:180px; margin-bottom:0;">
+            <label for="id_orden">Ordenar por</label>
+            <select id="id_orden" name="orden" class="select">
+                <option value="nombre" {% if orden == "nombre" %}selected{% endif %}>Nombre (A-Z)</option>
+                <option value="-nombre" {% if orden == "-nombre" %}selected{% endif %}>Nombre (Z-A)</option>
+                <option value="reciente" {% if orden == "reciente" %}selected{% endif %}>Más recientes</option>
+                <option value="antiguo" {% if orden == "antiguo" %}selected{% endif %}>Más antiguos</option>
+            </select>
+        </div>
+        <div class="campo" style="margin-bottom:0;">
+            <label>
+                <input type="checkbox" name="mostrar_inactivos" value="1" {% if show_inactive %}checked{% endif %}>
+                Mostrar inactivos
+            </label>
+        </div>
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+{% if suppliers %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th>Identificación</th>
+                <th>Contacto</th>
+                <th>Estado</th>
+                <th><span class="visualmente-oculto">Acciones</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for supplier in suppliers %}
+            <tr>
+                <td><a href="{% url 'customers:supplier_detail' supplier.pk %}">{{ supplier.display_name }}</a></td>
+                <td>{{ supplier.get_party_type_display }}</td>
+                <td>{{ supplier.identification_number|default:"—" }}</td>
+                <td>{{ supplier.email|default:supplier.phone|default:"—" }}</td>
+                <td>
+                    {% if supplier.is_active %}
+                    <span class="badge badge--verde">Activo</span>
+                    {% else %}
+                    <span class="badge badge--neutro">Inactivo</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a class="btn btn--contorno btn--sm" href="{% url 'customers:supplier_update' supplier.pk %}">Editar</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if is_paginated %}
+<nav class="paginacion" aria-label="Paginación de proveedores">
+    {% if page_obj.has_previous %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}orden={{ orden }}&page={{ page_obj.previous_page_number }}">&laquo; Anterior</a>
+    {% else %}
+    <span class="deshabilitado">&laquo; Anterior</span>
+    {% endif %}
+    <span class="actual">{{ page_obj.number }}</span>
+    <span>de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?{% if query %}q={{ query }}&{% endif %}orden={{ orden }}&page={{ page_obj.next_page_number }}">Siguiente &raquo;</a>
+    {% else %}
+    <span class="deshabilitado">Siguiente &raquo;</span>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">🚚</div>
+    {% if query %}
+    <h3>No se encontraron proveedores</h3>
+    <p>Intenta con otra búsqueda o quita los filtros.</p>
+    {% else %}
+    <h3>Todavía no tienes proveedores</h3>
+    <p>Crea tu primer proveedor para empezar a llevar su historial.</p>
+    <a class="btn btn--primario" href="{% url 'customers:supplier_create' %}">Nuevo proveedor</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

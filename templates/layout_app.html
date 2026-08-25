@@ -19,6 +19,18 @@
                 </a>
             </li>
             <li>
+                <a class="sidebar__enlace" href="{% url 'customers:customer_list' %}"
+                   {% if request.resolver_match.url_name == 'customer_list' or request.resolver_match.url_name == 'customer_detail' %}aria-current="page"{% endif %}>
+                    Clientes
+                </a>
+            </li>
+            <li>
+                <a class="sidebar__enlace" href="{% url 'customers:supplier_list' %}"
+                   {% if request.resolver_match.url_name == 'supplier_list' or request.resolver_match.url_name == 'supplier_detail' %}aria-current="page"{% endif %}>
+                    Proveedores
+                </a>
+            </li>
+            <li>
                 <a class="sidebar__enlace" href="{% url 'accounts:perfil' %}"
                    {% if request.resolver_match.url_name == 'perfil' %}aria-current="page"{% endif %}>
                     Mi perfil

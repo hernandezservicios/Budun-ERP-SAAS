@@ -28,6 +28,16 @@ no consume esa interfaz — no se requiere ningún cambio de diseño en esta
 fase por ese motivo. Se documenta aquí solo para dejar constancia de que
 se revisó, tal como pidió el usuario para todas las fases 10–15.
 
+## Nota de FASE 9 — Interfaz de Proveedores a consumir
+
+FASE 9 agregó `apps/customers` (`Supplier`, ver `docs/suppliers.md`).
+Cuando un gasto corresponda a un proveedor conocido, `Expense` debería
+poder referenciarlo opcionalmente mediante su propia FK
+(`Expense.supplier`, nulo/opcional — no todo gasto tiene un proveedor
+formal), reutilizando `apps.customers.services.get_active_suppliers`
+para el selector, en vez de reimplementar la consulta o duplicar datos
+de proveedor dentro de `apps.expenses`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

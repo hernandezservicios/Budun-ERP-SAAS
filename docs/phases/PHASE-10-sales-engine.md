@@ -48,6 +48,32 @@ integrarse con esa interfaz ya existente, sin reinventarla:
   con la fila bloqueada (mismo patrón `select_for_update` que ya usa
   `apps/inventory/services.py`).
 
+## Nota de FASE 9 — Interfaz de Clientes a consumir
+
+FASE 9 agregó `apps/customers` (`Customer`, ver `docs/customers.md`).
+Esta fase debe integrarse con esa interfaz ya existente, sin
+reinventarla:
+
+- `Sale` debe referenciar a `Customer` mediante su propia FK
+  (`Sale.customer`, `on_delete=PROTECT` recomendado para preservar el
+  historial), no al revés — `Customer` no necesita saber nada de
+  ventas.
+- Reutilizar `apps.customers.services.get_active_customers(tenant)`
+  para poblar cualquier selector de cliente, en vez de reimplementar la
+  consulta.
+- Antes de confirmar una venta a crédito, esta fase es la primera que
+  debe leer (nunca modificar el modelo de `Customer` para ello)
+  `customer.credit_enabled`/`credit_limit`/`credit_days`/`currency` —
+  campos ya preparados en FASE 9 pero sin ningún motor financiero
+  detrás. Calcular un saldo/deuda real y decidir si una venta a crédito
+  debe bloquearse por límite excedido es responsabilidad de esta fase
+  (o de una fase de Billing/cuentas por cobrar), nunca de
+  `apps.customers`.
+- Registrar aquí (no en `apps.customers`) cualquier evento de venta en
+  el historial del cliente: la pestaña "Historial" del detalle de
+  cliente (FASE 9) hoy muestra un estado vacío explícito precisamente
+  esperando esta fase.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

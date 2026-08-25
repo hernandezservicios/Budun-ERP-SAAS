@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.dashboard",
     "apps.inventory",
+    "apps.customers",
 ]
 
 # Custom User Model (FASE 3). Debe fijarse antes de la primera migración
@@ -163,6 +164,25 @@ USE_TZ = True
 # --- Archivos estáticos ----------------------------------------------------
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# --- Archivos subidos por el usuario (FASE 9: documentos de Clientes y
+# Proveedores) ------------------------------------------------------------
+# Deliberadamente NO se registra `static(MEDIA_URL, document_root=MEDIA_ROOT)`
+# en config/urls.py: eso serviría cualquier archivo de `media-private/`
+# como estático público sin autenticación ni verificación de tenant. La
+# única vía de descarga es una vista protegida (login + tenant + dueño
+# del documento verificados), ver `apps/customers/views.py`. `MEDIA_URL`
+# solo existe para que Django construya `.file.url` internamente; nunca
+# se expone tal cual en una plantilla como enlace de descarga directo.
+MEDIA_URL = "media-private/"
+MEDIA_ROOT = BASE_DIR / "media-private"
+
+# Límite duro a nivel de Django (además de la validación explícita en
+# `apps.customers.file_validation`, que corre antes y da un mensaje más
+# claro): ninguna subida completa puede superar ~10 MB en memoria antes
+# de volcarse a disco temporal.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
