@@ -20,6 +20,24 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
 - [ ] Git commit creado.
 
+## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
+
+Los reportes de inventario/stock deben distinguir explícitamente los dos
+tipos de seguimiento definidos en FASE 8 (`Product.inventory_tracking_type`,
+ver `docs/inventory.md`), nunca sumarlos como si fueran una sola cifra
+homogénea:
+
+- Productos por CANTIDAD: cantidad disponible desde `StockMovement`
+  (vía `services.get_current_stock`/`services.list_products_with_stock`).
+- Productos SERIALIZADOS: conteo de unidades por estado desde
+  `InventoryUnit` (p. ej. cuántas `EN_STOCK`, cuántas `VENDIDO`,
+  `REPARACION`, `GARANTIA`, etc. — cada estado es una dimensión de
+  reporte útil que no existe para productos por cantidad).
+- Reutilizar `services.get_current_stock`/`services.list_products_with_stock`
+  (que ya devuelven el valor correcto para ambos tipos vía el mismo
+  campo anotado `current_stock`) en vez de recalcular el stock con una
+  consulta propia — evita una tercera fuente de verdad.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

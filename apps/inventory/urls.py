@@ -17,4 +17,10 @@ urlpatterns = [
     path("productos/<int:pk>/entrada/", views.StockInView.as_view(), name="stock_in"),
     path("productos/<int:pk>/salida/", views.StockOutView.as_view(), name="stock_out"),
     path("productos/<int:pk>/ajuste/", views.StockAdjustmentView.as_view(), name="stock_adjustment"),
+    path("productos/<int:pk>/unidades/nueva/", views.UnitCreateView.as_view(), name="unit_create"),
+    path(
+        "productos/<int:product_pk>/unidades/<int:unit_pk>/estado/",
+        views.UnitStatusChangeView.as_view(),
+        name="unit_status_change",
+    ),
 ]

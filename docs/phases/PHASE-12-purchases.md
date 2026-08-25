@@ -20,6 +20,29 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
 - [ ] Git commit creado.
 
+## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
+
+FASE 8 agregó `apps/inventory/services.register_serialized_unit(...)`
+(ver `docs/inventory.md`) como la única vía sancionada para dar de alta
+una `InventoryUnit` nueva. Al recibir una compra de un producto
+SERIALIZADO, esta fase debe:
+
+- Por cada unidad física recibida, llamar a `register_serialized_unit`
+  con `product`, `user`, y al menos uno de `serial`/`imei_1`/`imei_2`,
+  más `unit_cost` (del costo real de esa compra) y `entry_date`. La
+  unidad queda automáticamente en estado `EN_STOCK`.
+- Pasar `purchase_origin` con una referencia legible a la compra/orden
+  de FASE 12 (por ahora ese campo es texto libre en `InventoryUnit`,
+  documentado como provisional en `docs/inventory.md`; cuando exista el
+  modelo `Purchase` real, lo natural es que `Purchase`/`PurchaseItem`
+  referencien a `InventoryUnit` con su propia FK, no al revés).
+- Para productos por CANTIDAD, la recepción de compra sigue impactando
+  el inventario vía `services.register_stock_in` (StockMovement),
+  exactamente igual que hoy.
+- Nunca crear una `InventoryUnit` a mano (fuera de `services.py`): así se
+  preservan las constraints de unicidad por tenant y las validaciones
+  (IMEI 1 ≠ IMEI 2, al menos un identificador) en un único punto.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

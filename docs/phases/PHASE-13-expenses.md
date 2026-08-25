@@ -19,6 +19,15 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
 - [ ] Git commit creado.
 
+## Nota de FASE 8 — Inventario Serializado
+
+FASE 8 agregó inventario serializado (`InventoryUnit`, ver
+`docs/inventory.md`). Revisado explícitamente: Gastos (registro de
+egresos de la empresa, sin relación directa con unidades de inventario)
+no consume esa interfaz — no se requiere ningún cambio de diseño en esta
+fase por ese motivo. Se documenta aquí solo para dejar constancia de que
+se revisó, tal como pidió el usuario para todas las fases 10–15.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

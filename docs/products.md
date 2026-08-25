@@ -21,6 +21,7 @@ También `TenantScopedModel`. El stock **no** vive aquí — ver
 
 | Campo | Tipo | Notas |
 |---|---|---|
+| `inventory_tracking_type` | `CharField` con choices | `QUANTITY` (por defecto) o `SERIALIZED` (IMEI/número de serie) — decide qué fuente de verdad calcula el stock del producto, ver `docs/inventory.md` |
 | `name` | `CharField` | |
 | `sku` | `CharField` | único por tenant (`unique_product_tenant_sku`) |
 | `barcode` | `CharField`, opcional | único por tenant **solo cuando no está vacío** (`UniqueConstraint` con `condition=Q(barcode__gt="")` — varios productos sin código de barras no chocan entre sí) |
@@ -29,8 +30,16 @@ También `TenantScopedModel`. El stock **no** vive aquí — ver
 | `purchase_price` | `DecimalField(12,2)` | Decimal, nunca float (dinero) |
 | `sale_price` | `DecimalField(12,2)` | Decimal |
 | `tax_rate` | `DecimalField(5,2)` | porcentaje, p. ej. `16.00` = 16% |
-| `min_stock` | `DecimalField(12,3)` | umbral para "stock bajo" |
+| `min_stock` | `DecimalField(12,3)` | umbral para "stock bajo" (solo aplica de forma directa a productos `QUANTITY`) |
 | `is_active` | `BooleanField` | "eliminar" un producto = desactivarlo (ver `docs/inventory.md`) |
+
+Un producto SERIALIZADO no usa `StockMovement`: su disponibilidad viene
+de `InventoryUnit`, una unidad física por fila (IMEI/número de serie).
+Ver "Inventario SERIALIZADO" en `docs/inventory.md` para el modelo
+completo, la máquina de estados, la búsqueda unificada
+(`services.search_catalog`) y las reglas de venta. El tipo de
+seguimiento no puede cambiarse una vez que el producto ya tiene
+movimientos o unidades registradas (`ProductForm.clean_inventory_tracking_type`).
 
 **Constraints de PostgreSQL** (no solo validación de formulario):
 `CheckConstraint` para que `purchase_price`, `sale_price`, `tax_rate` y

@@ -20,6 +20,36 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
 - [ ] Git commit creado.
 
+## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
+
+FASE 8 dejó preparada, en `apps/inventory/services.py`, la búsqueda
+unificada y el flujo de carrito que este POS debe usar tal cual (ver
+`docs/inventory.md`):
+
+- `services.search_catalog(tenant, query)` identifica una búsqueda por
+  nombre, SKU, código de barras, número de serie o IMEI (1 o 2), y
+  devuelve una lista de `SearchResult(product, unit=None|InventoryUnit)`.
+  Un QR escaneado normalmente solo codifica uno de estos valores como
+  texto plano, así que se busca con el mismo `search_catalog` — no hace
+  falta un campo ni una función de búsqueda aparte para QR.
+- Flujo esperado en el POS, ya modelado por `SearchResult.requires_unit_selection`:
+  - Producto por CANTIDAD: el resultado se agrega directo al carrito.
+  - Producto SERIALIZADO encontrado por nombre/SKU/barcode (`requires_unit_selection == True`):
+    el POS debe pedir a continuación el IMEI/serie concreto antes de
+    agregarlo al carrito.
+  - IMEI/serie escaneado o tecleado directamente: `search_catalog` ya
+    devuelve la unidad exacta (`result.unit`) — validar con
+    `services.ensure_unit_available_for_sale(result.unit)` antes de
+    agregarla al carrito.
+- No permitir agregar al carrito: una unidad inexistente (búsqueda sin
+  resultados), una unidad ya en el carrito (revisar duplicados por
+  `unit.pk` en el estado del carrito), o una unidad que
+  `ensure_unit_available_for_sale` rechace (vendida, reservada, en
+  reparación, dañada, perdida).
+- Multi-Tenant: `search_catalog` ya recibe `tenant` explícito y nunca
+  mezcla resultados de otro tenant — el POS debe seguir pasando siempre
+  `request.tenant`, nunca un tenant elegido por el cliente.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

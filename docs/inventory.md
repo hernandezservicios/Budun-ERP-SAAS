@@ -3,6 +3,16 @@
 Movimientos de stock, historial y alertas de `apps/inventory`. Ver
 `docs/products.md` para Productos/Categorías.
 
+> **Nota de transparencia**: el inventario serializado (IMEI/número de
+> serie) descrito en este documento fue incorporado a FASE 8 a partir de
+> una auditoría explícita del usuario, ya con la fase inicial cerrada.
+> No se encontró ningún requisito de inventario serializado en
+> `CLAUDE.md`, `docs/MASTER-PROMPT.md`, `docs/phases/PHASES.md` ni en la
+> versión original de este documento — se buscó explícitamente
+> (`grep` de "serial"/"imei"/"serializ" en todo el repositorio) antes de
+> implementarlo. Se documenta aquí con la misma fidelidad que el resto
+> de la fase, sin ocultar que fue una ampliación de alcance posterior.
+
 ## Diseño central: el stock es un libro mayor, no un campo
 
 `Product` **no tiene** un campo `current_stock`. El stock actual de un
@@ -132,6 +142,160 @@ movimiento de stock. Incluye una regresión directa de FASE 3
 (manipular `active_tenant_id` en la sesión no filtra datos de
 inventario de otro tenant).
 
+## Inventario SERIALIZADO (IMEI / número de serie)
+
+### Dos tipos de seguimiento, un solo punto de verdad por producto
+
+`Product.inventory_tracking_type` decide cómo se calcula su
+stock/disponibilidad — nunca los dos a la vez para el mismo producto:
+
+| Tipo | Fuente de verdad | Disponibilidad |
+|---|---|---|
+| `QUANTITY` (por defecto) | `StockMovement` | `stock_after` del movimiento más reciente |
+| `SERIALIZED` | `InventoryUnit` | conteo de unidades con `status = EN_STOCK` |
+
+`services.get_current_stock(product)` sigue siendo la única función que
+cualquier llamador necesita: internamente decide la fuente según
+`inventory_tracking_type`, así que nadie fuera de `services.py` necesita
+saber cuál de las dos tablas consultar. `services.list_products_with_stock`
+anota `current_stock` con un `Case/When` que combina ambas subqueries en
+una sola consulta (sin N+1), para que el listado de productos no tenga
+que tratar ambos tipos de forma distinta.
+
+**Regla explícita**: un producto no puede cambiar de tipo de seguimiento
+una vez que ya tiene movimientos o unidades registradas
+(`ProductForm.clean_inventory_tracking_type`) — permitirlo crearía dos
+fuentes de verdad parciales e inconsistentes para el mismo producto. Si
+de verdad se necesita el otro tipo, se crea un producto nuevo.
+
+### `InventoryUnit`: una fila por unidad física real
+
+Equivalente de `StockMovement` para productos serializados: cada unidad
+física (un teléfono con su IMEI, un equipo con su número de serie) es su
+propia fila, y su disponibilidad es simplemente su `status` — nunca un
+conteo desnormalizado aparte.
+
+Campos: `tenant`, `product`, `serial`, `imei_1`, `imei_2`, `status`,
+`unit_cost`, `entry_date`, `purchase_origin` (texto libre, provisional —
+ver nota abajo), `sale_reference`/`customer_reference` (ídem,
+provisionales), `warranty_until`, `notes`, `status_changed_by`,
+`created_at`/`updated_at`.
+
+**Constraints de PostgreSQL** (no solo de formulario):
+- `serial`, `imei_1` e `imei_2` únicos por tenant, pero con
+  `UniqueConstraint` **parcial** (`condition=Q(campo__gt="")`): varias
+  unidades pueden compartir el valor vacío (no todas necesitan los tres
+  identificadores), solo se exige unicidad entre valores no vacíos.
+- `imei_1 != imei_2` cuando ambos están presentes (`CheckConstraint`).
+- Al menos un identificador (`serial`, `imei_1` o `imei_2`) no puede
+  estar vacío — una unidad sin ningún identificador no es rastreable.
+- `unit_cost >= 0`.
+- Índices compuestos `(tenant, product, status)` y `(tenant, status)`
+  para listar/contar unidades por producto o por estado sin recorrer la
+  tabla completa.
+
+### Estados de unidad y máquina de estados
+
+`EN_STOCK`, `RESERVADO`, `VENDIDO`, `DEVUELTO`, `REPARACION`,
+`GARANTIA`, `DANADO`, `PERDIDO`. Las transiciones válidas están
+centralizadas en `services.ALLOWED_UNIT_TRANSITIONS` y se aplican en
+`services.transition_unit_status` — nunca se asigna `unit.status`
+directamente desde una vista ni desde un módulo futuro. Ejemplos de
+reglas: `VENDIDO` solo puede volver a `DEVUELTO` (nunca "revertirse" a
+`RESERVADO`); `PERDIDO` es un estado terminal sin ninguna salida. Rechazar
+una transición no permitida lanza `InvalidInventoryOperation` con un
+mensaje que identifica el producto (SKU) y los dos estados — nunca el
+IMEI/serie completo (ver "Seguridad" más abajo).
+
+### Reglas de venta reutilizables por FASE 10/11
+
+`services.ensure_unit_available_for_sale(unit)` es la única función que
+FASE 10 (Ventas) y FASE 11 (POS) deben usar para decidir si una unidad
+puede agregarse a una venta: rechaza explícitamente vender una unidad
+que no está `EN_STOCK` (ya vendida, reservada, en reparación, en
+garantía, dañada o perdida). Combinada con `services.search_catalog`
+(ver abajo) y con el `select_for_update()` ya usado en el resto de
+`services.py`, cubre los 5 casos que el usuario pidió bloquear
+explícitamente: unidad inexistente (búsqueda sin resultados), unidad
+vendida, reservada, en reparación, o duplicada en el carrito (esta
+última la debe verificar el carrito de FASE 11 por `unit.pk`, ya que la
+unidad es un objeto identificable único).
+
+### Búsqueda unificada: `services.search_catalog(tenant, query)`
+
+Un único punto de entrada para nombre, SKU, código de barras, número de
+serie o IMEI (1 o 2) — pensado explícitamente para que FASE 10/11/15 no
+reimplementen su propia búsqueda:
+
+1. Primero intenta una coincidencia **exacta** de `serial`/`imei_1`/`imei_2`
+   contra `InventoryUnit`. Si la hay, devuelve **solo esa unidad**
+   (`SearchResult(product, unit)`): un IMEI/serie identifica una unidad
+   física real, no tiene sentido mezclarlo con resultados de texto libre.
+2. Si no hay coincidencia de unidad, busca productos activos por nombre
+   (`icontains`), SKU (`iexact`) o código de barras (`exact`).
+
+Un código QR no necesita un campo ni una búsqueda aparte: en la práctica
+un QR solo codifica uno de estos mismos valores (típicamente un
+SKU/código de barras/serie) como texto plano, así que se resuelve con la
+misma función.
+
+`SearchResult.requires_unit_selection` es `True` cuando el resultado es
+un producto SERIALIZADO encontrado por nombre/SKU/barcode (no por
+IMEI/serie exacto): la señal que FASE 11 (POS) necesita para saber que
+debe pedir a continuación el IMEI/serie concreto antes de poder agregar
+el producto al carrito, en vez de agregarlo directamente como haría con
+un producto por cantidad.
+
+### Multi-Tenancy
+
+`search_catalog` recibe `tenant` explícito y nunca consulta otro tenant;
+`InventoryUnit` hereda `TenantScopedModel` igual que el resto del
+módulo. Cobertura de tests dedicada
+(`apps/inventory/tests/test_serialized_inventory.py::SerializedInventoryIsolationTests`):
+una búsqueda por el serial/IMEI exacto de otro tenant no encuentra nada
+(ni confirma que el identificador existe en otro lado), acceso directo
+por URL a una unidad de otro tenant devuelve 404, y el detalle de un
+producto nunca lista unidades de otro tenant.
+
+### Seguridad: nunca exponer el identificador completo innecesariamente
+
+Ningún mensaje de error ni log de `services.py` incluye el IMEI/serie
+completo de una unidad — solo el SKU del producto y el/los estado(s)
+involucrados (verificado con tests explícitos). El listado de
+`InventoryUnitAdmin` (Django Admin, solo lectura/staff) muestra el
+identificador parcialmente enmascarado (`···1234`, últimos 4
+caracteres) como defensa adicional, aunque la búsqueda exacta del admin
+sigue funcionando sobre el valor completo. La ficha de producto de la
+propia empresa (su UI normal, autenticada y tenant-scoped) sí muestra el
+identificador completo de sus propias unidades: es una exposición
+necesaria (el usuario necesita ver el IMEI para identificar el equipo
+físico), no la "exposición innecesaria" que la regla busca evitar.
+
+### Campos provisionales: `purchase_origin`, `sale_reference`, `customer_reference`
+
+Son `CharField` de texto libre porque los modelos `Purchase` (FASE 12),
+`Sale`/`SaleItem` (FASE 10) y `Customer` (FASE 9) todavía no existen —
+construirlos ahora violaría la regla de construcción incremental de
+`CLAUDE.md`. Cuando esas fases lleguen, lo natural es que esos modelos
+referencien a `InventoryUnit` con su propia FK (p. ej.
+`SaleItem.inventory_unit`), no al revés; estos campos de texto quedan
+como referencia legible mientras tanto. Documentado también con
+`help_text` en cada campo del modelo.
+
+### Vistas y formularios
+
+`UnitCreateView` (alta de una unidad, equivalente a `StockInView` para
+productos por cantidad) y `UnitStatusChangeView` (cambio de estado, solo
+POST). Ambas rechazan con un mensaje claro (no un 500) si se usan sobre
+el tipo de producto equivocado: `UnitCreateView` sobre un producto por
+CANTIDAD, o `StockInView`/`StockOutView`/`StockAdjustmentView` sobre un
+producto SERIALIZADO (esta última validación vive en
+`services._require_quantity_tracking`, así que también protege cualquier
+otra vía de entrada futura, no solo la vista actual).
+
 ## Qué NO se construyó en esta fase (deliberado)
 Motor de ventas, POS, compras, gastos, API de Inventario para CRM IA
-(FASE 15), PayPal, Billing.
+(FASE 15), PayPal, Billing. Tampoco se construyó un endpoint HTTP de
+búsqueda para `search_catalog` — solo el servicio reutilizable: el
+endpoint/URL que lo consuma pertenece a FASE 10/11/15, según
+corresponda.

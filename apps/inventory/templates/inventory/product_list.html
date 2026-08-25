@@ -60,6 +60,7 @@
                 <th>Producto</th>
                 <th>SKU</th>
                 <th>Categoría</th>
+                <th>Tipo</th>
                 <th>Precio de venta</th>
                 <th>Stock actual</th>
                 <th>Estado</th>
@@ -72,6 +73,13 @@
                 <td><a href="{% url 'inventory:product_detail' product.pk %}">{{ product.name }}</a></td>
                 <td>{{ product.sku }}</td>
                 <td>{{ product.category.name|default:"—" }}</td>
+                <td>
+                    {% if product.inventory_tracking_type == "serialized" %}
+                    <span class="badge badge--azul">Serializado</span>
+                    {% else %}
+                    <span class="badge badge--neutro">Por cantidad</span>
+                    {% endif %}
+                </td>
                 <td>${{ product.sale_price }}</td>
                 <td>
                     {{ product.current_stock|floatformat:"-3" }}

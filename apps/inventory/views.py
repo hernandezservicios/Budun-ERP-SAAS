@@ -25,8 +25,16 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from apps.tenants.permissions import TenantRequiredMixin
 
 from . import services
-from .forms import CategoryForm, ProductForm, StockAdjustmentForm, StockInForm, StockOutForm
-from .models import Category, Product
+from .forms import (
+    CategoryForm,
+    InventoryUnitForm,
+    InventoryUnitStatusForm,
+    ProductForm,
+    StockAdjustmentForm,
+    StockInForm,
+    StockOutForm,
+)
+from .models import Category, InventoryUnit, Product
 from .services import InvalidInventoryOperation
 
 
@@ -144,7 +152,14 @@ class ProductDetailView(LoginRequiredMixin, TenantRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context["current_stock"] = services.get_current_stock(self.object)
         context["is_low_stock"] = context["current_stock"] <= self.object.min_stock
-        context["movements"] = services.get_product_movements(self.object, limit=15)
+        context["is_serialized"] = (
+            self.object.inventory_tracking_type == Product.TrackingType.SERIALIZED
+        )
+        if context["is_serialized"]:
+            context["units"] = services.list_units_for_product(self.object)[:50]
+            context["unit_status_form"] = InventoryUnitStatusForm()
+        else:
+            context["movements"] = services.get_product_movements(self.object, limit=15)
         return context
 
 
@@ -209,7 +224,9 @@ class ProductDeactivateView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class _StockMovementView(LoginRequiredMixin, TenantRequiredMixin, View):
     """Base común para entrada/salida/ajuste: solo cambia el formulario y
-    qué función de `services` se llama."""
+    qué función de `services` se llama. Solo aplica a productos por
+    CANTIDAD — un producto SERIALIZADO se gestiona con unidades
+    individuales (ver `UnitCreateView`/`UnitStatusChangeView`)."""
 
     form_class = None
     template_name = "inventory/stock_movement_form.html"
@@ -220,6 +237,13 @@ class _StockMovementView(LoginRequiredMixin, TenantRequiredMixin, View):
 
     def get(self, request, pk):
         product = self.get_product(request, pk)
+        if product.inventory_tracking_type == Product.TrackingType.SERIALIZED:
+            messages.error(
+                request,
+                f"«{product.name}» es un producto serializado: gestiona sus unidades "
+                "individuales (IMEI/serie) desde su ficha, no movimientos de cantidad.",
+            )
+            return redirect("inventory:product_detail", pk=product.pk)
         form = self.form_class()
         return render(
             request,
@@ -285,3 +309,82 @@ class StockAdjustmentView(_StockMovementView):
             user=request.user,
             notes=form.cleaned_data["notes"],
         )
+
+
+# ---------------------------------------------------------------------
+# Unidades de inventario (productos SERIALIZADOS)
+# ---------------------------------------------------------------------
+
+
+class UnitCreateView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """Alta de una unidad individual nueva (IMEI/serie) para un producto
+    SERIALIZADO — equivalente a `StockInView` para productos por
+    cantidad. Solo aplica a productos SERIALIZADOS."""
+
+    template_name = "inventory/unit_form.html"
+
+    def get_product(self, request, pk):
+        return get_object_or_404(Product, pk=pk, tenant=request.tenant)
+
+    def get(self, request, pk):
+        product = self.get_product(request, pk)
+        if product.inventory_tracking_type != Product.TrackingType.SERIALIZED:
+            messages.error(
+                request,
+                f"«{product.name}» es un producto por cantidad: registra su stock con "
+                "entrada/salida/ajuste, no con unidades individuales.",
+            )
+            return redirect("inventory:product_detail", pk=product.pk)
+        form = InventoryUnitForm()
+        return render(request, self.template_name, {"product": product, "form": form})
+
+    def post(self, request, pk):
+        product = self.get_product(request, pk)
+        form = InventoryUnitForm(request.POST)
+        if form.is_valid():
+            try:
+                services.register_serialized_unit(
+                    product=product,
+                    user=request.user,
+                    serial=form.cleaned_data["serial"],
+                    imei_1=form.cleaned_data["imei_1"],
+                    imei_2=form.cleaned_data["imei_2"],
+                    unit_cost=form.cleaned_data["unit_cost"],
+                    entry_date=form.cleaned_data["entry_date"] or None,
+                    purchase_origin=form.cleaned_data["purchase_origin"],
+                    notes=form.cleaned_data["notes"],
+                )
+            except InvalidInventoryOperation as error:
+                messages.error(request, "; ".join(error.messages) if hasattr(error, "messages") else str(error))
+            else:
+                messages.success(request, "Unidad registrada correctamente.")
+                return redirect("inventory:product_detail", pk=product.pk)
+        return render(request, self.template_name, {"product": product, "form": form})
+
+
+class UnitStatusChangeView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """Cambia el estado de una unidad individual (solo POST), validando
+    la máquina de estados en `services.transition_unit_status`. La
+    unidad se busca siempre filtrando por `tenant=request.tenant` — un
+    `pk` de otro tenant nunca es visible ni modificable (404, no 403, para
+    no confirmar siquiera que existe)."""
+
+    def post(self, request, product_pk, unit_pk):
+        product = get_object_or_404(Product, pk=product_pk, tenant=request.tenant)
+        unit = get_object_or_404(InventoryUnit, pk=unit_pk, tenant=request.tenant, product=product)
+        form = InventoryUnitStatusForm(request.POST)
+        if form.is_valid():
+            try:
+                services.transition_unit_status(
+                    unit=unit,
+                    new_status=form.cleaned_data["new_status"],
+                    user=request.user,
+                    notes=form.cleaned_data["notes"],
+                )
+            except InvalidInventoryOperation as error:
+                messages.error(request, "; ".join(error.messages) if hasattr(error, "messages") else str(error))
+            else:
+                messages.success(request, "Estado de la unidad actualizado correctamente.")
+        else:
+            messages.error(request, "Selecciona un estado válido.")
+        return redirect("inventory:product_detail", pk=product.pk)
