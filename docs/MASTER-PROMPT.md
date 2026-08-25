@@ -118,12 +118,12 @@ Los endpoints de la API de Inventario (FASE 15) deben poder exponer también el 
 
 Incorporado oficialmente a partir de FASE 10 (ampliado tras el cierre inicial): `Payment` (dinero recibido de un cliente) puede aplicarse a una o varias facturas del mismo cliente mediante `PaymentAllocation`, un ledger append-only. El monto aplicado nunca excede el saldo disponible del pago ni el saldo pendiente de la factura; `Payment`/`Sale` deben ser del mismo tenant y, al aplicar, del mismo cliente; `Payment.customer` nulo (venta de mostrador) nunca genera saldo a favor. Todo se calcula desde el ledger, nunca un campo desnormalizado; toda operación es idempotente y auditada. Ver `docs/payments.md`.
 
-Especificado como doctrina para fases futuras, sin ningún modelo construido todavía — ver `docs/accounts-receivable.md`, `docs/cash-registers.md` y `docs/approvals.md`:
+Construido a partir de FASE 11 (`apps/pos`, `apps/approvals`) — ver `docs/accounts-receivable.md`, `docs/cash-registers.md` y `docs/approvals.md`:
 
-- **Anticipo/saldo a favor**: un único saldo por cliente (nunca dos balances paralelos), respaldado eventualmente por `CustomerCreditLedger` (append-only).
-- **Notas de crédito** (`CreditNote`/`CreditNoteApplication`): misma disciplina de validación que `PaymentAllocation`, nunca altera la factura histórica.
-- **Cajas** (`CashRegister`/`CashSession`): cualquier cantidad de cajas por tenant (sin límite fijo); una sesión de caja abierta es obligatoria antes de confirmar una venta operativa de mostrador; solo el efectivo afecta el efectivo físico.
-- **Autorizaciones** (`ApprovalRequest`/`ApprovalService`): servicio centralizado y reutilizable para descuentos por encima del límite (porcentaje Y monto) y crédito excedido, con jerarquía usuario → rol → tenant → negar.
+- **Anticipo/saldo a favor**: un único saldo por cliente (nunca dos balances paralelos). No hay una tabla `CustomerCreditLedger` separada: se generalizaron `get_customer_credit_balance`/`get_sale_paid_amount` para sumar `Payment`+`PaymentAllocation` y `CreditNote`+`CreditNoteApplication` — los dos ledgers reales.
+- **Notas de crédito** (`CreditNote`/`CreditNoteApplication`, en `apps.sales`): misma disciplina de validación que `PaymentAllocation`, nunca altera la factura histórica.
+- **Cajas** (`CashRegister`/`CashSession`/`CashMovement`, en `apps.pos`): cualquier cantidad de cajas por tenant (sin límite fijo); una sesión de caja abierta es obligatoria antes de confirmar una venta operativa de mostrador; solo el efectivo afecta el efectivo físico.
+- **Autorizaciones** (`ApprovalPolicy`/`ApprovalRequest`, en `apps.approvals`): servicio centralizado y reutilizable para descuentos por encima del límite (porcentaje Y monto) y crédito excedido, con jerarquía usuario → rol → tenant → negar. El propietario del tenant siempre está autorizado.
 
 ## PayPal
 

@@ -201,13 +201,14 @@ Ver `docs/invoice-documents.md`.
   `get_customer_pending_sales` son agregaciones de solo lectura sobre
   `Payment`/`PaymentAllocation`/`Refund`, no una tabla ni un motor de
   estado de cuenta — ver `docs/payments.md`.
-- **`CustomerCreditLedger`, `CustomerAdvance`, `CreditNote`/
-  `CreditNoteApplication`, `CashRegister`/`CashSession`,
-  `ApprovalRequest`/`ApprovalService`**: especificados formalmente como
-  doctrina del proyecto (sincronización previa a FASE 11), sin ningún
-  modelo, campo ni migración construido todavía. Ver
+- **`CreditNote`/`CreditNoteApplication`, `CashRegister`/`CashSession`/
+  `CashMovement`, `ApprovalPolicy`/`ApprovalRequest`**: no se
+  construyeron en FASE 10 — quedaron especificados como doctrina
+  (sincronización previa a FASE 11) y **FASE 11 los construyó** (ver
   `docs/accounts-receivable.md`, `docs/cash-registers.md` y
-  `docs/approvals.md`.
+  `docs/approvals.md`). `CustomerCreditLedger` como tabla separada
+  nunca se construyó, ni en FASE 11 ni antes — decisión final
+  documentada en `docs/accounts-receivable.md` sección 3.
 - **Comisiones de vendedor**: se registra `salesperson`/`confirmed_by`
   en cada documento (preparación explícita pedida), pero ningún cálculo
   de comisión — corresponde a una fase de Reportes/Nómina futura.

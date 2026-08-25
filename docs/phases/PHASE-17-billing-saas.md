@@ -1,7 +1,7 @@
 # FASE 17 — Billing SaaS
 
 ## Objetivo
-Planes, suscripciones, estados, límites y sincronización con PayPal.
+Planes, suscripciones, estados, límites y sincronización con PayPal. Ver `docs/billing.md` para el resumen arquitectónico.
 
 ## Regla incremental
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
@@ -43,8 +43,8 @@ nunca deben mezclarse**, ni conceptual ni técnicamente:
 | | ERP Accounts Receivable | SaaS Billing |
 |---|---|---|
 | Qué es | Lo que un CLIENTE le debe a un TENANT (una empresa usando el ERP) | Lo que un TENANT le debe a Budun ERP (el SaaS) por usar la plataforma |
-| Modelos | `Customer`, `Sale`, `Payment`, `PaymentAllocation`, `CustomerCreditLedger`, `CreditNote` | `Tenant`, `Plan`, `Subscription` (esta fase) |
-| Saldo | Saldo a favor / pendiente de un `Customer` | Estado de la suscripción de un `Tenant` |
+| Modelos | `Customer`, `Sale`, `Payment`, `PaymentAllocation`, `CreditNote`, `CreditNoteApplication` (FASE 10/11, construidos) | `Tenant`, `Plan`, `Subscription` (esta fase, no construidos) |
+| Saldo | Saldo a favor / pendiente de un `Customer` (`get_customer_credit_balance`/`get_sale_balance_due`) | Estado de la suscripción de un `Tenant` |
 
 **Nunca** debe existir un campo, modelo o consulta que combine el
 "saldo de un cliente" de un tenant con la "suscripción del tenant" —

@@ -1,7 +1,7 @@
 # FASE 15 — Roles + Audit + Inventory API
 
 ## Objetivo
-Roles/permisos, audit log y API de Inventario para CRM IA.
+Roles/permisos, audit log y API de Inventario para CRM IA. Ver `docs/api-inventory.md` para el resumen arquitectónico de la API.
 
 ## Regla incremental
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
@@ -94,31 +94,34 @@ implementarlo:
 
 ## Nota de sincronización — Recursos financieros y de caja para Audit/API
 
-Sincronización de doctrina previa a FASE 11, sin implementación nueva.
 Cuando esta fase construya el audit log transversal y extienda la API,
-debe contemplar explícitamente:
+debe contemplar explícitamente (todos estos modelos ya están
+construidos y en producción desde FASE 10/11 — esta fase decide cómo
+exponerlos/auditarlos, no si construirlos):
 
-- **`Payment`/`PaymentAllocation`** (ya construidos, FASE 10) como
+- **`Payment`/`PaymentAllocation`** (FASE 10, `apps.sales`) como
   entidades auditables/expuestas bajo su propio scope
   (`payments:read`), nunca mezcladas con `inventory:read`.
-- **`CreditNote`/`CreditNoteApplication`** (`docs/accounts-receivable.md`)
-  bajo un scope propio cuando existan.
-- **`ApprovalRequest`** (`docs/approvals.md`) — el historial de
-  aprobaciones es información sensible; exponerlo por API (si alguna
-  vez se decide) requiere su propio scope explícito, nunca heredado de
-  otro módulo.
-- **`CashSession`/`CashMovement`** (`docs/cash-registers.md`) — igual
-  que arriba, un scope propio si se decide exponerlos.
+- **`CreditNote`/`CreditNoteApplication`** (FASE 11, `apps.sales`, ver
+  `docs/accounts-receivable.md`) bajo un scope propio.
+- **`ApprovalPolicy`/`ApprovalRequest`** (FASE 11, `apps.approvals`,
+  ver `docs/approvals.md`) — el historial de aprobaciones es
+  información sensible; exponerlo por API (si alguna vez se decide)
+  requiere su propio scope explícito, nunca heredado de otro módulo.
+- **`CashRegister`/`CashSession`/`CashMovement`** (FASE 11, `apps.pos`,
+  ver `docs/cash-registers.md`) — igual que arriba, un scope propio si
+  se decide exponerlos.
 - La futura API **solo podrá exponer recursos financieros mediante
   scopes explícitos** — nunca por defecto, nunca reutilizando el scope
   de otro dominio (mismo principio ya aplicado a `customers:read`/
   `suppliers:read`/`sales:read` en las notas de FASE 9/10 de este
   documento).
-- Extender el modelo de roles (`Membership.Role`, FASE 3) con las
-  políticas de autorización por rol/usuario que `ApprovalService`
-  necesita (`docs/approvals.md`, sección 3) — esta fase es la
-  responsable de esa infraestructura de permisos más rica, aunque
-  FASE 11 sea la primera consumidora real.
+- Extender el modelo de roles (`Membership.Role`, FASE 3, y
+  `ApprovalPolicy`, FASE 11) con las políticas de autorización por
+  rol/usuario más ricas que un RBAC completo necesitaría — FASE 11 ya
+  construyó una versión mínima funcional (`ApprovalPolicy` por
+  usuario/rol/tenant); esta fase es responsable de generalizarla si el
+  proyecto necesita roles más allá de OWNER/MEMBER.
 
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.

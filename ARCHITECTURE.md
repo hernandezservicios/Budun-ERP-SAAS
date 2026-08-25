@@ -29,18 +29,18 @@ Incorporado oficialmente a partir de FASE 8. Cada producto tiene un tipo de segu
 
 Prohibido cualquier campo de stock desnormalizado o cualquier segunda fuente que pueda desincronizarse de la anterior. `serial`/`imei_1`/`imei_2` de `InventoryUnit` son únicos por tenant (no global) entre valores no vacíos; `imei_1` ≠ `imei_2`; toda unidad requiere al menos un identificador. Ver `docs/inventory.md` para el diseño completo (estados, máquina de estados, búsqueda unificada, reglas de venta).
 
-## Cuentas por cobrar: un solo ledger de saldo, nunca un campo editable
-Incorporado oficialmente a partir de FASE 10 (ampliado tras el cierre inicial). Mismo principio que el inventario: el saldo se deriva siempre de un ledger append-only, nunca de un campo desnormalizado que alguien pueda editar directamente.
+## Cuentas por cobrar, caja y autorizaciones: ledgers append-only, nunca un campo editable
+Incorporado oficialmente a partir de FASE 10 (ampliado tras el cierre inicial) y completado en FASE 11 (`apps/pos`, `apps/approvals`). Mismo principio que el inventario: el saldo se deriva siempre de un ledger append-only, nunca de un campo desnormalizado que alguien pueda editar directamente.
 
 | Concepto | Fuente de verdad | Estado |
 |---|---|---|
 | Pago aplicado a factura(s) | `Payment` + `PaymentAllocation` | Construido (FASE 10) |
-| Anticipo / saldo a favor | `Payment` sin aplicar hoy; `CustomerCreditLedger` (append-only: ADVANCE/PAYMENT_OVERAGE/CREDIT_NOTE/REFUND_TO_CREDIT/APPLICATION/REVERSAL) cuando se generalice | Especificado, no construido — ver `docs/accounts-receivable.md` |
-| Nota de crédito | `CreditNote`/`CreditNoteApplication` (misma disciplina que `PaymentAllocation`) | Especificado, no construido — ver `docs/accounts-receivable.md` |
-| Caja | `CashRegister`/`CashSession`/`CashMovement` | Especificado, no construido — ver `docs/cash-registers.md` |
-| Autorización | `ApprovalRequest`/`ApprovalService`, jerarquía usuario → rol → tenant → negar | Especificado, no construido — ver `docs/approvals.md` |
+| Anticipo / saldo a favor | `Payment` sin aplicar + `CreditNote` sin aplicar, sumados por `get_customer_credit_balance` | Construido (FASE 11) — sin tabla `CustomerCreditLedger` separada, ver `docs/accounts-receivable.md` sección 3 |
+| Nota de crédito | `CreditNote`/`CreditNoteApplication` (misma disciplina que `PaymentAllocation`) | Construido (FASE 11) — `docs/accounts-receivable.md` |
+| Caja | `CashRegister`/`CashSession`/`CashMovement` | Construido (FASE 11) — `docs/cash-registers.md` |
+| Autorización | `ApprovalPolicy`/`ApprovalRequest`, jerarquía usuario → rol → tenant → negar | Construido (FASE 11) — `docs/approvals.md` |
 
-Reglas permanentes: un `PaymentAllocation`/`CreditNoteApplication` nunca excede el saldo disponible del origen ni el saldo pendiente de la factura destino; origen y destino deben ser del mismo tenant y del mismo cliente; un `Payment` sin cliente nunca genera saldo a favor; nunca dos balances paralelos ("anticipo" y "saldo a favor" son el mismo saldo, distintos orígenes). Cuentas por Cobrar del ERP (lo que un cliente le debe a un tenant) y Billing del SaaS (lo que un tenant le debe a Budun ERP) son ejes ortogonales — nunca se mezclan.
+Reglas permanentes: un `PaymentAllocation`/`CreditNoteApplication` nunca excede el saldo disponible del origen ni el saldo pendiente de la factura destino; origen y destino deben ser del mismo tenant y del mismo cliente; un `Payment` sin cliente nunca genera saldo a favor; nunca dos balances paralelos ("anticipo" y "saldo a favor" son el mismo saldo, distintos orígenes); nunca una tercera tabla que resuma los dos ledgers reales. Cuentas por Cobrar del ERP (lo que un cliente le debe a un tenant) y Billing del SaaS (lo que un tenant le debe a Budun ERP) son ejes ortogonales — nunca se mezclan.
 
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

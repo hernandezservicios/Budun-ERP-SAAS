@@ -101,38 +101,41 @@ reinventarla:
 - Documentado en `docs/sales.md`, `docs/quotations.md`, `docs/proforma-invoices.md`, `docs/payments.md`, `docs/reservations.md`, `docs/returns.md`, `docs/invoice-documents.md`. Especificaciones de FASE 11-17 actualizadas con la interfaz que cada una debe consumir.
 - Ningún módulo de negocio adicional (POS, Compras, Gastos, Reportes, Roles/Audit/API, PayPal, Billing, motor de facturación fiscal, ledger contable completo de cuentas por cobrar, PDF binario) fue construido — todos documentados explícitamente en `docs/sales.md`/`docs/payments.md`.
 
-## Doctrina de Cuentas por Cobrar (sincronización de fuentes de verdad, sin implementación nueva)
+## Doctrina de Cuentas por Cobrar (sincronización de fuentes de verdad)
 
 Tras aprobar la ampliación Payment + PaymentAllocation, el usuario
 ordenó formalizar el dominio completo de cuentas por cobrar como
-doctrina oficial del proyecto — documentación y arquitectura
-únicamente, sin construir ningún sistema contable completo. Quedan
-incorporados oficialmente a partir de esta fase (diseño aprobado,
-implementación en la fase que corresponda):
+doctrina oficial del proyecto. En ese momento (previo a FASE 11) era
+documentación/arquitectura únicamente; **FASE 11 completó la
+implementación real de todo lo que seguía pendiente en esta lista**
+(actualizado aquí para no dejar una fuente de verdad desactualizada):
 
-- **`Payment`/`PaymentAllocation`** — ya construidos y en producción
-  (ver arriba y `docs/payments.md`).
-- **`Refund`** — ya construido (dinero que sale del sistema, separado
-  de `Return`); extendido conceptualmente para poder convertirse en
-  crédito en vez de salir como dinero, sin romper su contrato actual.
-  Ver `docs/returns.md` y `docs/accounts-receivable.md` sección 5.
-- **`CustomerCreditLedger`** — ledger append-only conceptual que
-  unifica anticipo, sobrepago, nota de crédito y reembolso convertido
-  a crédito en un único saldo a favor por cliente (nunca dos balances
-  paralelos). Ver `docs/accounts-receivable.md`.
-- **Anticipo (`CustomerAdvance`, concepto — no necesariamente un
-  modelo nuevo)** — dinero recibido antes de una factura definitiva;
-  ya representable hoy como un `Payment` sin `PaymentAllocation`. Un
-  anticipo nunca es una venta. Ver `docs/accounts-receivable.md`.
-- **`CreditNote`/`CreditNoteApplication`** — nota de crédito
-  compensatoria, estructuralmente análoga a `Payment`/
+- **`Payment`/`PaymentAllocation`** — construidos en esta fase (ver
+  arriba y `docs/payments.md`).
+- **`Refund`** — construido en esta fase (dinero que sale del sistema,
+  separado de `Return`); FASE 11 agregó `convert_refund_to_credit`
+  como alternativa (el dinero nunca sale del negocio, genera una
+  `CreditNote` en su lugar) sin romper su contrato original. Ver
+  `docs/returns.md` y `docs/accounts-receivable.md` sección 5.
+- **`CustomerCreditLedger` como tabla separada — decisión final: NO se
+  construyó** (FASE 11). En vez de una tercera fuente de verdad,
+  `get_customer_credit_balance`/`get_sale_paid_amount` se
+  generalizaron para sumar los dos ledgers reales (`Payment`+
+  `PaymentAllocation` y `CreditNote`+`CreditNoteApplication`). Ver
+  `docs/accounts-receivable.md` sección 3.
+- **Anticipo** — dinero recibido antes de una factura definitiva,
+  representado como un `Payment` sin `PaymentAllocation` (operacional
+  desde el POS, FASE 11). Un anticipo nunca es una venta. Ver
+  `docs/accounts-receivable.md`/`docs/pos.md`.
+- **`CreditNote`/`CreditNoteApplication`** — construidos en FASE 11
+  (`apps.sales`), estructuralmente análogos a `Payment`/
   `PaymentAllocation` (misma validación de sobre-aplicación, mismo
   aislamiento por tenant/cliente, misma inmutabilidad vía reversa).
   Nunca altera la factura histórica. Ver `docs/accounts-receivable.md`.
-- **Estado de cuenta del cliente (`Customer Statement`)** — vista
-  futura de solo lectura sobre los modelos anteriores; pertenece a
-  FASE 14, con un resumen básico anticipado en la ficha de cliente de
-  FASE 9. Ver `docs/accounts-receivable.md`.
+- **Estado de cuenta del cliente (`Customer Statement`)** — sigue
+  siendo una vista futura de solo lectura sobre los modelos anteriores
+  (no requiere ningún modelo nuevo); pertenece a FASE 14. Ver
+  `docs/accounts-receivable.md` sección 6.
 - **Trazabilidad financiera** — todo movimiento de crédito y toda
   aplicación de nota de crédito debe poder responder de dónde vino y a
   dónde se aplicó, mismo estándar que `Quotation → ProformaInvoice →

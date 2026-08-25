@@ -1,7 +1,7 @@
 # FASE 16 — PayPal Sandbox
 
 ## Objetivo
-Integración PayPal Sandbox mediante service layer; Orders/Payments/Subscriptions/Webhooks según alcance. Configurar MCP con documentación oficial vigente.
+Integración PayPal Sandbox mediante service layer; Orders/Payments/Subscriptions/Webhooks según alcance. Configurar MCP con documentación oficial vigente. Ver `docs/paypal.md` para el resumen arquitectónico.
 
 ## Regla incremental
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.

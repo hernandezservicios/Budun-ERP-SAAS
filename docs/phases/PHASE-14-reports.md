@@ -1,7 +1,12 @@
 # FASE 14 — Reports
 
 ## Objetivo
-Reportes de ventas, inventario, productos, clientes, compras, gastos y utilidad; filtros y exportaciones según alcance.
+Reportes de ventas, inventario, productos, clientes, compras, gastos y
+utilidad; filtros y exportaciones según alcance. Incluye explícitamente
+**Reportes de Inventario** completos (existencias, movimientos,
+serializados, trazabilidad, valorización preparada — ver sección
+dedicada más abajo), reportes de caja, y cuentas por cobrar/pagar. Ver
+`docs/reports.md` para el resumen arquitectónico.
 
 ## Regla incremental
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
@@ -20,23 +25,62 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
 - [ ] Git commit creado.
 
-## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
+## Reportes de Inventario (requisito explícito, sección dedicada)
 
 Los reportes de inventario/stock deben distinguir explícitamente los dos
 tipos de seguimiento definidos en FASE 8 (`Product.inventory_tracking_type`,
 ver `docs/inventory.md`), nunca sumarlos como si fueran una sola cifra
-homogénea:
+homogénea, y deben cubrir como mínimo:
 
-- Productos por CANTIDAD: cantidad disponible desde `StockMovement`
-  (vía `services.get_current_stock`/`services.list_products_with_stock`).
-- Productos SERIALIZADOS: conteo de unidades por estado desde
-  `InventoryUnit` (p. ej. cuántas `EN_STOCK`, cuántas `VENDIDO`,
-  `REPARACION`, `GARANTIA`, etc. — cada estado es una dimensión de
-  reporte útil que no existe para productos por cantidad).
+- **Existencias**: stock actual, reservado (`apps.sales.services.get_reserved_quantity`,
+  FASE 10), disponible para prometer (`get_available_to_promise`) y
+  comprometido (cantidad ya incluida en cotizaciones/proformas
+  vigentes, si el negocio lo distingue de "reservado") — nunca un
+  único número que mezcle las cuatro dimensiones.
+- **Productos por cantidad vs. serializados, activos/inactivos**:
+  segmentar siempre por `inventory_tracking_type` y por `is_active`.
+- **Bajo stock y agotados**: reutilizar `services.get_low_stock_products`
+  (ya construido, FASE 8), nunca recalcular el umbral con una consulta
+  propia.
+- **Movimientos**: entradas, salidas, ajustes y devoluciones —
+  agregando `StockMovement` por `movement_type` (productos por
+  cantidad).
+- **Serializados**: IMEI, serial, estado, fecha, usuario y producto de
+  cada `InventoryUnit` — conteo de unidades por estado (`EN_STOCK`,
+  `VENDIDO`, `RESERVADO`, `DEVUELTO`, `REPARACION`, `GARANTIA`,
+  `DANADO`, `PERDIDO`; cada estado es una dimensión de reporte útil que
+  no existe para productos por cantidad). Nunca exponer el IMEI/serie
+  completo en un reporte sin necesidad real — mismo principio de
+  seguridad que `apps.inventory.services`/la API de Inventario (FASE 15).
+- **Trazabilidad completa de movimientos**: un reporte de "historial de
+  un producto/unidad" debe poder listar, en orden, cada `StockMovement`/
+  transición de `InventoryUnit` con su usuario/fecha/motivo/documento
+  de origen (compra, venta, devolución, ajuste).
+- **Valorización**: preparada (costo × cantidad por producto/categoría)
+  pero sin construir un motor de valorización completo (FIFO/promedio
+  ponderado, etc.) salvo necesidad real explícita — mismo criterio de
+  "no adelantar contabilidad" ya aplicado en todo el proyecto.
 - Reutilizar `services.get_current_stock`/`services.list_products_with_stock`
   (que ya devuelven el valor correcto para ambos tipos vía el mismo
   campo anotado `current_stock`) en vez de recalcular el stock con una
   consulta propia — evita una tercera fuente de verdad.
+
+## Reportes de Caja (FASE 11, `apps.pos`, ya construido)
+
+- Aperturas y cierres por caja/usuario/período, agregando `CashSession`.
+- Ventas en efectivo, entradas, salidas, devoluciones en efectivo —
+  agregando `CashMovement` por `movement_type`, reutilizando
+  `apps.pos.services.get_expected_cash` como referencia de cálculo,
+  nunca recalculando el efectivo esperado con una consulta propia.
+- Sobrantes/faltantes: `CashSession.difference` por sesión/caja/período.
+
+## Reportes de Cuentas por Pagar (FASE 12, cuando exista)
+
+Equivalentes a los de cuentas por cobrar (ver más abajo) pero del lado
+de `Supplier`: órdenes/recepciones pendientes de pago, pagos a
+proveedor, anticipos, saldo pendiente por proveedor — siempre como
+agregación de lectura sobre los ledgers reales que construya FASE 12
+(ver `docs/purchases.md`), nunca una fuente de verdad nueva.
 
 ## Nota de FASE 9 — Interfaz de Clientes/Proveedores a consumir
 
@@ -91,20 +135,23 @@ no recalcular:
 
 ## Nota de sincronización — Cuentas por Cobrar y Caja a reportar
 
-Sincronización de doctrina previa a FASE 11, sin implementación nueva.
-Cuando los modelos correspondientes existan (`CustomerCreditLedger`,
-`CreditNote`, `CashRegister`/`CashSession`, `ApprovalRequest`), esta
-fase debe poder reportar, siempre como agregación de lectura sobre
-esos modelos (nunca recalculando el saldo con una consulta propia):
+`Payment`/`PaymentAllocation` (FASE 10) y `CreditNote`/
+`CreditNoteApplication`/`CashRegister`/`CashSession`/`ApprovalRequest`
+(FASE 11) ya están construidos y en producción — esta fase debe
+reportar sobre ellos, siempre como agregación de lectura (nunca
+recalculando el saldo con una consulta propia):
 
 - **Anticipos**: `Payment` sin `PaymentAllocation` (saldo sin aplicar
   por cliente), ver `docs/accounts-receivable.md`.
 - **Notas de crédito**: emitidas, aplicadas parcial/totalmente,
   canceladas — agregando `CreditNote`/`CreditNoteApplication`.
-- **Refunds**: dinero devuelto vs. convertido a crédito.
+- **Refunds**: dinero devuelto vs. convertido a crédito
+  (`Refund`/`CreditNote(source_type=REFUND)`).
 - **Saldo pendiente / saldo a favor**: por factura
-  (`get_sale_balance_due`) y por cliente
-  (`get_customer_credit_balance`/`CustomerCreditLedger` cuando exista).
+  (`get_sale_balance_due`) y por cliente (`get_customer_credit_balance`
+  — ya generalizado para sumar `Payment`+`CreditNote`, sin
+  `CustomerCreditLedger` como tabla separada, ver
+  `docs/accounts-receivable.md` sección 3).
 - **Estados de cuenta**: la vista "Customer Statement" descrita en
   `docs/accounts-receivable.md` (sección 6) es responsabilidad de esta
   fase.

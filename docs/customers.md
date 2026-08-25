@@ -86,18 +86,17 @@ se trazó:
   tener nunca un `current_stock` en `Product` (FASE 8): el
   cálculo se hace desde el histórico real, nunca desde un campo que se
   pueda desincronizar.
-- **Extensión futura esperada**: cuando Ventas/Billing necesiten un
-  saldo real, lo natural es un modelo relacionado nuevo (con su propio
-  ledger append-only — mismo patrón que `StockMovement`/`InventoryUnit`
-  en FASE 8) vinculado por FK a `Customer`, nunca un campo `balance`
-  sobre este modelo. **Actualización (sincronización previa a FASE 11,
-  FASE 10 ya construida)**: `Payment`/`PaymentAllocation` ya son ese
-  ledger para pagos aplicados a facturas (ver `docs/payments.md`); el
-  ledger de saldo a favor/anticipos/notas de crédito anticipado aquí
-  como `CustomerAccount` se especificó formalmente como
-  `CustomerCreditLedger` en `docs/accounts-receivable.md` — mismo
-  concepto, nombre definitivo fijado ahí. Ese documento es la fuente de
-  verdad de diseño para cuando se construya, no este.
+- **Extensión futura esperada, ya construida**: el `CustomerAccount`
+  anticipado aquí en FASE 9 se materializó en FASE 10/11 como
+  `Payment`/`PaymentAllocation` (pagos aplicados a facturas) +
+  `CreditNote`/`CreditNoteApplication` (saldo a favor/notas de
+  crédito) — dos ledgers append-only reales en `apps.sales`, **nunca
+  una tabla `CustomerCreditLedger` separada** (decisión final,
+  documentada en `docs/accounts-receivable.md` sección 3): construir
+  una tercera tabla que resumiera los dos ledgers habría sido
+  exactamente el "campo `balance` editable" que este documento evita
+  desde el principio. Ver `docs/accounts-receivable.md`/`docs/pos.md`
+  para el diseño completo y operacional.
 
 ## Arquitectura (separación de responsabilidades)
 

@@ -47,8 +47,11 @@ editado a mano), `status` (`OPEN`/`CLOSED`), `notes`.
   rechazarse con un mensaje claro, nunca silenciosamente crear una
   segunda sesión concurrente sobre la misma caja física.
 - Cualquier excepción a estas dos reglas requiere permiso explícito
-  (integrado con `docs/approvals.md` cuando exista esa infraestructura)
-  — nunca un bypass silencioso desde el frontend.
+  (vía `apps.approvals`, construido en esta misma fase — ver
+  `docs/approvals.md`) — nunca un bypass silencioso desde el frontend.
+  Nota: FASE 11 no llegó a necesitar una excepción real a estas dos
+  reglas de exclusividad (ninguna operación las requirió); quedan
+  documentadas como el mecanismo a usar si una fase futura lo necesita.
 - Toda apertura y todo cierre se auditan (usuario, caja, fecha, montos)
   — mismo estándar de auditoría que el resto del sistema desde FASE 8.
 - Toda operación de caja (venta en efectivo, anticipo en efectivo,
@@ -68,12 +71,12 @@ inicial` (`opening_amount`), `notas` opcionales. Estado resultante:
 exista una `CashSession` `OPEN` para el usuario/caja que está operando
 (ver sección 8, regla obligatoria para POS).
 
-## 5. Movimientos de caja (`CashMovement`, conceptual)
+## 5. Movimientos de caja (`CashMovement`)
 
 Cada operación que afecta el efectivo físico (o que debe quedar
 registrada dentro de una sesión aunque no mueva efectivo) genera una
 fila — mismo principio append-only que `StockMovement`/
-`PaymentAllocation`/`CustomerCreditLedger`:
+`PaymentAllocation`/`CreditNoteApplication`:
 
 | Tipo | Efecto en efectivo físico |
 |---|---|

@@ -45,11 +45,11 @@ Incorporado oficialmente a partir de FASE 10 (ampliado tras el cierre inicial). 
 - El saldo pendiente de una factura y el saldo sin aplicar de un pago se calculan siempre desde el ledger, nunca un campo desnormalizado.
 - Idempotencia obligatoria (`idempotency_key`); toda operación audita payment recorded/allocated/reversed/voided/refunded.
 
-**Especificado como doctrina, sin implementación todavía** (ver `docs/accounts-receivable.md`, `docs/cash-registers.md`, `docs/approvals.md` para el diseño completo):
-- Anticipo = dinero recibido antes de una factura (un `Payment` sin aplicar); saldo a favor = un único saldo por cliente (nunca dos balances paralelos para "anticipo" y "saldo a favor"), respaldado eventualmente por `CustomerCreditLedger` (ledger append-only: ADVANCE/PAYMENT_OVERAGE/CREDIT_NOTE/REFUND_TO_CREDIT/APPLICATION/REVERSAL).
-- `CreditNote`/`CreditNoteApplication`: nota de crédito compensatoria, misma disciplina de validación que `PaymentAllocation` (nunca sobre-aplicación, nunca cruza tenant/cliente, nunca altera la factura histórica).
-- `CashRegister`/`CashSession`: un tenant puede tener cualquier cantidad de cajas (sin límite fijo). Una `CashSession` abierta es obligatoria antes de confirmar una venta operativa de mostrador. Solo el efectivo afecta el efectivo físico de la caja.
-- `ApprovalRequest`/`ApprovalService`: servicio centralizado y reutilizable (nunca lógica de autorización duplicada por módulo) para descuentos por encima del límite (por porcentaje Y por monto, cada uno con su propio tope) y crédito excedido. Jerarquía de resolución: usuario → rol → tenant → negar.
+**Cuentas por cobrar, caja y autorizaciones — construido a partir de FASE 11** (`apps/pos`, `apps/approvals`; diseño completo en `docs/accounts-receivable.md`, `docs/cash-registers.md`, `docs/approvals.md`):
+- Anticipo = dinero recibido antes de una factura (un `Payment` sin aplicar); saldo a favor = un único saldo por cliente (nunca dos balances paralelos para "anticipo" y "saldo a favor"). No existe una tabla `CustomerCreditLedger` separada — decisión final: `get_customer_credit_balance`/`get_sale_paid_amount` se generalizaron para sumar `Payment`+`PaymentAllocation` y `CreditNote`+`CreditNoteApplication`, los dos ledgers reales, en vez de crear una tercera fuente de verdad.
+- `CreditNote`/`CreditNoteApplication` (en `apps.sales`): nota de crédito compensatoria, misma disciplina de validación que `PaymentAllocation` (nunca sobre-aplicación, nunca cruza tenant/cliente, nunca altera la factura histórica).
+- `CashRegister`/`CashSession`/`CashMovement` (`apps.pos`): un tenant puede tener cualquier cantidad de cajas (sin límite fijo). Una `CashSession` abierta es obligatoria antes de confirmar una venta operativa de mostrador. Solo el efectivo afecta el efectivo físico de la caja.
+- `ApprovalPolicy`/`ApprovalRequest` (`apps.approvals`): servicio centralizado y reutilizable (nunca lógica de autorización duplicada por módulo) para descuentos por encima del límite (por porcentaje Y por monto, cada uno con su propio tope) y crédito excedido. Jerarquía de resolución: usuario → rol → tenant → negar. El propietario del tenant siempre está autorizado (regla de negocio explícita).
 
 ## Fases
 Exactamente 25 fases: 0–24. No saltar, fusionar ni crear nuevas fases sin justificación documentada.
@@ -73,7 +73,7 @@ Commit por fase. No hacer commits gigantes. No commitear .env, API keys, passwor
 Al terminar una fase, generar un reporte y detenerse hasta recibir autorización para la siguiente fase, salvo que el usuario haya indicado expresamente que se pueden ejecutar las siguientes fases en la misma instrucción.
 
 ## Fuente de verdad
-Este archivo, docs/MASTER-PROMPT.md y docs/phases/PHASES.md son la fuente de verdad del proyecto. Si hay conflicto, prevalecen en ese orden.
+Este archivo, docs/MASTER-PROMPT.md, docs/phases/PHASES.md y docs/phases/FASES_OFICIALES_0_24_ACTUALIZADAS.md (fuente maestra de alcance por fase, entregada por el usuario tras el cierre de FASE 11) son la fuente de verdad del proyecto. Si hay conflicto, prevalecen en ese orden.
 
 
 ## Construcción incremental

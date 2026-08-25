@@ -1,15 +1,32 @@
-# FASE 12 — Purchases
+# FASE 12 — Purchases + Purchase Orders + Receiving + Costs + AP preparation
 
 ## Objetivo
-Compras, recepción y actualización de inventario.
+Órdenes de compra, recepciones parciales/completas (productos por
+cantidad y serializados, con IMEI/serie en la recepción), costos
+históricos, landed cost preparado (sin construirlo todavía si no hay
+necesidad real), devoluciones a proveedor, documentos adjuntos,
+reutilización de `apps.approvals` para cualquier autorización que
+corresponda, y preparación de cuentas por pagar (incluyendo anticipos
+a proveedores) — mismo criterio que FASE 9/10 con cuentas por cobrar:
+preparar el dominio sin construir un motor contable completo salvo que
+el usuario lo pida explícitamente. Ver la sección "Nota de
+sincronización" más abajo y `docs/purchases.md` para el diseño
+detallado.
 
 ## Regla incremental
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
 
 ## Criterios de aceptación
-- [ ] purchase workflow
-- [ ] stock increase
-- [ ] tests
+- [ ] `PurchaseOrder`/`PurchaseOrderItem` — flujo de orden de compra (borrador → enviada → confirmada/cancelada), numeración propia vía `DocumentSequence`.
+- [ ] Recepción parcial y completa — `PurchaseReceipt`/`PurchaseReceiptItem` (o equivalente), pudiendo recibir una orden en varias entregas.
+- [ ] Recepción de productos por CANTIDAD — impacta inventario vía `apps.inventory.services.register_stock_in`, nunca duplicando esa lógica.
+- [ ] Recepción de productos SERIALIZADOS — alta de `InventoryUnit` por IMEI/serie vía `apps.inventory.services.register_serialized_unit`, una unidad por cada IMEI/serie recibido.
+- [ ] Costos históricos por línea (snapshot al recibir, mismo principio que `SaleItem`/`QuotationItem` en FASE 10 — nunca recalculado desde el costo actual del producto).
+- [ ] Devoluciones a proveedor (mercancía) — inmutables, mismo principio que `Return` de FASE 10.
+- [ ] Documentos adjuntos — reutilizando la validación de archivos de FASE 9 (`apps.customers.file_validation`), nunca un segundo sistema de archivos.
+- [ ] Pago en efectivo desde caja requiere `CashSession` abierta (`apps.pos`, FASE 11) — otros medios no afectan el efectivo físico.
+- [ ] Preparación de cuentas por pagar y anticipos a proveedores — sin motor contable completo, mismo criterio que cuentas por cobrar en FASE 9/10.
+- [ ] tests (unitarios, integración, Multi-Tenant, concurrencia donde aplique)
 
 ## Verificación
 - [ ] `python manage.py check` o la validación equivalente está en verde.
@@ -80,6 +97,36 @@ conceptos de venta, no de compra), pero sí debe respetar:
 - El `salesperson`/comprador responsable de una compra puede seguir el
   mismo patrón que `Sale.salesperson` (FK a usuario, `SET_NULL`) para
   consistencia, aunque es una decisión de esta fase.
+
+## Nota de sincronización — Caja y Autorizaciones ya construidas (FASE 11)
+
+FASE 11 construyó `apps.pos` (`CashRegister`/`CashSession`/
+`CashMovement`, ver `docs/cash-registers.md`) y `apps.approvals`
+(`ApprovalPolicy`/`ApprovalRequest`, ver `docs/approvals.md`) como
+servicios reales y reutilizables — esta fase debe consumirlos tal
+cual, nunca reimplementar su lógica:
+
+- **Pago en efectivo de una compra**: si esta fase permite pagar una
+  compra en efectivo desde una caja física, requiere una `CashSession`
+  `OPEN` exactamente igual que una venta de mostrador
+  (`apps.pos.services.ensure_open_session_for_checkout`/
+  `record_cash_movement`, con un `CashMovement.MovementType` nuevo si
+  hace falta uno específico para "pago a proveedor" — nunca duplicar
+  el cálculo de efectivo esperado). Otros medios de pago no afectan el
+  efectivo físico.
+- **Autorizaciones**: cualquier descuento/excepción de esta fase que
+  necesite aprobación (p. ej. un ajuste de costo fuera de rango, una
+  recepción con discrepancia) debe usar `apps.approvals.services`
+  (`request_approval`/`resolve_approval`/`check_*_authorization`),
+  nunca una implementación paralela — ver `docs/approvals.md` sección
+  7 ("Operaciones autorizables futuras"), que ya anticipa ajustes de
+  inventario como caso de uso de esta fase.
+- **Cuentas por pagar**: preparar el dominio siguiendo exactamente el
+  mismo criterio que cuentas por cobrar (FASE 9/10/11) — un anticipo a
+  proveedor es un pago sin aplicar, un saldo a favor del proveedor se
+  deriva de ledgers reales, nunca un campo `balance` editable. Ver
+  `docs/purchases.md` para el diseño detallado (especificación, sin
+  implementación todavía).
 
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.

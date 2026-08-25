@@ -1,14 +1,21 @@
 # FASE 13 — Expenses
 
 ## Objetivo
-Gastos, categorías, adjuntos opcionales y reportes base.
+Gastos profesionales: categorías, proveedor opcional, documentos
+adjuntos, monto, impuestos, método de pago, fecha, estado, y relación
+con caja/pagos cuando el gasto se paga en efectivo desde una caja
+física. Preparar (sin implementar todavía) recurrencia y aprobaciones
+de gastos vía `apps.approvals` (FASE 11, ya construido).
 
 ## Regla incremental
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
 
 ## Criterios de aceptación
-- [ ] CRUD
+- [ ] CRUD de `Expense` (categoría, proveedor opcional, monto, impuestos, método, fecha, estado, documentos adjuntos)
 - [ ] tenant scoped
+- [ ] Relación con caja — un gasto pagado en efectivo desde una `CashRegister` requiere `CashSession` abierta (`apps.pos`) y genera el `CashMovement` correspondiente; otros métodos de pago no afectan el efectivo físico.
+- [ ] Preparación de recurrencia (sin implementar el motor de repetición todavía, salvo necesidad real explícita)
+- [ ] Preparación de aprobaciones de gastos por encima de un límite, reutilizando `apps.approvals` (sin conectar todavía salvo necesidad real explícita)
 
 ## Verificación
 - [ ] `python manage.py check` o la validación equivalente está en verde.
@@ -47,6 +54,26 @@ diseño en esta fase por ese motivo. Si en el futuro un gasto necesitara
 un número comercial propio, reutilizar el patrón de `DocumentSequence`
 (agregando su propio `DocumentType`) en vez de inventar un esquema de
 numeración paralelo.
+
+## Nota de sincronización — Caja y Autorizaciones ya construidas (FASE 11)
+
+FASE 11 construyó `apps.pos` (`CashRegister`/`CashSession`/
+`CashMovement`) y `apps.approvals` (`ApprovalPolicy`/`ApprovalRequest`)
+como servicios reales — esta fase debe consumirlos, nunca
+reimplementarlos:
+
+- Un gasto pagado en efectivo desde una caja física exige una
+  `CashSession` `OPEN` para quien registra el pago
+  (`apps.pos.services.ensure_open_session_for_checkout`) y genera un
+  `CashMovement` (tipo `CASH_OUT` o uno específico si esta fase decide
+  agregarlo, p. ej. para distinguir "gasto" de "retiro genérico") —
+  nunca un cálculo de efectivo paralelo al de `apps.pos`.
+- Si esta fase agrega un límite de monto que un gasto puede registrar
+  sin aprobación, debe usar `apps.approvals.services`
+  (`request_approval`/`resolve_approval`), reutilizando el mismo
+  patrón de "bloquear → solicitar → aprobar → reintentar" ya construido
+  para descuentos/crédito excedido en el POS — ver `docs/approvals.md`
+  sección 7, que ya anticipa esto como operación autorizable futura.
 
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
