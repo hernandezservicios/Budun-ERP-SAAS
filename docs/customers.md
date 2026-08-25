@@ -87,10 +87,17 @@ se trazó:
   cálculo se hace desde el histórico real, nunca desde un campo que se
   pueda desincronizar.
 - **Extensión futura esperada**: cuando Ventas/Billing necesiten un
-  saldo real, lo natural es un modelo relacionado nuevo (p. ej.
-  `CustomerAccount`, con su propio ledger append-only — mismo patrón que
-  `StockMovement`/`InventoryUnit` en FASE 8) vinculado por FK a
-  `Customer`, nunca un campo `balance` sobre este modelo.
+  saldo real, lo natural es un modelo relacionado nuevo (con su propio
+  ledger append-only — mismo patrón que `StockMovement`/`InventoryUnit`
+  en FASE 8) vinculado por FK a `Customer`, nunca un campo `balance`
+  sobre este modelo. **Actualización (sincronización previa a FASE 11,
+  FASE 10 ya construida)**: `Payment`/`PaymentAllocation` ya son ese
+  ledger para pagos aplicados a facturas (ver `docs/payments.md`); el
+  ledger de saldo a favor/anticipos/notas de crédito anticipado aquí
+  como `CustomerAccount` se especificó formalmente como
+  `CustomerCreditLedger` en `docs/accounts-receivable.md` — mismo
+  concepto, nombre definitivo fijado ahí. Ese documento es la fuente de
+  verdad de diseño para cuando se construya, no este.
 
 ## Arquitectura (separación de responsabilidades)
 

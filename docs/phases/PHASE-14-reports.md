@@ -89,6 +89,30 @@ no recalcular:
   otorgados" o "impuesto recaudado" es una agregación directa sobre
   `SaleItem`, sin recalcular nada.
 
+## Nota de sincronización — Cuentas por Cobrar y Caja a reportar
+
+Sincronización de doctrina previa a FASE 11, sin implementación nueva.
+Cuando los modelos correspondientes existan (`CustomerCreditLedger`,
+`CreditNote`, `CashRegister`/`CashSession`, `ApprovalRequest`), esta
+fase debe poder reportar, siempre como agregación de lectura sobre
+esos modelos (nunca recalculando el saldo con una consulta propia):
+
+- **Anticipos**: `Payment` sin `PaymentAllocation` (saldo sin aplicar
+  por cliente), ver `docs/accounts-receivable.md`.
+- **Notas de crédito**: emitidas, aplicadas parcial/totalmente,
+  canceladas — agregando `CreditNote`/`CreditNoteApplication`.
+- **Refunds**: dinero devuelto vs. convertido a crédito.
+- **Saldo pendiente / saldo a favor**: por factura
+  (`get_sale_balance_due`) y por cliente
+  (`get_customer_credit_balance`/`CustomerCreditLedger` cuando exista).
+- **Estados de cuenta**: la vista "Customer Statement" descrita en
+  `docs/accounts-receivable.md` (sección 6) es responsabilidad de esta
+  fase.
+- **Apertura/cierre de caja**: sobrantes y faltantes por sesión,
+  agregando `CashSession.difference` — ver `docs/cash-registers.md`.
+- **Descuentos autorizados / créditos aprobados excepcionalmente**:
+  agregando `ApprovalRequest` por tipo/estado — ver `docs/approvals.md`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

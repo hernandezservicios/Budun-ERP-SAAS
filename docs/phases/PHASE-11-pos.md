@@ -114,6 +114,56 @@ ventas". Reutilizar tal cual:
   unidad dos veces al carrito EN PANTALLA (antes de confirmar), por
   UX, revisando `unit.pk` en el estado del carrito.
 
+## Nota de sincronización — Cajas, Cuentas por Cobrar y Autorizaciones a construir en esta fase
+
+Sincronización de doctrina ordenada por el usuario tras aprobar la
+ampliación Payment + PaymentAllocation, previa a iniciar esta fase.
+Documentación y arquitectura únicamente — nada de esto se implementó
+todavía. FASE 11 debe construir, además del POS en sí:
+
+- **Múltiples cajas/terminales (`CashRegister`)**: el tenant puede
+  crear cualquier cantidad de cajas, sin límite fijo de diseño. Ver
+  `docs/cash-registers.md`.
+- **`CashSession`**: apertura/cierre de jornada de caja, con las
+  reglas de exclusividad (un usuario o una caja no pueden tener dos
+  sesiones `OPEN` simultáneas salvo permiso explícito), conciliación
+  al cierre (efectivo esperado vs. contado, sobrante/faltante), y
+  **bloqueo obligatorio**: ninguna venta operativa de mostrador se
+  confirma sin una `CashSession` abierta y válida. Ver
+  `docs/cash-registers.md`.
+- **`CashMovement`**: apertura, venta en efectivo, anticipo en
+  efectivo, entradas/salidas, devoluciones en efectivo, retiros,
+  ajustes autorizados. Solo el efectivo afecta el efectivo físico —
+  tarjeta/transferencia/PayPal quedan registrados en la sesión sin
+  sumar a `expected_cash`. Ver `docs/cash-registers.md`.
+- **Anticipos y saldo a favor operacional**: el POS debe poder recibir
+  un anticipo (`services.create_payment` sin aplicar todavía) y
+  aplicar el saldo a favor de un cliente (`get_customer_credit_balance`)
+  a una factura nueva o pendiente. Ver `docs/accounts-receivable.md`.
+- **Notas de crédito**: el POS debe poder aplicar una `CreditNote`
+  existente a una factura (cuando el modelo se construya en esta
+  fase o una posterior autorizada) con la misma disciplina de
+  validación que `PaymentAllocation`. Ver `docs/accounts-receivable.md`.
+- **Refunds**: cobro/devolución de dinero en efectivo desde el POS
+  reutiliza `services.record_refund` (nunca una segunda
+  implementación); cuando la política lo permita, un refund puede
+  convertirse en crédito en vez de salir como efectivo (ver
+  `docs/accounts-receivable.md`, sección 5).
+- **Autorización de descuentos**: por porcentaje Y por monto, cada uno
+  con su propio límite por rol/usuario, resolviendo la jerarquía
+  usuario → rol → tenant → negar. Exceder cualquiera de los dos
+  límites dispara un `ApprovalRequest`. Ver `docs/approvals.md`.
+- **Autorización de crédito excedido**: venta a crédito que supera
+  `customer.credit_limit`/`credit_days` requiere `ApprovalRequest` si
+  el cajero no tiene autorización suficiente. Ver `docs/approvals.md`.
+- **`ApprovalService`**: servicio centralizado y reutilizable — el POS
+  lo consume, nunca implementa su propia lógica de aprobación. Ver
+  `docs/approvals.md`.
+
+Estos documentos (`docs/accounts-receivable.md`, `docs/cash-registers.md`,
+`docs/approvals.md`) son la fuente de verdad de diseño para esta fase;
+deben releerse antes de implementar, no re-derivarse desde cero.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

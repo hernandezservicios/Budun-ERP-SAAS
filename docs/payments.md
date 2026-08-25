@@ -154,6 +154,17 @@ existentes — **no** una tabla ni un campo de saldo nuevo, ni un ledger
 contable completo (eso queda para una fase posterior si se decide
 construir cuentas por cobrar reales).
 
+Un `Payment` con `customer=None` (venta de mostrador) **nunca**
+participa en el cálculo de saldo a favor de ningún cliente — no hay
+ningún cliente al que atribuírselo (regla confirmada como doctrina
+permanente, ver `docs/accounts-receivable.md` sección 2). Ese mismo
+documento define oficialmente el resto del dominio de cuentas por
+cobrar (`CustomerCreditLedger`, anticipos, notas de crédito) como
+especificación aprobada para fases futuras — **sin ningún modelo nuevo
+construido todavía**; cuando exista `CustomerCreditLedger`, deberá
+generalizar esta función (nunca coexistir con ella como un segundo
+saldo independiente).
+
 ## Facturas pendientes del cliente (preparación de estado de cuenta)
 
 `get_customer_pending_sales(customer)`: ventas `CONFIRMED` o

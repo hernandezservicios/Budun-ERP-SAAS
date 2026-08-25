@@ -32,6 +32,28 @@ se quisiera facturar a un tenant basándose en su volumen de ventas
 (p. ej. un plan por transacción), sería una agregación de solo lectura
 sobre `Sale`/`Payment`, nunca una dependencia estructural.
 
+## Nota de sincronización — Cuentas por Cobrar del ERP vs. Billing del SaaS (separación obligatoria)
+
+Sincronización de doctrina previa a FASE 11, reafirmando explícitamente
+la nota anterior ahora que el ERP tiene un dominio de cuentas por
+cobrar más rico (`Payment`/`PaymentAllocation`/`CustomerCreditLedger`/
+`CreditNote`, ver `docs/accounts-receivable.md`): **estos dos dominios
+nunca deben mezclarse**, ni conceptual ni técnicamente:
+
+| | ERP Accounts Receivable | SaaS Billing |
+|---|---|---|
+| Qué es | Lo que un CLIENTE le debe a un TENANT (una empresa usando el ERP) | Lo que un TENANT le debe a Budun ERP (el SaaS) por usar la plataforma |
+| Modelos | `Customer`, `Sale`, `Payment`, `PaymentAllocation`, `CustomerCreditLedger`, `CreditNote` | `Tenant`, `Plan`, `Subscription` (esta fase) |
+| Saldo | Saldo a favor / pendiente de un `Customer` | Estado de la suscripción de un `Tenant` |
+
+**Nunca** debe existir un campo, modelo o consulta que combine el
+"saldo de un cliente" de un tenant con la "suscripción del tenant" —
+son ejes ortogonales. Si en el futuro se quisiera un plan de Billing
+basado en el volumen de cuentas por cobrar de un tenant (métrica de
+uso, no un acoplamiento estructural), sería una agregación de solo
+lectura sobre `apps.sales`/`apps.accounts_receivable` (cuando exista),
+nunca una relación directa entre `Subscription` y `Customer`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

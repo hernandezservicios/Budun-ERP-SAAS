@@ -37,6 +37,20 @@ Prohibido introducir un campo de stock desnormalizado o una segunda fuente de ve
 
 Unicidad de identificadores de `InventoryUnit` (serial, IMEI 1, IMEI 2): únicos **por tenant**, nunca global, y solo entre valores no vacíos (varias unidades pueden no tener alguno de los tres). IMEI 1 nunca puede ser igual a IMEI 2. Toda unidad debe tener al menos un identificador no vacío. Ver `docs/inventory.md` para el detalle completo (estados, máquina de estados, búsqueda unificada, reglas de venta).
 
+## Pagos y cuentas por cobrar
+Incorporado oficialmente a partir de FASE 10 (ampliado tras el cierre inicial). Un `Payment` (dinero recibido de un cliente) puede aplicarse a una o varias facturas del mismo cliente mediante `PaymentAllocation` (ledger append-only, nunca editado in-place — las correcciones son reversos, no ediciones). Reglas permanentes:
+- El monto aplicado nunca puede exceder el saldo disponible del pago ni el saldo pendiente de la factura.
+- `Payment` y la `Sale`/factura destino deben pertenecer al mismo tenant; al aplicar, `Payment.customer` debe coincidir con `Sale.customer`.
+- `Payment.customer` puede ser nulo solo para ventas de mostrador/consumidor final sin cliente registrado — un pago sin cliente **nunca** genera saldo a favor de nadie.
+- El saldo pendiente de una factura y el saldo sin aplicar de un pago se calculan siempre desde el ledger, nunca un campo desnormalizado.
+- Idempotencia obligatoria (`idempotency_key`); toda operación audita payment recorded/allocated/reversed/voided/refunded.
+
+**Especificado como doctrina, sin implementación todavía** (ver `docs/accounts-receivable.md`, `docs/cash-registers.md`, `docs/approvals.md` para el diseño completo):
+- Anticipo = dinero recibido antes de una factura (un `Payment` sin aplicar); saldo a favor = un único saldo por cliente (nunca dos balances paralelos para "anticipo" y "saldo a favor"), respaldado eventualmente por `CustomerCreditLedger` (ledger append-only: ADVANCE/PAYMENT_OVERAGE/CREDIT_NOTE/REFUND_TO_CREDIT/APPLICATION/REVERSAL).
+- `CreditNote`/`CreditNoteApplication`: nota de crédito compensatoria, misma disciplina de validación que `PaymentAllocation` (nunca sobre-aplicación, nunca cruza tenant/cliente, nunca altera la factura histórica).
+- `CashRegister`/`CashSession`: un tenant puede tener cualquier cantidad de cajas (sin límite fijo). Una `CashSession` abierta es obligatoria antes de confirmar una venta operativa de mostrador. Solo el efectivo afecta el efectivo físico de la caja.
+- `ApprovalRequest`/`ApprovalService`: servicio centralizado y reutilizable (nunca lógica de autorización duplicada por módulo) para descuentos por encima del límite (por porcentaje Y por monto, cada uno con su propio tope) y crédito excedido. Jerarquía de resolución: usuario → rol → tenant → negar.
+
 ## Fases
 Exactamente 25 fases: 0–24. No saltar, fusionar ni crear nuevas fases sin justificación documentada.
 

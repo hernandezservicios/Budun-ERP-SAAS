@@ -92,6 +92,34 @@ implementarlo:
   `docs/sales.md`) son responsabilidad de esta fase: decidir el umbral
   y qué rol puede autorizar un descuento por encima de él.
 
+## Nota de sincronización — Recursos financieros y de caja para Audit/API
+
+Sincronización de doctrina previa a FASE 11, sin implementación nueva.
+Cuando esta fase construya el audit log transversal y extienda la API,
+debe contemplar explícitamente:
+
+- **`Payment`/`PaymentAllocation`** (ya construidos, FASE 10) como
+  entidades auditables/expuestas bajo su propio scope
+  (`payments:read`), nunca mezcladas con `inventory:read`.
+- **`CreditNote`/`CreditNoteApplication`** (`docs/accounts-receivable.md`)
+  bajo un scope propio cuando existan.
+- **`ApprovalRequest`** (`docs/approvals.md`) — el historial de
+  aprobaciones es información sensible; exponerlo por API (si alguna
+  vez se decide) requiere su propio scope explícito, nunca heredado de
+  otro módulo.
+- **`CashSession`/`CashMovement`** (`docs/cash-registers.md`) — igual
+  que arriba, un scope propio si se decide exponerlos.
+- La futura API **solo podrá exponer recursos financieros mediante
+  scopes explícitos** — nunca por defecto, nunca reutilizando el scope
+  de otro dominio (mismo principio ya aplicado a `customers:read`/
+  `suppliers:read`/`sales:read` en las notas de FASE 9/10 de este
+  documento).
+- Extender el modelo de roles (`Membership.Role`, FASE 3) con las
+  políticas de autorización por rol/usuario que `ApprovalService`
+  necesita (`docs/approvals.md`, sección 3) — esta fase es la
+  responsable de esa infraestructura de permisos más rica, aunque
+  FASE 11 sea la primera consumidora real.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

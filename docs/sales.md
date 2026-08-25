@@ -201,6 +201,13 @@ Ver `docs/invoice-documents.md`.
   `get_customer_pending_sales` son agregaciones de solo lectura sobre
   `Payment`/`PaymentAllocation`/`Refund`, no una tabla ni un motor de
   estado de cuenta — ver `docs/payments.md`.
+- **`CustomerCreditLedger`, `CustomerAdvance`, `CreditNote`/
+  `CreditNoteApplication`, `CashRegister`/`CashSession`,
+  `ApprovalRequest`/`ApprovalService`**: especificados formalmente como
+  doctrina del proyecto (sincronización previa a FASE 11), sin ningún
+  modelo, campo ni migración construido todavía. Ver
+  `docs/accounts-receivable.md`, `docs/cash-registers.md` y
+  `docs/approvals.md`.
 - **Comisiones de vendedor**: se registra `salesperson`/`confirmed_by`
   en cada documento (preparación explícita pedida), pero ningún cálculo
   de comisión — corresponde a una fase de Reportes/Nómina futura.

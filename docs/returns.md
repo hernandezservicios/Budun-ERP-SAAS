@@ -77,6 +77,13 @@ como `COMPLETED` de inmediato (`Refund.Status` también prevé
 `PENDING`/`FAILED` para cuando FASE 16 conecte un proveedor real con
 confirmación asíncrona).
 
+**Especificación futura (sin construir todavía)**: un reembolso podrá,
+alternativamente, convertirse en saldo a favor del cliente en vez de
+salir como dinero físico — decisión del negocio en el momento de
+atenderlo, nunca automática. Ver `docs/accounts-receivable.md` sección
+5 para el diseño completo (`REFUND_TO_CREDIT`), que preserva intacto
+el contrato actual de `record_refund`.
+
 ## Multi-Tenancy
 
 Cobertura en `test_isolation.py`: registrar una devolución sobre una
