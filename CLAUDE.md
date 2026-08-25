@@ -51,6 +51,16 @@ Incorporado oficialmente a partir de FASE 10 (ampliado tras el cierre inicial). 
 - `CashRegister`/`CashSession`/`CashMovement` (`apps.pos`): un tenant puede tener cualquier cantidad de cajas (sin límite fijo). Una `CashSession` abierta es obligatoria antes de confirmar una venta operativa de mostrador. Solo el efectivo afecta el efectivo físico de la caja.
 - `ApprovalPolicy`/`ApprovalRequest` (`apps.approvals`): servicio centralizado y reutilizable (nunca lógica de autorización duplicada por módulo) para descuentos por encima del límite (por porcentaje Y por monto, cada uno con su propio tope) y crédito excedido. Jerarquía de resolución: usuario → rol → tenant → negar. El propietario del tenant siempre está autorizado (regla de negocio explícita).
 
+## Compras y cuentas por pagar
+Incorporado oficialmente a partir de FASE 12 (`apps/purchases`; diseño completo en `docs/purchases.md`, `docs/purchase-orders.md`, `docs/receiving.md`, `docs/supplier-invoices.md`, `docs/accounts-payable.md`, `docs/supplier-returns.md`). Orquesta sobre `apps.customers` (Suppliers), `apps.inventory`, `apps.approvals` y `apps.pos` — nunca un segundo sistema de inventario, aprobaciones, caja ni archivos. Reglas permanentes:
+- `PurchaseOrder`/`PurchaseOrderItem` (numeración `OC-` vía la misma `DocumentSequence` de FASE 10) y `PurchaseReceipt`/`PurchaseReceiptItem` (`REC-`, inmutable, recepción parcial o completa) son documentos independientes — la orden es el compromiso, la recepción es el evento físico que mueve inventario.
+- `PurchaseOrderItem` nunca guarda `received_quantity`/`pending_quantity` como campo: se calculan siempre agregando sobre `PurchaseReceiptItem`, nunca una segunda fuente de verdad.
+- Recepción de productos QUANTITY vía `register_stock_in`; SERIALIZED vía `register_serialized_unit`, una llamada por unidad física (nunca un alta masiva sin unidades individuales reales).
+- `SupplierPayment`/`SupplierPaymentAllocation` (Cuentas por Pagar) son el espejo exacto de `Payment`/`PaymentAllocation` — mismas reglas de sobre-aplicación, mismo tenant/proveedor, mismo ledger append-only — pero **nunca mezclado** con Cuentas por Cobrar (`SupplierPayment` nunca referencia un `Customer`; `Payment` nunca referencia un `Supplier`). Un anticipo a proveedor es un `SupplierPayment` sin aplicar, nunca un modelo aparte.
+- `SupplierReturn`/`SupplierReturnItem`: inmutable, mismo principio que `Return`. Una unidad serializada devuelta al proveedor transiciona a `InventoryUnit.Status.DEVUELTO_PROVEEDOR` (agregado en FASE 12) — nunca se reutiliza `DEVUELTO`, que significa lo opuesto (un cliente nos devolvió a nosotros).
+- Pago a proveedor en efectivo exige una `CashSession` abierta (`apps.pos`) y genera `CashMovement` (`SUPPLIER_PAYMENT_CASH`/`SUPPLIER_ADVANCE_CASH`) — otros medios no afectan el efectivo físico; no toda compra requiere caja, solo el pago en efectivo.
+- Compra sobre el límite y sobre-recepción se autorizan vía `apps.approvals` (`ApprovalPolicy.max_purchase_order_amount`/`max_over_receiving_percent`, `ApprovalRequest.ActionType.PURCHASE_OVER_THRESHOLD`/`OVER_RECEIVING`) — mismas primitivas reutilizables que descuentos/crédito excedido, jerarquía usuario → rol → tenant → negar, propietario siempre autorizado.
+
 ## Fases
 Exactamente 25 fases: 0–24. No saltar, fusionar ni crear nuevas fases sin justificación documentada.
 

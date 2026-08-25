@@ -1,0 +1,55 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Devolución a proveedor — {{ orden.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'purchases:purchase_order_list' %}">Compras</a></li>
+        <li><a href="{% url 'purchases:purchase_order_detail' orden.pk %}">{{ orden.number }}</a></li>
+        <li aria-current="page">Devolución a proveedor</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Devolución a proveedor</h1>
+    <p class="encabezado-pagina__descripcion">Selecciona las líneas recibidas que quieres devolver a {{ orden.supplier.display_name }}.</p>
+</div>
+
+{% if receipt_items %}
+<form method="post">
+    {% csrf_token %}
+    {{ management_form }}
+    <div class="tabla-envoltorio">
+        <table class="tabla">
+            <thead><tr><th>Devolver</th><th>Línea recibida</th><th>Recibido</th><th>Cantidad a devolver</th></tr></thead>
+            <tbody>
+                {% for receipt_item, fila in formset %}
+                <tr>
+                    <td>{{ fila.include }}{{ fila.receipt_item_id }}</td>
+                    <td>
+                        {{ receipt_item.purchase_order_item.description }}
+                        {% if receipt_item.inventory_unit %} — {% firstof receipt_item.inventory_unit.serial receipt_item.inventory_unit.imei_1 %}{% endif %}
+                    </td>
+                    <td>{% if receipt_item.inventory_unit %}1 unidad{% else %}{{ receipt_item.quantity_received|floatformat:"-3" }}{% endif %}</td>
+                    <td>{% if not receipt_item.inventory_unit %}{{ fila.quantity_returned }}{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+        <div class="tarjeta__cuerpo">
+            {% for field in reason_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Registrar devolución</button>
+        </div>
+    </div>
+</form>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📦</div><h3>Todavía no hay nada recibido para devolver</h3></div>
+{% endif %}
+{% endblock %}

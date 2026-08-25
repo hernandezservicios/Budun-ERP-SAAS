@@ -269,6 +269,8 @@ ALLOWED_UNIT_TRANSITIONS = {
         InventoryUnit.Status.REPARACION,
         InventoryUnit.Status.DANADO,
         InventoryUnit.Status.PERDIDO,
+        # FASE 12 (Compras): devolver una unidad EN_STOCK al proveedor.
+        InventoryUnit.Status.DEVUELTO_PROVEEDOR,
     },
     InventoryUnit.Status.RESERVADO: {
         InventoryUnit.Status.EN_STOCK,  # se cancela la reserva
@@ -297,6 +299,7 @@ ALLOWED_UNIT_TRANSITIONS = {
         InventoryUnit.Status.PERDIDO,
     },
     InventoryUnit.Status.PERDIDO: set(),  # estado terminal: sin salida
+    InventoryUnit.Status.DEVUELTO_PROVEEDOR: set(),  # estado terminal: sin salida
 }
 
 

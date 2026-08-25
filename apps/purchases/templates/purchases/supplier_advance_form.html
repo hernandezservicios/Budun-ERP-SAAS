@@ -1,0 +1,55 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Anticipo a {{ supplier.display_name }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'purchases:supplier_invoice_list' %}">Facturas de proveedor</a></li>
+        <li aria-current="page">Anticipo — {{ supplier.display_name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Anticipo a {{ supplier.display_name }}</h1>
+        <p class="encabezado-pagina__descripcion">Saldo a favor actual (sin aplicar): ${{ advance_balance }}</p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Registrar anticipo</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Registrar anticipo</button>
+        </form>
+    </div>
+</div>
+
+{% if pending_invoices %}
+<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 48rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Facturas pendientes de este proveedor</h3>
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Número</th><th>Fecha</th><th>Total</th></tr></thead>
+                <tbody>
+                    {% for factura in pending_invoices %}
+                    <tr>
+                        <td><a href="{% url 'purchases:supplier_invoice_detail' factura.pk %}">{{ factura.supplier_invoice_number }}</a></td>
+                        <td>{{ factura.issue_date|date:"d M Y" }}</td>
+                        <td>${{ factura.total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

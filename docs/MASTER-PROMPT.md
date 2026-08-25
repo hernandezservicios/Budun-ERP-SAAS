@@ -125,6 +125,17 @@ Construido a partir de FASE 11 (`apps/pos`, `apps/approvals`) — ver `docs/acco
 - **Cajas** (`CashRegister`/`CashSession`/`CashMovement`, en `apps.pos`): cualquier cantidad de cajas por tenant (sin límite fijo); una sesión de caja abierta es obligatoria antes de confirmar una venta operativa de mostrador; solo el efectivo afecta el efectivo físico.
 - **Autorizaciones** (`ApprovalPolicy`/`ApprovalRequest`, en `apps.approvals`): servicio centralizado y reutilizable para descuentos por encima del límite (porcentaje Y monto) y crédito excedido, con jerarquía usuario → rol → tenant → negar. El propietario del tenant siempre está autorizado.
 
+## Compras y cuentas por pagar
+
+Incorporado oficialmente a partir de FASE 12 (`apps/purchases`) — ver `docs/purchases.md`, `docs/purchase-orders.md`, `docs/receiving.md`, `docs/supplier-invoices.md`, `docs/accounts-payable.md` y `docs/supplier-returns.md`. Orquesta sobre `apps.customers`/`apps.inventory`/`apps.approvals`/`apps.pos` ya construidos, nunca un segundo sistema de inventario, aprobaciones, caja ni archivos:
+
+- **`PurchaseOrder`/`PurchaseReceipt`**: documentos independientes (`OC-`/`REC-`, misma `DocumentSequence` de FASE 10); la orden es el compromiso, la recepción es el evento físico. Recepción parcial/completa; `PurchaseOrderItem` nunca guarda cantidad recibida/pendiente como campo — se calcula siempre desde `PurchaseReceiptItem`.
+- **Recepción**: QUANTITY vía `register_stock_in`; SERIALIZED vía `register_serialized_unit`, una llamada por unidad física.
+- **Cuentas por pagar** (`SupplierPayment`/`SupplierPaymentAllocation`): espejo exacto de `Payment`/`PaymentAllocation`, nunca mezclado con Cuentas por Cobrar. Anticipo a proveedor = `SupplierPayment` sin aplicar.
+- **Devolución a proveedor** (`SupplierReturn`): inmutable; serializados transicionan a `InventoryUnit.Status.DEVUELTO_PROVEEDOR` (nuevo, distinto de `DEVUELTO`).
+- **Caja**: pago a proveedor en efectivo exige `CashSession` abierta y genera `CashMovement` propio; otros medios no afectan el efectivo físico.
+- **Autorizaciones**: compra sobre el límite y sobre-recepción vía `apps.approvals`, mismas primitivas que descuentos/crédito excedido.
+
 ## PayPal
 
 Implementar primero Sandbox. Consultar documentación oficial vigente para API y MCP. No inventar herramientas MCP ni endpoints. El frontend se comunica con Django; Django usa una capa de servicios de pago; MCP es herramienta del agente/desarrollo/operación.

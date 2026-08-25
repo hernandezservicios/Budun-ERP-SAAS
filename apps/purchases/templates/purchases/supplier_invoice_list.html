@@ -1,0 +1,69 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Facturas de proveedor — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'purchases:purchase_order_list' %}">Compras</a></li>
+        <li aria-current="page">Facturas de proveedor</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Facturas de proveedor</h1>
+        <p class="encabezado-pagina__descripcion">Cuentas por pagar — pagos, anticipos y saldo pendiente por factura.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--primario" href="{% url 'purchases:supplier_invoice_create' %}">Registrar factura</a>
+    </div>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);" role="search" aria-label="Buscar facturas de proveedor">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        <div class="campo" style="flex:2; min-width:200px; margin-bottom:0;">
+            <label for="id_q">Buscar por número de factura</label>
+            <input type="text" id="id_q" name="q" class="input" value="{{ request.GET.q }}">
+        </div>
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+{% if facturas %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th></tr></thead>
+        <tbody>
+            {% for factura in facturas %}
+            <tr>
+                <td><a href="{% url 'purchases:supplier_invoice_detail' factura.pk %}">{{ factura.supplier_invoice_number }}</a></td>
+                <td>{{ factura.supplier.display_name }}</td>
+                <td>{{ factura.issue_date|date:"d M Y" }}</td>
+                <td>${{ factura.total }}</td>
+                <td>
+                    {% if factura.status == "confirmed" %}<span class="badge badge--advertencia">{{ factura.get_status_display }}</span>
+                    {% elif factura.status == "canceled" %}<span class="badge badge--peligro">{{ factura.get_status_display }}</span>
+                    {% else %}<span class="badge badge--neutro">{{ factura.get_status_display }}</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if is_paginated %}
+<nav class="paginacion" aria-label="Paginación de facturas de proveedor">
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">&laquo; Anterior</a>{% else %}<span class="deshabilitado">&laquo; Anterior</span>{% endif %}
+    <span class="actual">{{ page_obj.number }}</span><span>de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">Siguiente &raquo;</a>{% else %}<span class="deshabilitado">Siguiente &raquo;</span>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">🧾</div>
+    <h3>Todavía no tienes facturas de proveedor</h3>
+    <a class="btn btn--primario" href="{% url 'purchases:supplier_invoice_create' %}">Registrar factura</a>
+</div>
+{% endif %}
+{% endblock %}

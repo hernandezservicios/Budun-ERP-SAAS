@@ -78,6 +78,12 @@ _PREFIJOS_POR_DEFECTO = {
     DocumentSequence.DocumentType.SALE: "FAC",
     DocumentSequence.DocumentType.RETURN: "DEV",
     DocumentSequence.DocumentType.CREDIT_NOTE: "NC",
+    # FASE 12 (Compras) — apps.purchases.services llama a
+    # generate_document_number(tenant, DocumentSequence.DocumentType.PURCHASE_ORDER)
+    # literalmente, nunca reimplementa su propia numeración.
+    DocumentSequence.DocumentType.PURCHASE_ORDER: "OC",
+    DocumentSequence.DocumentType.PURCHASE_RECEIPT: "REC",
+    DocumentSequence.DocumentType.SUPPLIER_RETURN: "DEVP",
 }
 
 

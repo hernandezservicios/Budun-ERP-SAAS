@@ -90,6 +90,8 @@ class RolePolicySetView(LoginRequiredMixin, TenantRequiredMixin, View):
                 max_discount_percent=form.cleaned_data["max_discount_percent"],
                 max_discount_amount=form.cleaned_data["max_discount_amount"],
                 max_credit_overage=form.cleaned_data["max_credit_overage"],
+                max_purchase_order_amount=form.cleaned_data["max_purchase_order_amount"],
+                max_over_receiving_percent=form.cleaned_data["max_over_receiving_percent"],
                 can_approve=form.cleaned_data["can_approve"],
                 notes=form.cleaned_data["notes"],
             )

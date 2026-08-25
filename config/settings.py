@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     "apps.sales",
     "apps.approvals",
     "apps.pos",
+    "apps.purchases",
 ]
 
 # Custom User Model (FASE 3). Debe fijarse antes de la primera migración

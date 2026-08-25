@@ -74,13 +74,19 @@ homogénea, y deben cubrir como mínimo:
   nunca recalculando el efectivo esperado con una consulta propia.
 - Sobrantes/faltantes: `CashSession.difference` por sesión/caja/período.
 
-## Reportes de Cuentas por Pagar (FASE 12, cuando exista)
+## Reportes de Cuentas por Pagar (FASE 12, ya construido)
 
-Equivalentes a los de cuentas por cobrar (ver más abajo) pero del lado
-de `Supplier`: órdenes/recepciones pendientes de pago, pagos a
-proveedor, anticipos, saldo pendiente por proveedor — siempre como
-agregación de lectura sobre los ledgers reales que construya FASE 12
-(ver `docs/purchases.md`), nunca una fuente de verdad nueva.
+FASE 12 construyó `apps.purchases` (`SupplierPayment`/
+`SupplierPaymentAllocation`, ver `docs/accounts-payable.md`) y dejó
+preparadas las agregaciones de solo lectura que esta fase debe
+consumir, nunca reimplementar: `get_open_purchase_orders_count`,
+`get_period_purchases_total`, `get_pending_supplier_invoices_total`
+(saldo pendiente total, vía `get_invoice_balance_due_bulk`),
+`get_total_supplier_advances`. Equivalentes a los de cuentas por
+cobrar (ver más abajo) pero del lado de `Supplier`: órdenes/recepciones
+pendientes, pagos a proveedor, anticipos, saldo pendiente por
+proveedor — siempre una agregación sobre el ledger real, nunca una
+fuente de verdad nueva.
 
 ## Nota de FASE 9 — Interfaz de Clientes/Proveedores a consumir
 
@@ -88,7 +94,7 @@ FASE 9 agregó `apps/customers` (`Customer`/`Supplier`, ver
 `docs/customers.md`/`docs/suppliers.md`). Los reportes "ventas por
 cliente" y "compras por proveedor" pedidos para esta fase deben:
 
-- Agregar `SaleItem`/`PurchaseItem` (FASE 10/12) agrupados por
+- Agregar `SaleItem`/`PurchaseOrderItem` (FASE 10/12) agrupados por
   `customer`/`supplier`, reutilizando
   `services.list_customers`/`list_suppliers`/`get_active_customers`/
   `get_active_suppliers` como fuente de la lista de clientes/proveedores

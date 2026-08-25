@@ -148,6 +148,13 @@ class DocumentSequence(TenantScopedModel):
         SALE = "sale", "Venta / Factura"
         RETURN = "return", "Devolución"
         CREDIT_NOTE = "credit_note", "Nota de crédito"
+        # FASE 12 (Compras): reutiliza literalmente esta misma tabla de
+        # secuencias — nunca un segundo sistema de numeración — solo se
+        # agregan tipos de documento nuevos, mismo patrón extensible que
+        # el resto de estos enums (ver docs/purchases.md).
+        PURCHASE_ORDER = "purchase_order", "Orden de compra"
+        PURCHASE_RECEIPT = "purchase_receipt", "Recepción de compra"
+        SUPPLIER_RETURN = "supplier_return", "Devolución a proveedor"
 
     document_type = models.CharField("tipo de documento", max_length=20, choices=DocumentType.choices)
     prefix = models.CharField("prefijo", max_length=10)

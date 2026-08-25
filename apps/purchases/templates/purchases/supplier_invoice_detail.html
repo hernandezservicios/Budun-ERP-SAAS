@@ -1,0 +1,198 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ factura.supplier_invoice_number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'purchases:supplier_invoice_list' %}">Facturas de proveedor</a></li>
+        <li aria-current="page">{{ factura.supplier_invoice_number }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ factura.supplier_invoice_number }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ factura.supplier.display_name }} · {{ factura.issue_date|date:"d M Y" }}
+            · <span class="badge badge--azul">{{ factura.get_status_display }}</span>
+            · Total: ${{ factura.total }} · Pagado: ${{ paid_amount }} · Pendiente: ${{ balance_due }}
+        </p>
+        {% if factura.purchase_order %}<p class="campo__ayuda">Orden de compra: <a href="{% url 'purchases:purchase_order_detail' factura.purchase_order.pk %}">{{ factura.purchase_order.number }}</a></p>{% endif %}
+    </div>
+    <div class="encabezado-pagina__acciones">
+        {% if factura.status == "draft" %}
+        <form action="{% url 'purchases:supplier_invoice_confirm' factura.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Confirmar esta factura? Se reconoce como cuenta por pagar.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primario">Confirmar</button>
+        </form>
+        <form action="{% url 'purchases:supplier_invoice_cancel' factura.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cancelar esta factura en borrador?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Cancelar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones de la factura de proveedor">
+        <button class="tabs__boton" role="tab" id="tab-lineas" aria-controls="panel-lineas" aria-selected="true" tabindex="0">Líneas</button>
+        <button class="tabs__boton" role="tab" id="tab-pagos" aria-controls="panel-pagos" aria-selected="false" tabindex="-1">Pagos ({{ allocations|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ attachments|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-lineas" role="tabpanel" aria-labelledby="tab-lineas" class="tabs__panel">
+        {% if items %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Descripción</th><th>Cantidad</th><th>Costo unitario</th><th>Impuesto</th><th>Total</th></tr></thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.description }}</td>
+                        <td>{{ item.quantity|floatformat:"-3" }}</td>
+                        <td>${{ item.unit_cost }}</td>
+                        <td>${{ item.tax_amount }}</td>
+                        <td>${{ item.total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin líneas todavía</h3></div>
+        {% endif %}
+
+        {% if factura.status == "draft" %}
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 36rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Agregar línea</h3>
+                <form method="post" action="{% url 'purchases:supplier_invoice_item_add' factura.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in item_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Agregar línea</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-pagos" role="tabpanel" aria-labelledby="tab-pagos" class="tabs__panel" hidden>
+        {% if allocations %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Monto</th><th>Pago</th><th>Método</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for asignacion in allocations %}
+                    <tr>
+                        <td>${{ asignacion.amount }}</td>
+                        <td>#{{ asignacion.payment_id }}</td>
+                        <td>{{ asignacion.payment.get_method_display }}</td>
+                        <td>{{ asignacion.created_at|date:"d M Y" }}</td>
+                        <td>
+                            <form action="{% url 'purchases:supplier_payment_allocation_reverse' factura.pk asignacion.pk %}" method="post"
+                                  onsubmit="return confirm('¿Reversar esta aplicación de pago?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Reversar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💳</div><h3>Sin pagos aplicados todavía</h3></div>
+        {% endif %}
+
+        {% if factura.status == "confirmed" and balance_due > 0 %}
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Registrar pago</h3>
+                <form method="post" action="{% url 'purchases:supplier_invoice_pay' factura.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in payment_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Registrar pago</button>
+                </form>
+            </div>
+        </div>
+
+        {% if advance_balance > 0 %}
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Aplicar anticipo disponible (${{ advance_balance }})</h3>
+                <form method="post" action="{% url 'purchases:supplier_invoice_apply_advance' factura.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in apply_advance_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--secundario">Aplicar anticipo</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        {% if attachments %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Archivo</th><th>Categoría</th><th>Subido</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for adjunto in attachments %}
+                    <tr>
+                        <td>{{ adjunto.original_filename }}</td>
+                        <td>{{ adjunto.get_category_display }}</td>
+                        <td>{{ adjunto.uploaded_at|date:"d M Y" }}</td>
+                        <td style="white-space:nowrap;">
+                            <a class="btn btn--contorno btn--sm" href="{% url 'purchases:supplier_invoice_attachment_download' factura.pk adjunto.pk %}">Descargar</a>
+                            <form action="{% url 'purchases:supplier_invoice_attachment_delete' factura.pk adjunto.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos adjuntos</h3></div>
+        {% endif %}
+
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'purchases:supplier_invoice_attachment_upload' factura.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% for field in attachment_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <ul class="lista-actividad">
+            {% for evento in activity_log %}
+            <li><strong>{{ evento.get_action_display }}</strong> — {{ evento.details }} · {{ evento.user }} · {{ evento.created_at|date:"d M Y H:i" }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕓</div><h3>Sin actividad registrada</h3></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

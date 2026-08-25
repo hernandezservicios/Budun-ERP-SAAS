@@ -111,6 +111,32 @@ def check_credit_overage_authorization(tenant, user, *, overage_amount):
     return overage_amount <= limite, limite
 
 
+def check_purchase_authorization(tenant, user, *, amount):
+    """FASE 12 (Compras): ¿puede este usuario enviar/confirmar una orden
+    de compra por `amount` sin autorización adicional? Mismo patrón que
+    `check_credit_overage_authorization` — jerarquía usuario → rol →
+    tenant → negar, propietario siempre autorizado. Devuelve
+    `(autorizado: bool, limite)`."""
+    if is_owner(tenant, user):
+        return True, None
+    politica = get_effective_policy(tenant, user)
+    limite = politica.max_purchase_order_amount if politica else Decimal("0")
+    return amount <= limite, limite
+
+
+def check_over_receiving_authorization(tenant, user, *, excess_percent):
+    """FASE 12 (Compras): ¿puede este usuario recibir por encima de la
+    cantidad pendiente de una línea de orden de compra, en el porcentaje
+    `excess_percent`, sin autorización adicional? Mismo patrón que
+    `check_discount_authorization` (una sola dimensión). Devuelve
+    `(autorizado: bool, limite_percent)`."""
+    if is_owner(tenant, user):
+        return True, None
+    politica = get_effective_policy(tenant, user)
+    limite = politica.max_over_receiving_percent if politica else Decimal("0")
+    return excess_percent <= limite, limite
+
+
 @transaction.atomic
 def request_approval(
     tenant, *, action_type, requested_by, requested_value=None, allowed_limit=None,
@@ -225,36 +251,48 @@ def get_policies(tenant):
 
 
 @transaction.atomic
-def set_role_policy(tenant, *, role, max_discount_percent, max_discount_amount, max_credit_overage, can_approve, notes=""):
+def set_role_policy(
+    tenant, *, role, max_discount_percent, max_discount_amount, max_credit_overage, can_approve, notes="",
+    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"),
+):
     politica, _creada = ApprovalPolicy.all_objects.update_or_create(
         tenant=tenant, scope=ApprovalPolicy.Scope.ROLE, role=role,
         defaults=dict(
             max_discount_percent=max_discount_percent, max_discount_amount=max_discount_amount,
             max_credit_overage=max_credit_overage, can_approve=can_approve, notes=notes,
+            max_purchase_order_amount=max_purchase_order_amount, max_over_receiving_percent=max_over_receiving_percent,
         ),
     )
     return politica
 
 
 @transaction.atomic
-def set_user_policy(tenant, *, user, max_discount_percent, max_discount_amount, max_credit_overage, can_approve, notes=""):
+def set_user_policy(
+    tenant, *, user, max_discount_percent, max_discount_amount, max_credit_overage, can_approve, notes="",
+    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"),
+):
     politica, _creada = ApprovalPolicy.all_objects.update_or_create(
         tenant=tenant, scope=ApprovalPolicy.Scope.USER, user=user,
         defaults=dict(
             max_discount_percent=max_discount_percent, max_discount_amount=max_discount_amount,
             max_credit_overage=max_credit_overage, can_approve=can_approve, notes=notes,
+            max_purchase_order_amount=max_purchase_order_amount, max_over_receiving_percent=max_over_receiving_percent,
         ),
     )
     return politica
 
 
 @transaction.atomic
-def set_tenant_default_policy(tenant, *, max_discount_percent, max_discount_amount, max_credit_overage, can_approve=False, notes=""):
+def set_tenant_default_policy(
+    tenant, *, max_discount_percent, max_discount_amount, max_credit_overage, can_approve=False, notes="",
+    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"),
+):
     politica, _creada = ApprovalPolicy.all_objects.update_or_create(
         tenant=tenant, scope=ApprovalPolicy.Scope.TENANT,
         defaults=dict(
             max_discount_percent=max_discount_percent, max_discount_amount=max_discount_amount,
             max_credit_overage=max_credit_overage, can_approve=can_approve, notes=notes,
+            max_purchase_order_amount=max_purchase_order_amount, max_over_receiving_percent=max_over_receiving_percent,
         ),
     )
     return politica

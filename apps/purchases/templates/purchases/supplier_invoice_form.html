@@ -1,0 +1,40 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Registrar factura de proveedor — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'purchases:supplier_invoice_list' %}">Facturas de proveedor</a></li>
+        <li aria-current="page">Registrar factura</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Registrar factura de proveedor</h1>
+    {% if orden %}<p class="encabezado-pagina__descripcion">Contra la orden de compra {{ orden.number }} ({{ orden.supplier.display_name }}).</p>{% endif %}
+</div>
+
+<div class="tarjeta" style="max-width: 40rem;">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="campo">
+                <label for="id_supplier">Proveedor</label>
+                <select id="id_supplier" name="supplier" class="select" required>
+                    <option value="">Selecciona un proveedor</option>
+                    {% for proveedor in proveedores %}
+                    <option value="{{ proveedor.pk }}" {% if orden and orden.supplier_id == proveedor.pk %}selected{% endif %}>{{ proveedor.display_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if orden %}<input type="hidden" name="purchase_order" value="{{ orden.pk }}">{% endif %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Registrar factura</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Recibir {{ item.description }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'purchases:purchase_order_list' %}">Compras</a></li>
+        <li><a href="{% url 'purchases:purchase_order_detail' orden.pk %}">{{ orden.number }}</a></li>
+        <li aria-current="page">Recibir línea</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Recibir «{{ item.description }}»</h1>
+        <p class="encabezado-pagina__descripcion">
+            Ordenado: {{ item.quantity|floatformat:"-3" }} · Pendiente: {{ pendiente|floatformat:"-3" }}
+            {% if es_serializado %}· Producto serializado — indica el IMEI/serie de cada unidad recibida.{% else %}· Producto por cantidad.{% endif %}
+        </p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 44rem;">
+    <div class="tarjeta__cuerpo">
+        {% if es_serializado %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ serialized_formset.management_form }}
+            <p class="campo__ayuda">Completa una fila por cada unidad física recibida (deja vacías las filas sobrantes).</p>
+            {% for unit_form in serialized_formset %}
+            <fieldset style="border:1px solid var(--borde); border-radius: var(--radio); padding: var(--espacio-4); margin-bottom: var(--espacio-4);">
+                <legend>Unidad {{ forloop.counter }}</legend>
+                {% for field in unit_form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+            </fieldset>
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Registrar recepción</button>
+        </form>
+        {% else %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in quantity_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Registrar recepción</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

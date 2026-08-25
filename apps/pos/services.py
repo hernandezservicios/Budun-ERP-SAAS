@@ -144,6 +144,9 @@ _TIPOS_NEGATIVOS = {
     CashMovement.MovementType.CASH_OUT,
     CashMovement.MovementType.CASH_REFUND,
     CashMovement.MovementType.WITHDRAWAL,
+    # FASE 12 (Compras): dinero que sale de la caja hacia un proveedor.
+    CashMovement.MovementType.SUPPLIER_PAYMENT_CASH,
+    CashMovement.MovementType.SUPPLIER_ADVANCE_CASH,
 }
 # ADJUSTMENT puede sumar o restar según el caso concreto — se registra
 # con el signo que indique quien autoriza el ajuste (ver

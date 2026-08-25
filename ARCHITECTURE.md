@@ -42,5 +42,17 @@ Incorporado oficialmente a partir de FASE 10 (ampliado tras el cierre inicial) y
 
 Reglas permanentes: un `PaymentAllocation`/`CreditNoteApplication` nunca excede el saldo disponible del origen ni el saldo pendiente de la factura destino; origen y destino deben ser del mismo tenant y del mismo cliente; un `Payment` sin cliente nunca genera saldo a favor; nunca dos balances paralelos ("anticipo" y "saldo a favor" son el mismo saldo, distintos orígenes); nunca una tercera tabla que resuma los dos ledgers reales. Cuentas por Cobrar del ERP (lo que un cliente le debe a un tenant) y Billing del SaaS (lo que un tenant le debe a Budun ERP) son ejes ortogonales — nunca se mezclan.
 
+## Compras y cuentas por pagar: el espejo de cuentas por cobrar
+Incorporado oficialmente a partir de FASE 12 (`apps/purchases`, ver `docs/purchases.md` y sus documentos de dominio). Orquesta sobre `apps.customers`/`apps.inventory`/`apps.approvals`/`apps.pos` ya construidos — nunca un segundo sistema de inventario, aprobaciones, caja ni archivos.
+
+| Concepto | Fuente de verdad | Estado |
+|---|---|---|
+| Orden de compra / recepción | `PurchaseOrder`/`PurchaseOrderItem` + `PurchaseReceipt`/`PurchaseReceiptItem` (recibido/pendiente calculado, nunca campo) | Construido (FASE 12) — `docs/purchase-orders.md`/`docs/receiving.md` |
+| Pago aplicado a factura(s) de proveedor | `SupplierPayment` + `SupplierPaymentAllocation` | Construido (FASE 12) — `docs/accounts-payable.md` |
+| Anticipo a proveedor | `SupplierPayment` sin aplicar, sumado por `get_supplier_advance_balance` | Construido (FASE 12) — sin tabla separada, mismo criterio que cuentas por cobrar |
+| Devolución a proveedor | `SupplierReturn`/`SupplierReturnItem`, `InventoryUnit.Status.DEVUELTO_PROVEEDOR` | Construido (FASE 12) — `docs/supplier-returns.md` |
+
+`SupplierPayment`/`SupplierPaymentAllocation` son estructuralmente idénticos a `Payment`/`PaymentAllocation` (mismas reglas de sobre-aplicación, mismo ledger append-only) pero **nunca mezclados**: `SupplierPayment` no referencia `Customer`, `Payment` no referencia `Supplier` — dos ledgers paralelos e independientes.
+
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

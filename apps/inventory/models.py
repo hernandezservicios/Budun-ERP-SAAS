@@ -201,6 +201,17 @@ class InventoryUnit(TenantScopedModel):
         GARANTIA = "garantia", "En garantía"
         DANADO = "danado", "Dañado"
         PERDIDO = "perdido", "Perdido"
+        # Agregado en FASE 12 (Compras): estado terminal para una unidad
+        # que SALE de nuestro inventario porque la devolvemos a quien nos
+        # la vendió — distinto de DEVUELTO (que significa lo opuesto: un
+        # CLIENTE nos la devolvió a nosotros). Ninguno de los 8 estados
+        # anteriores representaba este caso; se agrega como una línea
+        # nueva al enum existente (mismo patrón extensible que
+        # CashMovement.MovementType/ApprovalRequest.ActionType), nunca
+        # reutilizando DEVUELTO con un significado ambiguo. Ver
+        # apps.purchases.services.create_supplier_return y
+        # docs/supplier-returns.md.
+        DEVUELTO_PROVEEDOR = "devuelto_proveedor", "Devuelta al proveedor"
 
     product = models.ForeignKey(
         Product,

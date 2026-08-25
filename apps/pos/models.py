@@ -127,6 +127,15 @@ class CashMovement(TenantScopedModel):
         CUSTOMER_ADVANCE_CASH = "customer_advance_cash", "Anticipo en efectivo"
         WITHDRAWAL = "withdrawal", "Retiro"
         ADJUSTMENT = "adjustment", "Ajuste autorizado"
+        # FASE 12 (Compras): salidas de efectivo hacia un proveedor —
+        # apps.purchases.services reutiliza literalmente
+        # record_cash_movement/ensure_open_session_for_checkout, nunca
+        # reimplementa caja. Dos tipos, igual que en el lado de clientes
+        # (SALE_CASH vs CUSTOMER_ADVANCE_CASH), para que los reportes de
+        # caja (FASE 14) puedan distinguir "pago de factura" de
+        # "anticipo sin factura todavía".
+        SUPPLIER_PAYMENT_CASH = "supplier_payment_cash", "Pago a proveedor en efectivo"
+        SUPPLIER_ADVANCE_CASH = "supplier_advance_cash", "Anticipo a proveedor en efectivo"
 
     cash_session = models.ForeignKey(
         CashSession, verbose_name="sesión de caja", on_delete=models.PROTECT, related_name="movements"

@@ -52,6 +52,23 @@ class ApprovalPolicy(TenantScopedModel):
     max_credit_overage = models.DecimalField(
         "exceso de crédito autorizable sin aprobación", max_digits=12, decimal_places=2, default=Decimal("0")
     )
+    max_purchase_order_amount = models.DecimalField(
+        "total de orden de compra autorizable sin aprobación",
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        help_text="FASE 12 (Compras): una orden de compra con total mayor a este límite "
+        "requiere autorización antes de poder enviarse. Mismo patrón que max_credit_overage.",
+    )
+    max_over_receiving_percent = models.DecimalField(
+        "sobre-recepción autorizable sin aprobación (%)",
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0"),
+        help_text="FASE 12 (Compras): porcentaje por encima de la cantidad pendiente de una "
+        "línea de orden de compra que puede recibirse sin autorización adicional "
+        "(0 = ninguna sobre-recepción permitida sin aprobación explícita).",
+    )
     can_approve = models.BooleanField("puede resolver solicitudes de autorización", default=False)
     notes = models.CharField("notas", max_length=255, blank=True)
     created_at = models.DateTimeField("creada", auto_now_add=True)
@@ -82,7 +99,9 @@ class ApprovalPolicy(TenantScopedModel):
             models.CheckConstraint(
                 check=models.Q(max_discount_percent__gte=0)
                 & models.Q(max_discount_amount__gte=0)
-                & models.Q(max_credit_overage__gte=0),
+                & models.Q(max_credit_overage__gte=0)
+                & models.Q(max_purchase_order_amount__gte=0)
+                & models.Q(max_over_receiving_percent__gte=0),
                 name="approvalpolicy_limites_no_negativos",
             ),
         ]
@@ -107,6 +126,11 @@ class ApprovalRequest(TenantScopedModel):
         CANCELLATION = "cancellation", "Anulación sensible"
         INVENTORY_ADJUSTMENT = "inventory_adjustment", "Ajuste de inventario"
         CASH_MOVEMENT = "cash_movement", "Movimiento de caja especial"
+        # FASE 12 (Compras): mismas primitivas reutilizables
+        # (request_approval/resolve_approval/mark_consumed/
+        # get_usable_approved_request), solo dos tipos de acción nuevos.
+        PURCHASE_OVER_THRESHOLD = "purchase_over_threshold", "Compra sobre el límite"
+        OVER_RECEIVING = "over_receiving", "Sobre-recepción de compra"
         OTHER = "other", "Otro"
 
     class Status(models.TextChoices):

@@ -17,25 +17,26 @@ detallado.
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
 
 ## Criterios de aceptación
-- [ ] `PurchaseOrder`/`PurchaseOrderItem` — flujo de orden de compra (borrador → enviada → confirmada/cancelada), numeración propia vía `DocumentSequence`.
-- [ ] Recepción parcial y completa — `PurchaseReceipt`/`PurchaseReceiptItem` (o equivalente), pudiendo recibir una orden en varias entregas.
-- [ ] Recepción de productos por CANTIDAD — impacta inventario vía `apps.inventory.services.register_stock_in`, nunca duplicando esa lógica.
-- [ ] Recepción de productos SERIALIZADOS — alta de `InventoryUnit` por IMEI/serie vía `apps.inventory.services.register_serialized_unit`, una unidad por cada IMEI/serie recibido.
-- [ ] Costos históricos por línea (snapshot al recibir, mismo principio que `SaleItem`/`QuotationItem` en FASE 10 — nunca recalculado desde el costo actual del producto).
-- [ ] Devoluciones a proveedor (mercancía) — inmutables, mismo principio que `Return` de FASE 10.
-- [ ] Documentos adjuntos — reutilizando la validación de archivos de FASE 9 (`apps.customers.file_validation`), nunca un segundo sistema de archivos.
-- [ ] Pago en efectivo desde caja requiere `CashSession` abierta (`apps.pos`, FASE 11) — otros medios no afectan el efectivo físico.
-- [ ] Preparación de cuentas por pagar y anticipos a proveedores — sin motor contable completo, mismo criterio que cuentas por cobrar en FASE 9/10.
-- [ ] tests (unitarios, integración, Multi-Tenant, concurrencia donde aplique)
+- [x] `PurchaseOrder`/`PurchaseOrderItem` — flujo de orden de compra (borrador → enviada → parcialmente recibida/recibida/cerrada/cancelada), numeración propia vía `DocumentSequence` (`OC-`).
+- [x] Recepción parcial y completa — `PurchaseReceipt`/`PurchaseReceiptItem`, pudiendo recibir una orden en varias entregas (`REC-`).
+- [x] Recepción de productos por CANTIDAD — impacta inventario vía `apps.inventory.services.register_stock_in`, nunca duplicando esa lógica.
+- [x] Recepción de productos SERIALIZADOS — alta de `InventoryUnit` por IMEI/serie vía `apps.inventory.services.register_serialized_unit`, una unidad por cada IMEI/serie recibido.
+- [x] Costos históricos por línea (snapshot al recibir, mismo principio que `SaleItem`/`QuotationItem` en FASE 10 — nunca recalculado desde el costo actual del producto); landed cost preparado a nivel de cabecera (flete/seguro/otros costos), sin prorrateo por línea.
+- [x] Devoluciones a proveedor (mercancía) — inmutables, mismo principio que `Return` de FASE 10; nuevo estado `InventoryUnit.Status.DEVUELTO_PROVEEDOR` para serializados.
+- [x] Documentos adjuntos — reutilizando la validación de archivos de FASE 9 (`apps.customers.file_validation`), nunca un segundo sistema de archivos.
+- [x] Pago en efectivo desde caja requiere `CashSession` abierta (`apps.pos`, FASE 11) — otros medios no afectan el efectivo físico.
+- [x] Cuentas por pagar y anticipos a proveedores — `SupplierPayment`/`SupplierPaymentAllocation`, espejo exacto de `Payment`/`PaymentAllocation`, sin motor contable completo.
+- [x] Autorizaciones (`apps.approvals`, FASE 11) — compra sobre el límite (`PURCHASE_OVER_THRESHOLD`) y sobre-recepción (`OVER_RECEIVING`), dos dimensiones nuevas en `ApprovalPolicy`.
+- [x] tests (unitarios, integración, Multi-Tenant, concurrencia) — 44 tests nuevos en `apps/purchases/tests/`.
 
 ## Verificación
-- [ ] `python manage.py check` o la validación equivalente está en verde.
-- [ ] Tests relevantes ejecutados.
-- [ ] Smoke test realizado cuando aplique.
-- [ ] Seguridad revisada para el alcance de la fase.
-- [ ] Documentación actualizada.
-- [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
-- [ ] Git commit creado.
+- [x] `python manage.py check` en verde.
+- [x] Tests relevantes ejecutados (44/44 en `apps.purchases`; suite completa del proyecto sin regresiones).
+- [x] Smoke test HTTP realizado contra la base de datos real de desarrollo.
+- [x] Seguridad revisada para el alcance de la fase (Multi-Tenant, autorización, documentos).
+- [x] Documentación actualizada.
+- [x] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
+- [x] Git commit creado.
 
 ## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
 
@@ -128,8 +129,27 @@ cual, nunca reimplementar su lógica:
   `docs/purchases.md` para el diseño detallado (especificación, sin
   implementación todavía).
 
+## Evidencia (FASE 12)
+
+- Arquitectura: `apps/purchases`, orquestación pura sobre `apps.customers` (Suppliers), `apps.inventory` (register_stock_in/register_stock_out/register_serialized_unit/transition_unit_status), `apps.approvals` (autorizaciones) y `apps.pos` (caja) — nunca un segundo motor de inventario/aprobaciones/caja/archivos. Reutiliza literalmente la `DocumentSequence` de `apps.sales` (tres tipos de documento nuevos: `OC-`/`REC-`/`DEVP-`).
+- `PurchaseOrder`/`PurchaseOrderItem`: borrador → enviada → parcialmente recibida/recibida/cerrada/cancelada; `PurchaseOrderItem` nunca guarda recibido/pendiente como campo (siempre agregado sobre `PurchaseReceiptItem`, con variante en bloque sin N+1).
+- `PurchaseReceipt`/`PurchaseReceiptItem`: inmutable, recepción parcial/completa verificada con el ejemplo exacto de la especificación (10 → 6+4). QUANTITY vía `register_stock_in`; SERIALIZED vía `register_serialized_unit`, una llamada por IMEI/serie (verificado: 2 unidades recibidas = 2 `InventoryUnit` reales).
+- Sobre-recepción rechazada por defecto (`OverReceivingRequiresApproval`), autorizable vía `apps.approvals` (`ApprovalPolicy.max_over_receiving_percent`, `ActionType.OVER_RECEIVING`) — mismo flujo bloquear→solicitar→aprobar→reintentar que descuentos/crédito excedido en FASE 11. Compra sobre el límite (`PurchaseOverThresholdRequiresApproval`, `max_purchase_order_amount`) con el mismo patrón.
+- `SupplierInvoice`/`SupplierInvoiceItem`: borrador → confirmada/cancelada; número del PROVEEDOR (no generado por nosotros), único por `(tenant, supplier)`.
+- Cuentas por pagar: `SupplierPayment`/`SupplierPaymentAllocation`, espejo estructural exacto de `Payment`/`PaymentAllocation` (FASE 10/11) pero un ledger completamente independiente — nunca mezclado con Cuentas por Cobrar. Anticipo a proveedor = `SupplierPayment` sin aplicar. Pago en efectivo exige `CashSession` abierta y genera `CashMovement` propio (`SUPPLIER_PAYMENT_CASH`/`SUPPLIER_ADVANCE_CASH`).
+- `SupplierReturn`/`SupplierReturnItem`: inmutable. Nuevo estado terminal `InventoryUnit.Status.DEVUELTO_PROVEEDOR` (migración aditiva sobre `apps.inventory`) para unidades serializadas devueltas al proveedor — nunca se reutilizó `DEVUELTO`, que significa lo opuesto.
+- 1 bug real encontrado por el smoke test HTTP (no por los tests unitarios): `receive_purchase_order` usaba `dict.get(clave, default)` para el costo unitario opcional, que no cae al `default` cuando la clave está presente con valor `None` (el caso real desde la vista) — corregido con una comprobación explícita, 2 tests de regresión agregados. Ver `KNOWN_ISSUES.md` #81.
+- Concurrencia: 5 escenarios con hilos reales (`TransactionTestCase`) — recepción simultánea de la misma orden (una gana, la otra requiere autorización), sobre-recepción simultánea que comparte una misma aprobación (se consume una sola vez), registro simultáneo del mismo IMEI en órdenes distintas (la constraint de FASE 8 rechaza una), devolución simultánea de la misma unidad (una gana), y dos recepciones simultáneas que juntas completan exactamente una orden sin doble conteo.
+- Multi-Tenant: cobertura dedicada en `apps/purchases/tests/test_isolation.py` (proveedor/producto de otro tenant rechazados a nivel de servicio, orden de otro tenant invisible, pago de un tenant no aplicable a factura de otro, detalle de orden de otro tenant → 404 vía HTTP).
+- 50 tests nuevos en `apps.purchases` (todos verdes); suite completa del proyecto ejecutada sin regresiones.
+- Smoke test HTTP real contra PostgreSQL de desarrollo: crear orden → agregar líneas (cantidad + serializado) → enviar → recibir parcial → recibir completo (incluyendo 2 IMEI reales) → registrar factura → confirmar → pagar → registrar anticipo → devolución a proveedor → aislamiento Multi-Tenant (404 cross-tenant) — 34/34 verificaciones OK.
+- Documentado en `docs/purchases.md` (actualizado de especificación a "construido"); nuevos `docs/purchase-orders.md`, `docs/receiving.md`, `docs/supplier-invoices.md`, `docs/accounts-payable.md`, `docs/supplier-returns.md`. `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md` actualizados con la doctrina permanente de Compras y Cuentas por Pagar.
+- Ningún módulo de negocio adicional (Gastos, Reportes, Roles/Audit/API, PayPal, Billing) fue construido; prorrateo de landed cost y varios de los 6 escenarios de autorización mencionados quedan como primitivas genéricas reutilizables sin UI dedicada — ver `KNOWN_ISSUES.md` #77/#78.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
 ## Cierre
 No cerrar la fase sin evidencia. Al cerrarla, detenerse y esperar autorización para iniciar la siguiente, salvo instrucción explícita del usuario.
+
+**Estado: PASS.** Fase cerrada. Suite completa del proyecto: 552/552 tests OK (502 de fases anteriores sin cambios de lógica + 50 nuevos de `apps.purchases`). Esperando autorización explícita para iniciar FASE 13 — Expenses.

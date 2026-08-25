@@ -21,7 +21,7 @@
 {% if politicas %}
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Alcance</th><th>Descuento máx. (%)</th><th>Descuento máx. (monto)</th><th>Exceso de crédito autorizable</th><th>Puede aprobar</th><th>Notas</th></tr></thead>
+        <thead><tr><th>Alcance</th><th>Descuento máx. (%)</th><th>Descuento máx. (monto)</th><th>Exceso de crédito autorizable</th><th>OC autorizable (monto)</th><th>Sobre-recepción autorizable (%)</th><th>Puede aprobar</th><th>Notas</th></tr></thead>
         <tbody>
             {% for politica in politicas %}
             <tr>
@@ -29,6 +29,8 @@
                 <td>{{ politica.max_discount_percent }}%</td>
                 <td>${{ politica.max_discount_amount }}</td>
                 <td>${{ politica.max_credit_overage }}</td>
+                <td>${{ politica.max_purchase_order_amount }}</td>
+                <td>{{ politica.max_over_receiving_percent }}%</td>
                 <td>{% if politica.can_approve %}<span class="badge badge--verde">Sí</span>{% else %}<span class="badge badge--neutro">No</span>{% endif %}</td>
                 <td>{{ politica.notes|default:"—" }}</td>
             </tr>

@@ -49,6 +49,18 @@
                 </a>
             </li>
             <li>
+                <a class="sidebar__enlace" href="{% url 'purchases:purchase_order_list' %}"
+                   {% if request.resolver_match.app_name == 'purchases' and request.resolver_match.url_name|slice:":13" == "purchase_orde" %}aria-current="page"{% endif %}>
+                    Compras
+                </a>
+            </li>
+            <li>
+                <a class="sidebar__enlace" href="{% url 'purchases:supplier_invoice_list' %}"
+                   {% if request.resolver_match.app_name == 'purchases' and request.resolver_match.url_name|slice:":16" == "supplier_invoice" %}aria-current="page"{% endif %}>
+                    Facturas de proveedor
+                </a>
+            </li>
+            <li>
                 <a class="sidebar__enlace" href="{% url 'pos:terminal_start' %}"
                    {% if request.resolver_match.app_name == 'pos' and request.resolver_match.url_name|slice:":8" == "terminal" %}aria-current="page"{% endif %}>
                     POS
