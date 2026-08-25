@@ -28,6 +28,15 @@ Existe una sección Configuración → API de Inventario. Debe incluir Base URL 
 
 Endpoints iniciales previstos: GET /api/v1/health/, /products/, /products/{id}/, /categories/, /inventory/, /inventory/low-stock/, /inventory/movements/.
 
+## Inventario: por cantidad y serializado
+Todo producto tiene un tipo de seguimiento de inventario: QUANTITY (por cantidad) o SERIALIZED (IMEI/número de serie), incorporado oficialmente a partir de FASE 8. Cada tipo tiene una única fuente de verdad, nunca dos a la vez para el mismo producto:
+- QUANTITY → `StockMovement` (libro mayor append-only). Stock actual = `stock_after` del movimiento más reciente.
+- SERIALIZED → `InventoryUnit` (una fila por unidad física real). Disponibilidad = conteo de unidades en estado EN_STOCK.
+
+Prohibido introducir un campo de stock desnormalizado o una segunda fuente de verdad para cualquiera de los dos tipos. Un producto no puede cambiar de tipo de seguimiento una vez que ya tiene movimientos o unidades registradas.
+
+Unicidad de identificadores de `InventoryUnit` (serial, IMEI 1, IMEI 2): únicos **por tenant**, nunca global, y solo entre valores no vacíos (varias unidades pueden no tener alguno de los tres). IMEI 1 nunca puede ser igual a IMEI 2. Toda unidad debe tener al menos un identificador no vacío. Ver `docs/inventory.md` para el detalle completo (estados, máquina de estados, búsqueda unificada, reglas de venta).
+
 ## Fases
 Exactamente 25 fases: 0–24. No saltar, fusionar ni crear nuevas fases sin justificación documentada.
 

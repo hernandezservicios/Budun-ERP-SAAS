@@ -101,6 +101,19 @@ Endpoints mínimos:
 
 El agente IA nunca accede directamente a PostgreSQL.
 
+## Inventario: por cantidad y serializado
+
+Incorporado oficialmente a partir de FASE 8. Todo producto declara un tipo de seguimiento de inventario:
+
+- **QUANTITY** (por cantidad, por defecto): la fuente de verdad es `StockMovement`, un libro mayor append-only. El stock actual es el `stock_after` del movimiento más reciente — nunca un campo desnormalizado.
+- **SERIALIZED** (IMEI / número de serie): la fuente de verdad es `InventoryUnit`, una fila por unidad física real. La disponibilidad es el conteo de unidades en estado EN_STOCK.
+
+Un producto usa exactamente una de las dos fuentes a la vez; nunca deben coexistir dos fuentes de verdad contradictorias para el mismo producto, y un producto no puede cambiar de tipo si ya tiene historial registrado.
+
+Unicidad de `serial`, `imei_1` e `imei_2` (modelo `InventoryUnit`): por tenant, no global, y solo entre valores no vacíos; `imei_1` nunca puede ser igual a `imei_2`; toda unidad requiere al menos un identificador no vacío.
+
+Los endpoints de la API de Inventario (FASE 15) deben poder exponer también el inventario serializado, respetando el mismo principio read-only, de scopes y de aislamiento por tenant que el resto de la API. Ver `docs/inventory.md` para el diseño completo.
+
 ## PayPal
 
 Implementar primero Sandbox. Consultar documentación oficial vigente para API y MCP. No inventar herramientas MCP ni endpoints. El frontend se comunica con Django; Django usa una capa de servicios de pago; MCP es herramienta del agente/desarrollo/operación.
