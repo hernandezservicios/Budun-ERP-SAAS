@@ -7,7 +7,7 @@ Motor comercial central del ERP: Cotizaciones, Proformas/Prefacturas, Ventas/Fac
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
 
 ## Criterios de aceptación
-- [x] Venta atómica — `confirm_sale`/`record_payment`/`create_return`/`create_reservation` con `transaction.atomic()` + `select_for_update()`; idempotentes ante reintentos (verificado con hilos reales).
+- [x] Venta atómica — `confirm_sale`/`record_payment_for_sale`/`allocate_payment`/`create_return`/`create_reservation` con `transaction.atomic()` + `select_for_update()`; idempotentes ante reintentos (verificado con hilos reales).
 - [x] inventario actualizado — reutiliza literalmente `apps.inventory.services` (QUANTITY: `register_stock_in`/`register_stock_out`; SERIALIZED: `transition_unit_status`), nunca duplica esa lógica.
 - [x] totales correctos — snapshot histórico por línea, descuento por línea (%/monto) y global, impuesto sobre base ya descontada; verificado con tests numéricos explícitos.
 - [x] tests financieros — pagos parciales/múltiples/idempotentes, reembolsos con tope, estados de pago derivados (nunca asumidos).
@@ -22,7 +22,7 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 ## Verificación
 - [x] `python manage.py check` en verde.
 - [x] Tests relevantes ejecutados — ver "Evidencia".
-- [x] Smoke test HTTP real contra PostgreSQL de desarrollo (flujo completo Cotización → Proforma → Reserva → Venta → Confirmación → Pago → Recibo → Adjunto, más aislamiento Multi-Tenant).
+- [x] Smoke test HTTP real contra PostgreSQL de desarrollo (flujo completo Cotización → Proforma → Reserva → Venta → Confirmación → Pago → Recibo → Adjunto, más aislamiento Multi-Tenant; ampliación: ejemplo de un pago aplicado a 3 facturas, límites de sobre-aplicación, cross-tenant/cross-customer, reversa+reembolso, saldo a favor, flujo HTTP real de la pestaña "Pagos").
 - [x] Seguridad revisada — autorización (`LoginRequiredMixin`+`TenantRequiredMixin`), IDs manipulados (404), CSRF, validación de archivos adjuntos (reutiliza FASE 9), sin exposición entre tenants.
 - [x] Documentación actualizada — `docs/sales.md`, `docs/quotations.md`, `docs/proforma-invoices.md`, `docs/payments.md`, `docs/reservations.md`, `docs/returns.md`, `docs/invoice-documents.md` (nuevos); FASE 11-17 actualizadas con la interfaz que cada una debe consumir.
 - [x] `docs/project-status/CURRENT_PHASE.md`, `PHASE_HISTORY.md` y `KNOWN_ISSUES.md` actualizados.
@@ -90,15 +90,16 @@ reinventarla:
 - Numeración `COT-`/`PRO-`/`FAC-`/`DEV-` por tenant y tipo de documento, `select_for_update()` sin duplicados.
 - Reservas: capa derivada sobre `InventoryUnit`/stock real, nunca un segundo `StockMovement`; reserva EXPLÍCITA de proforma (nunca automática); liberación automática al cancelar/vencer.
 - Confirmación de venta: reutiliza literalmente `apps.inventory.services` (QUANTITY/SERIALIZED), idempotente ante reintentos, rechaza SKU sin stock/unidad no disponible antes de escribir nada.
-- Pagos: múltiples/parciales por venta, `payment_status` calculado (nunca asumido), `idempotency_key` sin duplicados, anulación idempotente.
+- Pagos y cuentas por cobrar: `Payment` + `PaymentAllocation` (ampliación obligatoria pedida por el usuario tras el cierre inicial de esta fase) — un pago puede aplicarse a una o varias facturas del mismo cliente, y una factura puede recibir asignaciones de varios pagos; `payment_status` calculado siempre desde el ledger (nunca asumido); saldo pendiente por factura y saldo sin aplicar por pago siempre calculados; `idempotency_key` sin duplicados; anulación/reversa idempotentes; saldo a favor del cliente y facturas pendientes como consultas reutilizables (preparación explícita para FASE 11); cross-tenant y cross-customer rechazados explícitamente; sobre-aplicación (más allá del pago o de la factura) rechazada incluso bajo concurrencia real (hilos). Ver `docs/payments.md`.
 - Devoluciones/Reembolsos: separados (mercancía vs. dinero); parcial/total; unidad serializada nunca reingresa sola a stock.
-- Concurrencia: 3 tests con hilos reales (`TransactionTestCase`) — doble reserva de unidad, doble venta de unidad, sobre-reserva de cantidad — exactamente una operación gana en cada caso.
+- Concurrencia: 5 tests con hilos reales (`TransactionTestCase`) — doble reserva de unidad, doble venta de unidad, sobre-reserva de cantidad, doble asignación del mismo pago que excede lo disponible, doble asignación a la misma factura que excede su saldo pendiente — exactamente una operación gana en cada caso.
 - Multi-Tenant: cobertura exhaustiva en `test_isolation.py` (lectura, listados, confirmar, cancelar, pagar, anular pago, liberar reserva, convertir, devolver, IDs manipulados, sesión manipulada).
 - Performance: comparación de conteo de queries (listados y detalle con pagos) sin crecimiento.
 - Bug real encontrado y corregido durante el desarrollo (mismo patrón de FASES 8/9): relación inversa `objects`/TenantManager fuera de request en `services.py` — detectado con un smoke test de servicios antes de escribir los tests formales, corregido con `get_quotation_items`/`get_proforma_items`/`get_sale_items` explícitos.
-- 110 tests nuevos — 371/371 tests OK en total (261 de fases anteriores + 110 de FASE 10). Smoke test HTTP real contra PostgreSQL de desarrollo (flujo completo).
+- **Ampliación obligatoria (Payment + PaymentAllocation)**: pedida explícitamente por el usuario tras el cierre inicial de esta fase ("un Payment puede aplicarse a una o varias facturas del mismo Customer"). `Payment.sale` se eliminó (reemplazado por `Payment.customer`, nulo solo para venta de mostrador); `PaymentAllocation` es el ledger append-only. Cambio de comportamiento intencional y documentado: un reembolso ahora solo puede salir del saldo SIN APLICAR de un pago (antes derivaba `REFUNDED` directamente) — `reverse_allocation` primero, `record_refund` después; dos tests de FASE 10 se actualizaron para reflejarlo (ver `docs/payments.md`). Vistas/plantillas de la pestaña "Pagos" del detalle de venta actualizadas para listar `PaymentAllocation` (no `Payment` directamente) y mostrar el saldo pendiente.
+- 110 tests nuevos del cierre inicial + 18 de la ampliación Payment/PaymentAllocation (128 en `apps.sales`) — 389/389 tests OK en total (261 de fases anteriores + 128 de FASE 10). Smoke test HTTP real contra PostgreSQL de desarrollo (flujo completo).
 - Documentado en `docs/sales.md`, `docs/quotations.md`, `docs/proforma-invoices.md`, `docs/payments.md`, `docs/reservations.md`, `docs/returns.md`, `docs/invoice-documents.md`. Especificaciones de FASE 11-17 actualizadas con la interfaz que cada una debe consumir.
-- Ningún módulo de negocio adicional (POS, Compras, Gastos, Reportes, Roles/Audit/API, PayPal, Billing, motor de facturación fiscal, `PaymentAllocation`, PDF binario) fue construido — todos documentados explícitamente en `docs/sales.md`.
+- Ningún módulo de negocio adicional (POS, Compras, Gastos, Reportes, Roles/Audit/API, PayPal, Billing, motor de facturación fiscal, ledger contable completo de cuentas por cobrar, PDF binario) fue construido — todos documentados explícitamente en `docs/sales.md`/`docs/payments.md`.
 
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.

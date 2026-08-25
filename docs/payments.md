@@ -1,80 +1,244 @@
-# Pagos (FASE 10)
+# Pagos y cuentas por cobrar (FASE 10 + ampliación obligatoria)
 
-`Payment` — uno o más pagos por venta. Ver `docs/sales.md` para la
-arquitectura compartida (concurrencia, idempotencia).
+`Payment` + `PaymentAllocation` — dinero recibido de un cliente,
+aplicado (parcial o totalmente, a una o varias facturas) mediante un
+ledger append-only. Ver `docs/sales.md` para la arquitectura compartida
+del motor comercial (concurrencia, idempotencia, auditoría).
 
-## Múltiples pagos por venta
+> **Historial del diseño**: FASE 10 se cerró originalmente con
+> `Payment.sale` como `ForeignKey` directo (un pago siempre pertenecía a
+> exactamente una venta) y sin `PaymentAllocation`, con el usuario
+> permitiendo explícitamente omitirlo "cuando no sea necesario". Una
+> ampliación obligatoria posterior, pedida explícitamente por el
+> usuario, exigió soportar "un Payment puede aplicarse a una o varias
+> facturas del mismo Customer" — este documento describe la
+> arquitectura **actual** (post-ampliación); `Payment.sale` ya no
+> existe.
 
-Una venta puede tener varios `Payment` (efectivo + tarjeta, por
-ejemplo: "Venta $10,000 → Efectivo $5,000, Tarjeta $5,000", el ejemplo
-que dio el usuario). `Payment.sale` es un `ForeignKey` normal (no
-`OneToOneField`): varias filas de `Payment` por una misma `Sale` son el
-caso esperado. Solo se puede registrar un pago sobre una venta
-`CONFIRMED` (`services.record_payment` lo exige).
+## El ledger: `Payment` + `PaymentAllocation`
 
-## Sin `PaymentAllocation`
+- **`Payment`**: dinero recibido de un cliente (`Payment.customer`,
+  nulo solo para el cobro inmediato de una venta de mostrador sin
+  cliente registrado). Ya NO tiene una venta asociada directamente.
+- **`PaymentAllocation`**: cuánto de un `Payment` se aplicó a qué
+  `Sale`. Un pago puede tener varias asignaciones (a varias facturas
+  distintas); una factura puede recibir asignaciones de varios pagos
+  distintos. Inmutable en el sentido de `Return` (FASE 10 original):
+  nunca se borra ni se edita in-place — una asignación equivocada se
+  corrige con `reverse_allocation` (`status=REVERSED` + auditoría), no
+  con un `UPDATE` silencioso.
 
-El usuario permitió explícitamente omitirlo "cuando no sea necesario".
-Aquí no lo es: un pago siempre pertenece a exactamente una venta. Un
-mismo pago cubriendo varias facturas a la vez (el caso que sí exigiría
-`PaymentAllocation`) no está en el alcance pedido para esta fase — si
-se necesitara en el futuro, es una tabla nueva sin tocar `Payment.sale`.
+Un pago sin ninguna asignación representa dinero recibido pero sin
+aplicar todavía a ninguna factura — el "saldo a favor" de ese pago
+(ver "Saldo a favor del cliente" más abajo).
+
+### Ejemplo (el que dio el usuario)
+
+```
+Factura A = 10,000
+Factura B = 7,500
+Factura C = 12,000
+
+Pago = 20,000
+
+PaymentAllocation:
+  A = 10,000
+  B = 7,500
+  C = 2,500        (factura C queda con 9,500 pendiente)
+```
+
+```python
+pago = services.create_payment(tenant, customer=cliente, method="transfer", amount=Decimal("20000"), user=user)
+services.apply_payment_to_sales(pago, [
+    {"sale": factura_a, "amount": Decimal("10000")},
+    {"sale": factura_b, "amount": Decimal("7500")},
+    {"sale": factura_c, "amount": Decimal("2500")},
+], user)
+```
+
+## Reglas de validación (todas en `allocate_payment`/`apply_payment_to_sales`)
+
+1. Un pago puede relacionarse con múltiples facturas — sin límite, cada
+   una es una fila de `PaymentAllocation`.
+2. Una factura puede recibir múltiples pagos — mismo mecanismo, en
+   sentido inverso.
+3. El monto aplicado nunca puede exceder **ninguno** de los dos límites,
+   validados dentro de la misma transacción bloqueada
+   (`select_for_update()` sobre `Payment` y `Sale`):
+   - el saldo **disponible** del pago (`get_unallocated_payment_amount`);
+   - el saldo **pendiente** de la factura (`get_sale_balance_due`).
+4. `apply_payment_to_sales` valida la suma total solicitada contra lo
+   disponible del pago **antes** de aplicar ninguna asignación
+   individual — todo o nada, nunca aplica parcialmente una lista.
+5. El pago y la factura deben pertenecer al mismo `tenant`
+   (`allocate_payment` lo revalida explícitamente, aunque nunca podría
+   ocurrir vía HTTP).
+6. La factura debe pertenecer al mismo `customer` que el pago
+   (`payment.customer_id == sale.customer_id`, incluyendo
+   `None == None` para el caso de venta de mostrador sin cliente).
+7. Cross-tenant y cross-customer se rechazan con `InvalidSalesOperation`
+   — nunca una excepción genérica ni un `IntegrityError` de PostgreSQL.
+8. Pagos parciales: `amount` puede ser menor al saldo pendiente de la
+   factura sin problema; la factura queda `PARTIALLY_PAID`.
+
+## Saldo pendiente de una factura (`get_sale_balance_due`)
+
+```python
+def get_sale_paid_amount(sale):
+    # Suma de PaymentAllocation ACTIVE de Payment CONFIRMED aplicadas a esta venta.
+    ...
+
+def get_sale_balance_due(sale):
+    return sale.total - get_sale_paid_amount(sale)
+```
+
+Nunca un campo desnormalizado: se calcula siempre desde el ledger, mismo
+principio que `get_current_stock` en `apps.inventory.services`.
 
 ## Estado de pago de la venta (`Sale.payment_status`)
 
-Calculado, no inventado: `services.recompute_payment_status(sale)`
-suma los `Payment` `CONFIRMED` de la venta, resta los `Refund`
-`COMPLETED` asociados, y compara el neto contra `sale.total`:
+`recompute_payment_status(sale)` deriva **únicamente** de
+`get_sale_paid_amount(sale)` contra `sale.total`:
 
 | Condición | Estado |
 |---|---|
-| Reembolsado > 0 y neto ≤ 0 | `REFUNDED` |
-| Reembolsado > 0 y neto > 0 | `PARTIALLY_REFUNDED` |
-| Neto ≤ 0 (sin pagos) | `UNPAID` |
-| 0 < neto < total | `PARTIALLY_PAID` |
-| neto ≥ total | `PAID` |
+| Pagado ≤ 0 | `UNPAID` |
+| 0 < pagado < total | `PARTIALLY_PAID` |
+| pagado ≥ total | `PAID` |
 
-Se recalcula (nunca se asume) cada vez que se registra/anula un pago o
-se registra un reembolso — el campo `payment_status` en `Sale` es una
-caché de consulta rápida para listados/filtros, siempre recalculada
-dentro de la misma transacción que la origina; la fuente de verdad real
-sigue siendo la suma de `Payment`/`Refund`.
+`REFUNDED`/`PARTIALLY_REFUNDED` siguen existiendo como valores del
+enum (compatibilidad), pero **ya no se derivan automáticamente aquí** —
+ver "Reembolsos" más abajo para el porqué. Se recalcula (nunca se
+asume) dentro de la misma transacción que aplica/revierte una
+asignación; `Sale.payment_status` es una caché de consulta rápida para
+listados/filtros, la fuente de verdad real es siempre el ledger.
+
+## Reversar una asignación (`reverse_allocation`)
+
+Deshace la aplicación de un pago a UNA factura concreta: libera el
+saldo pendiente de esa factura y devuelve el monto al saldo disponible
+del pago (el dinero sigue dentro del sistema, solo deja de estar
+aplicado). Idempotente. Distinta de anular un pago completo
+(`void_payment`, que reversa **todas** sus asignaciones activas en
+cascada) y distinta de un reembolso (`record_refund`, que saca el
+dinero **fuera** del sistema).
+
+## Reembolsos: solo desde el saldo sin aplicar
+
+`Refund` sigue separado de `Return` (dinero vs. mercancía — ver
+`docs/returns.md`). La regla cambió con la ampliación: un reembolso
+**solo puede salir del saldo sin aplicar de un pago**
+(`get_unallocated_payment_amount(payment)`), nunca de dinero ya
+aplicado a una factura. Si el dinero ya está aplicado, hay que
+**revertir la asignación primero** (`reverse_allocation`) — eso ya dej
+a la factura en `UNPAID`/`PARTIALLY_PAID` de forma natural — y **luego**
+reembolsar desde el saldo ahora libre.
+
+> **Cambio de comportamiento respecto al cierre original de FASE 10**:
+> antes, reembolsar el pago completo de una venta totalmente pagada
+> dejaba `Sale.payment_status = REFUNDED` directamente. Bajo la regla
+> nueva (más correcta: nunca "des-aplicar" una factura en silencio
+> dentro de un reembolso) ese mismo resultado requiere dos pasos
+> explícitos — `reverse_allocation` seguido de `record_refund` — y dos
+> tests de FASE 10 (`test_reembolso_total_deja_estado_refunded`,
+> `test_reembolso_parcial_deja_estado_partially_refunded`) se
+> actualizaron para reflejar el flujo correcto (ver
+> `apps/sales/tests/test_payments.py`).
+
+## Saldo a favor del cliente (preparación, sin ledger completo)
+
+`get_customer_credit_balance(customer)`: suma `get_unallocated_payment_amount`
+de todos los pagos `CONFIRMED` del cliente. Es una agregación de
+solo lectura sobre `Payment`/`PaymentAllocation`/`Refund` ya
+existentes — **no** una tabla ni un campo de saldo nuevo, ni un ledger
+contable completo (eso queda para una fase posterior si se decide
+construir cuentas por cobrar reales).
+
+## Facturas pendientes del cliente (preparación de estado de cuenta)
+
+`get_customer_pending_sales(customer)`: ventas `CONFIRMED` o
+`PARTIALLY_RETURNED` del cliente con `get_sale_balance_due(venta) > 0`.
+Consulta reutilizable (no un reporte — eso es FASE 14), pensada
+explícitamente para que FASE 11 (POS) pueda listar "facturas
+pendientes de este cliente" y cobrarlas.
 
 ## Idempotencia
 
-`record_payment(sale, *, method, amount, user, idempotency_key="", ...)`:
-si se pasa una `idempotency_key` y ya existe un `Payment` con esa
-clave para el tenant, se devuelve el pago existente **sin crear uno
-nuevo** — un doble clic o un reintento de red tras un timeout nunca
-duplica el cobro. `void_payment` también es idempotente (anular un pago
-ya anulado es un no-op).
+- `create_payment(tenant, *, ..., idempotency_key="")`: una clave
+  repetida devuelve el `Payment` ya existente sin crear uno duplicado.
+- `record_payment_for_sale(sale, *, ..., idempotency_key="")`: atajo
+  atómico que crea el pago y lo aplica por completo a una sola venta en
+  un solo paso — si la clave ya existía Y el pago ya fue aplicado, el
+  reintento no vuelve a aplicar (nunca duplica ni la creación ni la
+  aplicación).
+- `void_payment`/`reverse_allocation`: ambos idempotentes (repetir la
+  operación sobre algo ya anulado/revertido es un no-op).
 
-## Anular un pago (`void_payment`)
+## Auditoría
 
-No elimina la fila (preserva el historial/auditoría): cambia
-`Payment.status` a `VOIDED` y recalcula `payment_status` de la venta.
-Un pago anulado no cuenta en `_sum_confirmed_payments`.
+Cuatro eventos distintos en `SalesActivityLog`, cada uno con su propio
+`entity_type`/`entity_id` (`"payment"` para el pago en sí, `"sale"`
+para el efecto sobre una factura concreta):
 
-## Reembolsos: separados de las devoluciones de mercancía
+| Acción | `entity_type` | Cuándo |
+|---|---|---|
+| `PAYMENT_RECORDED` | `payment` | Al crear el `Payment` (`create_payment`) |
+| `PAYMENT_ALLOCATED` | `sale` | Al aplicar dinero a una factura (`allocate_payment`) |
+| `PAYMENT_ALLOCATION_REVERSED` | `sale` | Al revertir una asignación (`reverse_allocation`) |
+| `PAYMENT_VOIDED` | `payment` | Al anular el pago completo (`void_payment`) |
+| `REFUNDED` | `payment` | Al reembolsar dinero (`record_refund`) |
 
-`Refund` es la devolución de DINERO, ligada a un `Payment` concreto
-(nunca directamente a la venta) — ver "Devoluciones y reembolsos" en
-`docs/returns.md` para la justificación completa de por qué están
-separados de `Return`. `record_refund` valida que la suma de
-reembolsos `COMPLETED` de un pago nunca supere el monto de ese pago.
+## Vista de una sola venta (`SalePaymentAddView`/`sale_detail.html`)
+
+La UI de FASE 10 (pestaña "Pagos" del detalle de venta) usa
+`record_payment_for_sale`: registra un pago y lo aplica de inmediato al
+100% a esa venta, preservando la experiencia simple de "cobrar esta
+venta" sin que el usuario necesite saber que el ledger de asignaciones
+existe debajo. La tabla de esa pestaña lista `PaymentAllocation`
+(no `Payment` directamente) — el monto mostrado es lo aplicado a
+**esta** venta, correcto incluso si el pago subyacente también se
+aplicó a otra factura.
+
+El botón "Revertir" de esa tabla llama a `reverse_allocation` (no
+`void_payment`): deshace solo la aplicación a esta venta, sin afectar
+otras facturas que el mismo pago pudiera cubrir.
+
+## Multi-factura: preparación explícita para FASE 11 (POS)
+
+`apply_payment_to_sales(payment, allocations, user)` es el mecanismo de
+"aplicar un solo pago a varias facturas" pedido explícitamente para que
+FASE 11 (POS) pueda: cobrar la venta actual, recibir pago parcial,
+recibir pago múltiple, cobrar facturas pendientes de un cliente, y
+aplicar un solo pago a varias facturas a la vez. La capa de servicio ya
+soporta esto completo y está cubierta por tests (incluyendo
+concurrencia); FASE 10 no construyó una UI dedicada a esto — igual que
+en el cierre original ("no construir todavía el POS completo"), esa
+interfaz operacional le corresponde a quien la consuma (FASE 11, o una
+futura pantalla de "cuenta corriente de cliente").
 
 ## Preparación para PayPal (FASE 16) sin acoplar `Sale`
 
 `Payment.method` incluye `OTHER` como valor extensible (mismo patrón de
 `choices` extensible que `IdentificationType` en FASE 9). Toda la
-lógica de negocio pasa por `services.record_payment` — cuando FASE 16
-integre un proveedor real, el cambio se localiza ahí (o en un nuevo
-módulo de "Payment Service"/`PaymentProvider" que esta función invoque),
+lógica de negocio pasa por `services.py` — cuando FASE 16 integre un
+proveedor real, el cambio se localiza ahí (o en un nuevo módulo de
+"Payment Service"/`PaymentProvider` que estas funciones invoquen),
 nunca en las vistas ni en `models.py`. No se construyó ninguna
 integración real todavía.
 
+## Concurrencia
+
+Cubierto con hilos reales (`TransactionTestCase`, ver
+`test_concurrency.py`, clase `PaymentAllocationConcurrencyTests`): dos
+asignaciones simultáneas del mismo pago que juntas exceden lo
+disponible, y dos asignaciones simultáneas a la misma factura desde
+pagos distintos que juntas exceden el saldo pendiente — en ambos casos
+exactamente una gana, nunca una sobre-aplicación.
+
 ## Multi-Tenancy
 
-Cobertura en `test_isolation.py`: registrar/anular un pago de otro
-tenant siempre da 404, nunca confirma ni niega su existencia de otra
-forma.
+Cobertura en `test_isolation.py`: registrar/revertir un pago de otro
+tenant siempre da 404 vía HTTP; `allocate_payment` además rechaza
+explícitamente a nivel de servicio cualquier intento de aplicar un pago
+de un tenant a una venta de otro (segunda barrera, nunca confiada solo
+al filtrado de las vistas).

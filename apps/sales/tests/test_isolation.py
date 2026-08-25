@@ -14,7 +14,7 @@ from django.urls import reverse
 from apps.inventory import services as inv_services
 from apps.inventory.models import Product
 from apps.sales import services
-from apps.sales.models import ProformaInvoice, Reservation, Sale
+from apps.sales.models import PaymentAllocation, ProformaInvoice, Reservation, Sale
 from apps.tenants.models import Membership, Tenant
 
 from ._helpers import MEDIA_ROOT_TEMPORAL_TESTS
@@ -44,7 +44,7 @@ class SalesIsolationTests(TestCase):
         self.sale_a = services.create_sale(self.tenant_a, user=self.user_a)
         services.add_sale_item(self.sale_a, product=self.producto_a, quantity=Decimal("2"), user=self.user_a)
         self.sale_a = services.confirm_sale(self.sale_a, self.user_a)
-        self.payment_a = services.record_payment(self.sale_a, method="cash", amount=self.sale_a.total, user=self.user_a)
+        self.payment_a = services.record_payment_for_sale(self.sale_a, method="cash", amount=self.sale_a.total, user=self.user_a)
 
         self.sale_b = services.create_sale(self.tenant_b, user=self.user_b)
         services.add_sale_item(self.sale_b, product=self.producto_b, quantity=Decimal("2"), user=self.user_b)
@@ -113,12 +113,21 @@ class SalesIsolationTests(TestCase):
         })
         self.assertEqual(respuesta.status_code, 404)
 
-    def test_tenant_a_no_puede_anular_pago_de_tenant_b(self):
-        pago_b = services.record_payment(self.sale_b, method="cash", amount=Decimal("1"), user=self.user_b)
-        respuesta = self.client_a.post(reverse("sales:sale_payment_void", args=[self.sale_b.pk, pago_b.pk]))
+    def test_tenant_a_no_puede_revertir_pago_de_tenant_b(self):
+        pago_b = services.record_payment_for_sale(self.sale_b, method="cash", amount=Decimal("1"), user=self.user_b)
+        asignacion_b = PaymentAllocation.all_objects.get(tenant=self.tenant_b, payment=pago_b)
+        respuesta = self.client_a.post(reverse("sales:sale_payment_reverse", args=[self.sale_b.pk, asignacion_b.pk]))
         self.assertEqual(respuesta.status_code, 404)
-        pago_b.refresh_from_db()
-        self.assertNotEqual(pago_b.status, "voided")
+        asignacion_b.refresh_from_db()
+        self.assertEqual(asignacion_b.status, PaymentAllocation.Status.ACTIVE)
+
+    def test_allocate_payment_rechaza_asignacion_cross_tenant(self):
+        # Requisito explícito: "No permitir cross-tenant allocations" —
+        # ni siquiera pasando los objetos directamente al servicio (esto
+        # nunca podría ocurrir vía HTTP, que ya filtra por tenant, pero
+        # `services.py` debe rechazarlo igual como segunda barrera).
+        with self.assertRaises(services.InvalidSalesOperation):
+            services.allocate_payment(self.payment_a, self.sale_b, Decimal("1"), self.user_a)
 
     def test_tenant_a_no_puede_liberar_reserva_de_tenant_b(self):
         reserva_b = services.create_reservation(self.tenant_b, product=self.producto_b, user=self.user_b, quantity=Decimal("1"))

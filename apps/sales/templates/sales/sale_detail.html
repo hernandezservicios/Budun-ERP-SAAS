@@ -126,26 +126,30 @@
             </div>
         </div>
         {% endif %}
+        <div class="kpi-grid" style="margin-bottom: var(--espacio-4);">
+            <div class="kpi"><p class="kpi__etiqueta">Pagado</p><p class="kpi__valor">${{ paid_amount }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Saldo pendiente</p><p class="kpi__valor">${{ balance_due }}</p></div>
+        </div>
         {% if payments %}
         <div class="tabla-envoltorio">
             <table class="tabla">
-                <thead><tr><th>Método</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Usuario</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <thead><tr><th>Método</th><th>Monto aplicado</th><th>Referencia</th><th>Estado</th><th>Usuario</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
                 <tbody>
                     {% for pago in payments %}
                     <tr>
-                        <td>{{ pago.get_method_display }}</td>
+                        <td>{{ pago.payment.get_method_display }}</td>
                         <td>${{ pago.amount }}</td>
-                        <td>{{ pago.reference|default:"—" }}</td>
+                        <td>{{ pago.payment.reference|default:"—" }}</td>
                         <td>
-                            {% if pago.status == "confirmed" %}<span class="badge badge--verde">Confirmado</span>{% else %}<span class="badge badge--neutro">Anulado</span>{% endif %}
+                            {% if pago.status == "active" %}<span class="badge badge--verde">Aplicado</span>{% else %}<span class="badge badge--neutro">Revertido</span>{% endif %}
                         </td>
                         <td>{% firstof pago.user.get_full_name pago.user.email "—" %}</td>
                         <td>{{ pago.created_at|date:"d M Y H:i" }}</td>
                         <td>
-                            {% if pago.status == "confirmed" %}
-                            <form action="{% url 'sales:sale_payment_void' sale.pk pago.pk %}" method="post" onsubmit="return confirm('¿Anular este pago?');">
+                            {% if pago.status == "active" %}
+                            <form action="{% url 'sales:sale_payment_reverse' sale.pk pago.pk %}" method="post" onsubmit="return confirm('¿Revertir este pago de la venta?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn--contorno btn--sm">Anular</button>
+                                <button type="submit" class="btn btn--contorno btn--sm">Revertir</button>
                             </form>
                             {% endif %}
                         </td>

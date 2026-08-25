@@ -85,9 +85,22 @@ ventas". Reutilizar tal cual:
   quiera apartar stock antes de cobrar — no es obligatorio en el flujo
   de mostrador típico).
 - **Confirmar / cobrar**: `services.confirm_sale` seguido de uno o más
-  `services.record_payment` (efectivo + tarjeta, ver `docs/payments.md`)
-  — el "cambio" a entregar es `pago_recibido − sale.total`, calculado
-  en la vista/plantilla del POS, no en `apps.sales`.
+  `services.record_payment_for_sale` (efectivo + tarjeta, pago parcial o
+  múltiple — ver `docs/payments.md`) — el "cambio" a entregar es
+  `pago_recibido − sale.total`, calculado en la vista/plantilla del
+  POS, no en `apps.sales`.
+- **Cobrar facturas pendientes / un solo pago a varias facturas**:
+  ampliación obligatoria de FASE 10 pedida explícitamente para que este
+  POS pueda cobrar cuentas por cobrar reales, no solo la venta actual:
+  `services.get_customer_pending_sales(customer)` para listar las
+  facturas `CONFIRMED`/`PARTIALLY_RETURNED` con saldo pendiente de un
+  cliente, y `services.create_payment` + `services.apply_payment_to_sales`
+  para aplicar un único pago repartido entre varias de ellas (mismo
+  mecanismo que el ejemplo "Pago 20,000 → Factura A 10,000 / B 7,500 /
+  C 2,500" de `docs/payments.md`) — el motor ya valida que la suma
+  nunca exceda ni lo disponible del pago ni el saldo de cada factura;
+  el POS solo necesita construir la lista `[{sale, amount}, ...]` desde
+  la selección del cajero.
 - **Imprimir recibo**: reutilizar `sale_receipt.html`/la vista
   `SaleReceiptView` de FASE 10 (ver `docs/invoice-documents.md`), no
   crear una segunda plantilla de recibo.

@@ -48,12 +48,22 @@ unidad a `InventoryUnit.Status.RESERVADO` (reutilizando la máquina de
 estados ya construida en FASE 8, `services.transition_unit_status` —
 nunca se duplica esa lógica aquí).
 
-## Pagos: Payment por venta, sin PaymentAllocation
-El usuario permitió explícitamente omitir `PaymentAllocation` "cuando no
-sea necesario". Aquí no lo es: cada `Payment` referencia una única
-`Sale` (una venta puede tener VARIOS pagos — efectivo + tarjeta —, pero
-un pago siempre pertenece a una sola venta). Un mismo pago cubriendo
-varias facturas a la vez no está en el alcance pedido para esta fase.
+## Pagos y cuentas por cobrar: Payment + PaymentAllocation
+EXTENSIÓN OBLIGATORIA pedida explícitamente por el usuario tras el
+cierre inicial de FASE 10. `Payment` ya NO referencia una única `Sale`:
+representa dinero recibido de un `Customer`. `PaymentAllocation` es el
+ledger que registra cuánto de ese dinero se aplicó a cada factura —
+un pago puede aplicarse a varias facturas del mismo cliente, y una
+factura puede recibir asignaciones de varios pagos. El monto asignado
+nunca puede exceder ni lo disponible del pago
+(`services.get_unallocated_payment_amount`) ni el saldo pendiente de la
+factura (`services.get_sale_balance_due`) — ambos verificados dentro de
+la misma transacción con `select_for_update()`, igual que el resto del
+módulo. `services.record_payment_for_sale` sigue existiendo como atajo
+para el caso más común (un pago, una venta, aplicado de inmediato) —
+internamente crea el `Payment` y su `PaymentAllocation` en un solo paso
+atómico, así que las vistas que solo cobran una venta no necesitan
+saber que el ledger de asignaciones existe debajo.
 
 ## Devoluciones y reembolsos: separados a propósito
 `Return`/`ReturnItem` es la devolución de MERCANCÍA (afecta inventario).
@@ -463,11 +473,30 @@ class SaleItem(TenantScopedModel, CommercialDocumentItemMixin):
 
 
 class Payment(TenantScopedModel):
+    """Dinero recibido de un cliente — YA NO está atado a una única
+    venta (ver `PaymentAllocation` más abajo, extensión obligatoria
+    pedida explícitamente por el usuario tras el cierre inicial de
+    FASE 10: "un Payment puede aplicarse a una o varias facturas del
+    mismo Customer"). `Payment.customer` identifica de quién es el
+    dinero; `PaymentAllocation` es el ledger que registra CONTRA QUÉ
+    venta(s) se aplicó, cuánto de cada una. Un pago sin ninguna
+    asignación todavía representa saldo a favor del cliente sin aplicar
+    (ver `services.get_unallocated_payment_amount`/
+    `get_customer_credit_balance`)."""
+
     class Status(models.TextChoices):
         CONFIRMED = "confirmed", "Confirmado"
         VOIDED = "voided", "Anulado"
 
-    sale = models.ForeignKey(Sale, verbose_name="venta", on_delete=models.PROTECT, related_name="payments")
+    customer = models.ForeignKey(
+        Customer,
+        verbose_name="cliente",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Vacío solo para el pago inmediato de una venta de mostrador sin cliente registrado.",
+    )
     method = models.CharField("método", max_length=20, choices=PaymentMethod.choices)
     amount = models.DecimalField("monto", max_digits=12, decimal_places=2)
     currency = models.CharField("moneda", max_length=3, default="USD")
@@ -503,11 +532,64 @@ class Payment(TenantScopedModel):
             ),
         ]
         indexes = [
-            models.Index(fields=["tenant", "sale"], name="idx_payment_tenant_venta"),
+            models.Index(fields=["tenant", "customer"], name="idx_payment_tenant_cliente"),
         ]
 
     def __str__(self):
-        return f"{self.get_method_display()} {self.amount} — {self.sale.number}"
+        return f"{self.get_method_display()} {self.amount}"
+
+
+class PaymentAllocation(TenantScopedModel):
+    """Cuánto de un `Payment` se aplicó a qué `Sale` (factura) —
+    el ledger de cuentas por cobrar. Un pago puede tener varias
+    asignaciones (a varias facturas distintas); una factura puede
+    recibir asignaciones de varios pagos distintos. Nunca se borra
+    físicamente: `status=REVERSED` (con auditoría) deshace una
+    asignación equivocada sin perder el rastro — misma filosofía que
+    `Return` (FASE 10 original): inmutable, las correcciones son
+    operaciones nuevas, no ediciones silenciosas."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Activa"
+        REVERSED = "reversed", "Reversada"
+
+    payment = models.ForeignKey(Payment, verbose_name="pago", on_delete=models.PROTECT, related_name="allocations")
+    sale = models.ForeignKey(Sale, verbose_name="venta", on_delete=models.PROTECT, related_name="payment_allocations")
+    amount = models.DecimalField("monto aplicado", max_digits=12, decimal_places=2)
+    status = models.CharField("estado", max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="aplicada por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField("fecha", auto_now_add=True)
+    reversed_at = models.DateTimeField("reversada el", null=True, blank=True)
+    reversed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="reversada por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "asignación de pago"
+        verbose_name_plural = "asignaciones de pago"
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(check=models.Q(amount__gt=0), name="paymentallocation_monto_positivo"),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "payment", "status"], name="idx_alloc_tenant_pago"),
+            models.Index(fields=["tenant", "sale", "status"], name="idx_alloc_tenant_venta"),
+        ]
+
+    def __str__(self):
+        return f"{self.amount} — pago #{self.payment_id} → {self.sale.number}"
 
 
 class Refund(TenantScopedModel):
@@ -778,6 +860,8 @@ class SalesActivityLog(TenantScopedModel):
         CONFIRMED = "confirmed", "Confirmada"
         PAYMENT_RECORDED = "payment_recorded", "Pago registrado"
         PAYMENT_VOIDED = "payment_voided", "Pago anulado"
+        PAYMENT_ALLOCATED = "payment_allocated", "Pago aplicado a factura"
+        PAYMENT_ALLOCATION_REVERSED = "payment_allocation_reversed", "Aplicación de pago reversada"
         RETURNED = "returned", "Devuelta"
         REFUNDED = "refunded", "Reembolsada"
         ATTACHMENT_UPLOADED = "attachment_uploaded", "Adjunto subido"

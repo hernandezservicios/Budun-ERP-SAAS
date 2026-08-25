@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     DocumentSequence,
     Payment,
+    PaymentAllocation,
     ProformaInvoice,
     ProformaInvoiceItem,
     Quotation,
@@ -102,11 +103,26 @@ class SaleAdmin(admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ("sale", "tenant", "method", "amount", "status", "created_at")
+    list_display = ("customer", "tenant", "method", "amount", "status", "created_at")
     list_filter = ("tenant", "method", "status")
 
     def get_queryset(self, request):
-        return Payment.all_objects.select_related("tenant", "sale")
+        return Payment.all_objects.select_related("tenant", "customer")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PaymentAllocation)
+class PaymentAllocationAdmin(admin.ModelAdmin):
+    list_display = ("payment", "sale", "tenant", "amount", "status", "created_at")
+    list_filter = ("tenant", "status")
+
+    def get_queryset(self, request):
+        return PaymentAllocation.all_objects.select_related("tenant", "payment", "sale")
 
     def has_add_permission(self, request):
         return False

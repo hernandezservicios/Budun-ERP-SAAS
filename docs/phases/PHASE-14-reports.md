@@ -74,7 +74,13 @@ no recalcular:
   `CANCELED`/`EXPIRED`.
 - **Pagos**: agregar `Payment` (`status=CONFIRMED`) por `method`/fecha;
   usar `Sale.payment_status` (ya calculado, ver `docs/payments.md`) para
-  "ventas pendientes de cobro" sin recalcular la suma de pagos.
+  "ventas pendientes de cobro" sin recalcular la suma de pagos. Para el
+  monto exacto pendiente por factura o por cliente, reutilizar
+  `services.get_sale_balance_due`/`get_customer_pending_sales`/
+  `get_customer_credit_balance` (ampliación de FASE 10:
+  `Payment`/`PaymentAllocation`) en vez de recalcular el ledger — un
+  reporte de "cuentas por cobrar" es una agregación sobre estas mismas
+  funciones, no una fuente de verdad nueva.
 - **Devoluciones**: agregar `ReturnItem`/`Return` — nunca inventar un
   cálculo de "devuelto" distinto al que ya usa
   `services._is_full_return`.

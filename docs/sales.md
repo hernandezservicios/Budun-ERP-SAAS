@@ -91,13 +91,17 @@ Toda operación que lea-y-luego-escriba un valor que pueda cambiar bajo
 concurrencia usa `transaction.atomic()` + `select_for_update()`:
 numeración (`DocumentSequence`), confirmación de venta (`Sale` +
 `InventoryUnit`/`Product` vía `apps.inventory.services`), reservas
-(`InventoryUnit`/`Product`), pagos y reembolsos (`Payment`). Probado
+(`InventoryUnit`/`Product`), y pagos/asignaciones/reembolsos (`Payment`
++ `PaymentAllocation`, bloqueando ambas filas antes de validar). Probado
 explícitamente con hilos reales sobre `TransactionTestCase` (no
 `TestCase`, que nunca hace commit real): dos reservas concurrentes de
-la misma unidad, dos ventas concurrentes de la misma unidad, y dos
-reservas concurrentes que exceden el stock combinado — en los tres
-casos, exactamente una operación gana y la otra se rechaza
-limpiamente. Ver `docs/reservations.md`.
+la misma unidad, dos ventas concurrentes de la misma unidad, dos
+reservas concurrentes que exceden el stock combinado, dos asignaciones
+concurrentes del mismo pago que juntas exceden lo disponible, y dos
+asignaciones concurrentes a la misma factura que juntas exceden su
+saldo pendiente — en los cinco casos, exactamente una operación gana y
+la otra se rechaza limpiamente. Ver `docs/reservations.md` y
+`docs/payments.md`.
 
 ## Idempotencia
 
@@ -105,10 +109,14 @@ limpiamente. Ver `docs/reservations.md`.
   ya está `CONFIRMED`, la función devuelve la misma venta sin volver a
   aplicar ningún efecto de inventario — un reintento de red nunca
   produce una salida de stock duplicada ni una doble venta de unidad.
-- **Registrar un pago** (`record_payment`) acepta una
-  `idempotency_key` opcional: un reintento con la misma clave devuelve
-  el pago ya existente en vez de crear uno nuevo.
-- **Anular un pago** (`void_payment`) también es idempotente.
+- **Registrar un pago** (`create_payment`/`record_payment_for_sale`)
+  acepta una `idempotency_key` opcional: un reintento con la misma
+  clave devuelve el pago ya existente (y, en el caso de
+  `record_payment_for_sale`, no vuelve a aplicarlo si ya estaba
+  aplicado) en vez de crear/aplicar uno duplicado.
+- **Anular un pago** (`void_payment`) y **revertir una asignación**
+  (`reverse_allocation`) también son idempotentes. Ver `docs/payments.md`
+  para el diseño completo del ledger `PaymentAllocation`.
 
 ## No duplicar lógica de inventario
 
@@ -185,14 +193,14 @@ Ver `docs/invoice-documents.md`.
   generación de archivos PDF binarios — instalar una librería de PDF
   no está aprobado como dependencia nueva sin decisión explícita del
   usuario. Ver `docs/invoice-documents.md`.
-- **`PaymentAllocation`**: el usuario permitió explícitamente omitirlo
-  "cuando no sea necesario" — aquí no lo es, porque un pago siempre
-  pertenece a una sola venta (varios pagos por venta sí, un pago
-  cubriendo varias ventas a la vez no está en el alcance de esta fase).
 - **Integración real de pagos (PayPal, pasarelas)**: `Payment.method`
   incluye `OTHER` como valor extensible; el acoplamiento a un proveedor
-  real queda para FASE 16, siempre a través de `services.record_payment`
+  real queda para FASE 16, siempre a través de `services.py`
   (nunca desde las vistas ni desde `apps.sales.models`).
+- **Ledger contable completo de cuentas por cobrar**: `get_customer_credit_balance`/
+  `get_customer_pending_sales` son agregaciones de solo lectura sobre
+  `Payment`/`PaymentAllocation`/`Refund`, no una tabla ni un motor de
+  estado de cuenta — ver `docs/payments.md`.
 - **Comisiones de vendedor**: se registra `salesperson`/`confirmed_by`
   en cada documento (preparación explícita pedida), pero ningún cálculo
   de comisión — corresponde a una fase de Reportes/Nómina futura.

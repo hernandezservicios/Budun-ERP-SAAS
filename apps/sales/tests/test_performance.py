@@ -50,11 +50,11 @@ class SalesPerformanceTests(SalesTestCase):
         sale = services.confirm_sale(sale, self.user)
 
         for _ in range(2):
-            services.record_payment(sale, method="cash", amount=Decimal("1"), user=self.user)
+            services.record_payment_for_sale(sale, method="cash", amount=Decimal("1"), user=self.user)
         queries_con_2 = self._contar_queries(reverse("sales:sale_detail", args=[sale.pk]))
 
         for _ in range(8):
-            services.record_payment(sale, method="cash", amount=Decimal("1"), user=self.user)
+            services.record_payment_for_sale(sale, method="cash", amount=Decimal("1"), user=self.user)
         queries_con_10 = self._contar_queries(reverse("sales:sale_detail", args=[sale.pk]))
 
         self.assertEqual(queries_con_2, queries_con_10)

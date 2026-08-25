@@ -43,6 +43,7 @@ from apps.inventory.services import (
 from .models import (
     DocumentSequence,
     Payment,
+    PaymentAllocation,
     PaymentMethod,
     ProformaInvoice,
     ProformaInvoiceItem,
@@ -825,36 +826,48 @@ def cancel_sale(sale, user, reason=""):
 
 
 # ------------------------------------------------------------------
-# Pagos
+# Pagos y cuentas por cobrar (Payment + PaymentAllocation)
+#
+# Extensión obligatoria pedida explícitamente por el usuario tras el
+# cierre de FASE 10: un `Payment` ya NO pertenece a una única venta.
+# Representa dinero recibido de un cliente; `PaymentAllocation` es el
+# ledger append-only que registra contra qué venta(s) se aplicó ese
+# dinero y cuánto de cada una — nunca redistribuido implícitamente,
+# siempre una fila explícita y auditable por aplicación. El saldo de
+# una factura y el saldo sin aplicar de un pago se CALCULAN siempre
+# desde este ledger (nunca un campo desnormalizado), mismo principio
+# que `get_current_stock` en `apps.inventory.services`.
 # ------------------------------------------------------------------
 
 
-def _sum_confirmed_payments(sale):
-    total = Payment.all_objects.filter(tenant=sale.tenant, sale=sale, status=Payment.Status.CONFIRMED).aggregate(
-        total=Sum("amount")
-    )["total"]
+def get_sale_paid_amount(sale):
+    """Suma de asignaciones ACTIVAS de pagos CONFIRMADOS aplicadas a
+    esta venta — única fuente de verdad de "cuánto se ha pagado"."""
+    total = PaymentAllocation.all_objects.filter(
+        tenant=sale.tenant, sale=sale, status=PaymentAllocation.Status.ACTIVE, payment__status=Payment.Status.CONFIRMED
+    ).aggregate(total=Sum("amount"))["total"]
     return total or Decimal("0")
 
 
-def _sum_completed_refunds(sale):
-    total = Refund.all_objects.filter(tenant=sale.tenant, payment__sale=sale, status=Refund.Status.COMPLETED).aggregate(
-        total=Sum("amount")
-    )["total"]
-    return total or Decimal("0")
+def get_sale_balance_due(sale):
+    """Saldo pendiente de la factura: total menos lo efectivamente
+    aplicado (asignaciones activas de pagos confirmados)."""
+    return sale.total - get_sale_paid_amount(sale)
 
 
 def recompute_payment_status(sale):
-    total_pagado = _sum_confirmed_payments(sale)
-    total_reembolsado = _sum_completed_refunds(sale)
-    neto = total_pagado - total_reembolsado
-
-    if total_reembolsado > 0 and neto <= 0:
-        estado = Sale.PaymentStatus.REFUNDED
-    elif total_reembolsado > 0 and neto > 0:
-        estado = Sale.PaymentStatus.PARTIALLY_REFUNDED
-    elif neto <= 0:
+    """Deriva el estado de pago de la venta ÚNICAMENTE de lo realmente
+    aplicado (`get_sale_paid_amount`). `REFUNDED`/`PARTIALLY_REFUNDED`
+    siguen existiendo como valores del enum, pero ya no se derivan
+    automáticamente aquí: bajo la nueva regla, un reembolso solo puede
+    salir del saldo SIN APLICAR de un pago (`get_unallocated_payment_amount`)
+    — para "des-pagar" una factura primero hay que reversar su
+    asignación (`reverse_allocation`), lo que ya la devuelve a
+    UNPAID/PARTIALLY_PAID de forma natural. Ver docs/payments.md."""
+    pagado = get_sale_paid_amount(sale)
+    if pagado <= 0:
         estado = Sale.PaymentStatus.UNPAID
-    elif neto < sale.total:
+    elif pagado < sale.total:
         estado = Sale.PaymentStatus.PARTIALLY_PAID
     else:
         estado = Sale.PaymentStatus.PAID
@@ -862,47 +875,199 @@ def recompute_payment_status(sale):
     return estado
 
 
+def get_unallocated_payment_amount(payment):
+    """Saldo del pago sin aplicar a ninguna factura — monto total menos
+    lo asignado (activo) menos lo ya reembolsado. Es el "saldo a favor"
+    de ese pago concreto si nunca se aplica a nada."""
+    asignado = PaymentAllocation.all_objects.filter(
+        tenant=payment.tenant, payment=payment, status=PaymentAllocation.Status.ACTIVE
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    reembolsado = Refund.all_objects.filter(
+        tenant=payment.tenant, payment=payment, status=Refund.Status.COMPLETED
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    return payment.amount - asignado - reembolsado
+
+
+def get_customer_credit_balance(customer):
+    """Saldo a favor TOTAL de un cliente: suma del saldo sin aplicar de
+    todos sus pagos confirmados. Preparación explícita para una fase
+    posterior de cuentas por cobrar con ledger completo — aquí es solo
+    una agregación de lectura sobre `Payment`/`PaymentAllocation`/
+    `Refund` ya existentes, nunca un campo ni tabla nueva de saldo."""
+    total = Decimal("0")
+    pagos = Payment.all_objects.filter(tenant=customer.tenant, customer=customer, status=Payment.Status.CONFIRMED)
+    for pago in pagos:
+        total += get_unallocated_payment_amount(pago)
+    return total
+
+
+def get_customer_pending_sales(customer):
+    """Ventas confirmadas (o parcialmente devueltas) del cliente con
+    saldo pendiente > 0 — las "facturas pendientes" que FASE 11 (POS)
+    debe poder cobrar. Consulta reutilizable, no un reporte (FASE 14)."""
+    ventas = Sale.all_objects.filter(
+        tenant=customer.tenant, customer=customer, status__in=[Sale.Status.CONFIRMED, Sale.Status.PARTIALLY_RETURNED]
+    ).order_by("issue_date", "id")
+    return [venta for venta in ventas if get_sale_balance_due(venta) > 0]
+
+
 @transaction.atomic
-def record_payment(sale, *, method, amount, user, currency=None, reference="", idempotency_key="", notes=""):
-    """Registra un pago sobre una venta CONFIRMADA. Idempotente por
-    `idempotency_key`: un reintento con la misma clave devuelve el pago
-    ya existente en vez de crear uno duplicado — requisito explícito
-    (nunca duplicar pagos por reintentos)."""
+def create_payment(tenant, *, customer=None, method, amount, user, currency=None, reference="", idempotency_key="", notes=""):
+    """Registra dinero recibido de un cliente SIN aplicarlo todavía a
+    ninguna factura — queda disponible como saldo sin aplicar
+    (`get_unallocated_payment_amount`) hasta llamar a
+    `allocate_payment`/`apply_payment_to_sales`/`record_payment_for_sale`.
+    Idempotente por `idempotency_key`: un reintento con la misma clave
+    devuelve el pago ya existente en vez de crear uno duplicado."""
     if idempotency_key:
-        existente = Payment.all_objects.filter(tenant=sale.tenant, idempotency_key=idempotency_key).first()
+        existente = Payment.all_objects.filter(tenant=tenant, idempotency_key=idempotency_key).first()
         if existente:
             return existente
     if amount is None or amount <= 0:
         raise InvalidSalesOperation("El monto del pago debe ser mayor que cero.")
 
-    locked_sale = Sale.all_objects.select_for_update().get(pk=sale.pk, tenant=sale.tenant)
-    if locked_sale.status != Sale.Status.CONFIRMED:
-        raise InvalidSalesOperation(f"Solo se pueden registrar pagos sobre una venta confirmada (estado actual: {locked_sale.get_status_display()}).")
-
     payment = Payment.all_objects.create(
-        tenant=locked_sale.tenant, sale=locked_sale, method=method, amount=amount,
-        currency=currency or locked_sale.currency, reference=reference, idempotency_key=idempotency_key,
-        user=user, notes=notes,
+        tenant=tenant, customer=customer, method=method, amount=amount,
+        currency=currency or (customer.currency if customer else "USD"),
+        reference=reference, idempotency_key=idempotency_key, user=user, notes=notes,
     )
-    recompute_payment_status(locked_sale)
     log_activity(
-        locked_sale.tenant, entity_type="sale", entity_id=locked_sale.pk, entity_label=locked_sale.number,
-        action=SalesActivityLog.Action.PAYMENT_RECORDED, user=user, details=f"{payment.get_method_display()} {payment.amount}",
+        tenant, entity_type="payment", entity_id=payment.pk,
+        entity_label=f"{payment.get_method_display()} {payment.amount}",
+        action=SalesActivityLog.Action.PAYMENT_RECORDED, user=user,
+        details=(customer.display_name if customer else ""),
     )
     return payment
 
 
 @transaction.atomic
-def void_payment(payment, user):
-    locked = Payment.all_objects.select_for_update().get(pk=payment.pk, tenant=payment.tenant)
-    if locked.status == Payment.Status.VOIDED:
+def allocate_payment(payment, sale, amount, user):
+    """Aplica `amount` de un pago a una factura concreta. Bloquea AMBAS
+    filas (`Payment` y `Sale`) antes de validar para que dos
+    asignaciones concurrentes del mismo pago (o de la misma factura)
+    nunca sobre-apliquen — mismo patrón de concurrencia que el resto
+    del módulo (`select_for_update`)."""
+    locked_payment = Payment.all_objects.select_for_update().get(pk=payment.pk, tenant=payment.tenant)
+    locked_sale = Sale.all_objects.select_for_update().get(pk=sale.pk, tenant=sale.tenant)
+
+    if locked_payment.tenant_id != locked_sale.tenant_id:
+        raise InvalidSalesOperation("El pago y la venta deben pertenecer al mismo tenant.")
+    if locked_payment.customer_id != locked_sale.customer_id:
+        raise InvalidSalesOperation("Un pago solo puede aplicarse a facturas del mismo cliente.")
+    if locked_payment.status != Payment.Status.CONFIRMED:
+        raise InvalidSalesOperation("Solo un pago confirmado puede aplicarse a una factura.")
+    if locked_sale.status not in (Sale.Status.CONFIRMED, Sale.Status.PARTIALLY_RETURNED):
+        raise InvalidSalesOperation(
+            f"Solo se puede aplicar un pago a una venta confirmada (estado actual: {locked_sale.get_status_display()})."
+        )
+    if amount is None or amount <= 0:
+        raise InvalidSalesOperation("El monto a aplicar debe ser mayor que cero.")
+
+    disponible_pago = get_unallocated_payment_amount(locked_payment)
+    if amount > disponible_pago:
+        raise InvalidSalesOperation(f"El pago solo tiene {disponible_pago} disponible sin aplicar.")
+    saldo_factura = get_sale_balance_due(locked_sale)
+    if amount > saldo_factura:
+        raise InvalidSalesOperation(f"La venta «{locked_sale.number}» solo tiene {saldo_factura} pendiente.")
+
+    asignacion = PaymentAllocation.all_objects.create(
+        tenant=locked_payment.tenant, payment=locked_payment, sale=locked_sale, amount=amount, user=user,
+    )
+    recompute_payment_status(locked_sale)
+    log_activity(
+        locked_sale.tenant, entity_type="sale", entity_id=locked_sale.pk, entity_label=locked_sale.number,
+        action=SalesActivityLog.Action.PAYMENT_ALLOCATED, user=user,
+        details=f"{amount} del pago #{locked_payment.pk} ({locked_payment.get_method_display()})",
+    )
+    return asignacion
+
+
+@transaction.atomic
+def apply_payment_to_sales(payment, allocations, user):
+    """Aplica un mismo pago a VARIAS facturas en una sola operación —
+    `allocations`: lista de `{"sale": Sale, "amount": Decimal}`. Valida
+    que la suma total solicitada no exceda el saldo disponible del pago
+    ANTES de aplicar ninguna (todo o nada); cada asignación individual
+    se valida además contra el saldo de su propia factura dentro de
+    `allocate_payment`. Es el mecanismo pedido explícitamente para
+    "aplicar un solo pago a varias facturas" desde FASE 11 (POS)."""
+    if not allocations:
+        raise InvalidSalesOperation("Debes indicar al menos una factura a la que aplicar el pago.")
+    locked_payment = Payment.all_objects.select_for_update().get(pk=payment.pk, tenant=payment.tenant)
+    total_solicitado = sum((entrada["amount"] for entrada in allocations), Decimal("0"))
+    disponible = get_unallocated_payment_amount(locked_payment)
+    if total_solicitado > disponible:
+        raise InvalidSalesOperation(
+            f"El total a aplicar ({total_solicitado}) excede el saldo disponible del pago ({disponible})."
+        )
+    return [allocate_payment(locked_payment, entrada["sale"], entrada["amount"], user) for entrada in allocations]
+
+
+@transaction.atomic
+def record_payment_for_sale(sale, *, method, amount, user, currency=None, reference="", idempotency_key="", notes=""):
+    """Atajo para el caso más común: un pago que se cobra y se aplica de
+    inmediato a una sola venta (usado por la vista de "registrar pago"
+    de FASE 10). Crea el `Payment` (con el cliente de la venta) y lo
+    aplica en su totalidad en un solo paso atómico, para que las vistas
+    que solo cobran una venta no necesiten conocer el ledger de
+    asignaciones. Idempotente: un reintento con la misma
+    `idempotency_key` reutiliza el `Payment` ya creado y, si ya fue
+    aplicado, no vuelve a aplicarlo (nunca duplica ni la creación ni la
+    aplicación)."""
+    locked_sale = Sale.all_objects.select_for_update().get(pk=sale.pk, tenant=sale.tenant)
+    payment = create_payment(
+        locked_sale.tenant, customer=locked_sale.customer, method=method, amount=amount, user=user,
+        currency=currency or locked_sale.currency, reference=reference, idempotency_key=idempotency_key, notes=notes,
+    )
+    disponible = get_unallocated_payment_amount(payment)
+    if disponible > 0:
+        allocate_payment(payment, locked_sale, min(amount, disponible), user)
+    return payment
+
+
+@transaction.atomic
+def reverse_allocation(allocation, user):
+    """Deshace una asignación de pago a una factura: libera tanto el
+    saldo pendiente de la factura como el saldo sin aplicar del pago.
+    Es la acción de "reversa" pedida explícitamente, distinta de
+    `refund` (reversar mueve el dinero de vuelta al saldo sin aplicar
+    del pago; reembolsar lo devuelve fuera del sistema). Idempotente:
+    reversar una asignación ya reversada es un no-op."""
+    locked = PaymentAllocation.all_objects.select_for_update().get(pk=allocation.pk, tenant=allocation.tenant)
+    if locked.status == PaymentAllocation.Status.REVERSED:
         return locked
-    locked.status = Payment.Status.VOIDED
-    locked.save(update_fields=["status"])
+    locked.status = PaymentAllocation.Status.REVERSED
+    locked.reversed_at = timezone.now()
+    locked.reversed_by = user
+    locked.save(update_fields=["status", "reversed_at", "reversed_by"])
     recompute_payment_status(locked.sale)
     log_activity(
         locked.tenant, entity_type="sale", entity_id=locked.sale_id, entity_label=locked.sale.number,
-        action=SalesActivityLog.Action.PAYMENT_VOIDED, user=user, details=f"{locked.get_method_display()} {locked.amount}",
+        action=SalesActivityLog.Action.PAYMENT_ALLOCATION_REVERSED, user=user,
+        details=f"{locked.amount} del pago #{locked.payment_id}",
+    )
+    return locked
+
+
+@transaction.atomic
+def void_payment(payment, user):
+    """Anula un pago completo: reversa todas sus asignaciones ACTIVAS
+    (liberando el saldo de cada factura que respaldaban) y lo marca
+    `VOIDED`. Idempotente."""
+    locked = Payment.all_objects.select_for_update().get(pk=payment.pk, tenant=payment.tenant)
+    if locked.status == Payment.Status.VOIDED:
+        return locked
+    asignaciones_activas = PaymentAllocation.all_objects.filter(
+        tenant=locked.tenant, payment=locked, status=PaymentAllocation.Status.ACTIVE
+    )
+    for asignacion in asignaciones_activas:
+        reverse_allocation(asignacion, user)
+    locked.status = Payment.Status.VOIDED
+    locked.save(update_fields=["status"])
+    log_activity(
+        locked.tenant, entity_type="payment", entity_id=locked.pk,
+        entity_label=f"{locked.get_method_display()} {locked.amount}",
+        action=SalesActivityLog.Action.PAYMENT_VOIDED, user=user,
     )
     return locked
 
@@ -972,22 +1137,32 @@ def create_return(sale, *, items, user, reason=""):
 
 @transaction.atomic
 def record_refund(payment, *, amount, user, reason="", return_document=None):
+    """Devuelve dinero de un pago HACIA AFUERA del sistema. Solo puede
+    salir del saldo SIN APLICAR del pago (`get_unallocated_payment_amount`):
+    si el dinero ya está aplicado a una o más facturas, primero hay que
+    liberarlo con `reverse_allocation` (eso ya recalcula el estado de
+    pago de cada factura afectada) — un reembolso nunca "des-aplica"
+    una asignación en silencio. Esta es una separación deliberada entre
+    "reversa" (mueve el dinero de vuelta al saldo sin aplicar del pago,
+    sigue dentro del sistema) y "reembolso" (el dinero sale del
+    sistema)."""
     locked_payment = Payment.all_objects.select_for_update().get(pk=payment.pk, tenant=payment.tenant)
     if amount is None or amount <= 0:
         raise InvalidSalesOperation("El monto del reembolso debe ser mayor que cero.")
-    ya_reembolsado = Refund.all_objects.filter(tenant=locked_payment.tenant, payment=locked_payment, status=Refund.Status.COMPLETED).aggregate(
-        t=Sum("amount")
-    )["t"] or Decimal("0")
-    if ya_reembolsado + amount > locked_payment.amount:
-        raise InvalidSalesOperation("El reembolso no puede superar el monto pagado en este pago.")
+    disponible = get_unallocated_payment_amount(locked_payment)
+    if amount > disponible:
+        raise InvalidSalesOperation(
+            f"El reembolso no puede superar el saldo sin aplicar del pago ({disponible}). "
+            "Si el dinero ya está aplicado a una factura, revierte esa asignación primero."
+        )
 
     refund = Refund.all_objects.create(
         tenant=locked_payment.tenant, payment=locked_payment, return_document=return_document,
         amount=amount, reason=reason, user=user,
     )
-    recompute_payment_status(locked_payment.sale)
     log_activity(
-        locked_payment.tenant, entity_type="sale", entity_id=locked_payment.sale_id, entity_label=locked_payment.sale.number,
+        locked_payment.tenant, entity_type="payment", entity_id=locked_payment.pk,
+        entity_label=f"{locked_payment.get_method_display()} {locked_payment.amount}",
         action=SalesActivityLog.Action.REFUNDED, user=user, details=f"{refund.amount}",
     )
     return refund

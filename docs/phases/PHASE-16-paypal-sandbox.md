@@ -31,10 +31,13 @@ ningún proveedor concreto. Esta fase debe:
 
 - Agregar el flujo `Django → Payment Service → PayPal` (o equivalente)
   como una capa que, al confirmar un pago de PayPal (vía webhook
-  verificado), llame a `services.record_payment(sale, method=...,
+  verificado), llame a `services.record_payment_for_sale(sale, method=...,
   amount=..., idempotency_key=<id de la transacción de PayPal>, ...)`
-  — la `idempotency_key` ya existente es exactamente el mecanismo
-  pensado para que un webhook reintentado nunca duplique el pago.
+  (o `services.create_payment`/`apply_payment_to_sales` si el webhook
+  debe cubrir varias facturas a la vez) — la `idempotency_key` ya
+  existente es exactamente el mecanismo pensado para que un webhook
+  reintentado nunca duplique el pago. Ver `docs/payments.md` para el
+  ledger `Payment`/`PaymentAllocation` sobre el que se construye esto.
 - `Refund.status` ya prevé `PENDING`/`FAILED` (no solo `COMPLETED`) para
   cuando un reembolso de PayPal sea asíncrono — usarlos en vez de
   agregar un campo de estado paralelo.

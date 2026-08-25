@@ -32,6 +32,7 @@ from .forms import (
 )
 from .models import (
     Payment,
+    PaymentAllocation,
     ProformaInvoice,
     Quotation,
     QuotationItem,
@@ -402,7 +403,9 @@ class SaleDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
             "items": services.get_sale_items(sale),
             "item_form": SaleItemForm(tenant=request.tenant),
             "payment_form": PaymentForm(),
-            "payments": Payment.objects.filter(sale=sale).select_related("user"),
+            "payments": PaymentAllocation.objects.filter(sale=sale).select_related("payment", "user"),
+            "paid_amount": services.get_sale_paid_amount(sale),
+            "balance_due": services.get_sale_balance_due(sale),
             "returns": sale.returns.select_related("user"),
             "attachment_form": SalesAttachmentForm(),
             "attachments": SalesDocumentAttachment.objects.filter(document_type="sale", document_id=sale.pk),
@@ -470,7 +473,7 @@ class SalePaymentAddView(LoginRequiredMixin, TenantRequiredMixin, View):
         form = PaymentForm(request.POST)
         if form.is_valid():
             try:
-                services.record_payment(sale, user=request.user, **form.cleaned_data)
+                services.record_payment_for_sale(sale, user=request.user, **form.cleaned_data)
                 messages.success(request, "Pago registrado correctamente.")
             except ValidationError as error:
                 messages.error(request, _mensaje_error(error))
@@ -481,12 +484,17 @@ class SalePaymentAddView(LoginRequiredMixin, TenantRequiredMixin, View):
         return redirect("sales:sale_detail", pk=sale.pk)
 
 
-class SalePaymentVoidView(LoginRequiredMixin, TenantRequiredMixin, View):
-    def post(self, request, pk, payment_pk):
+class SalePaymentReverseView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """Revierte la APLICACIÓN de un pago a esta venta (no el pago
+    completo, que puede estar aplicado también a otras facturas del
+    mismo cliente): libera el saldo pendiente de la venta y devuelve
+    ese monto al saldo sin aplicar del pago."""
+
+    def post(self, request, pk, allocation_pk):
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
-        payment = get_object_or_404(Payment, pk=payment_pk, tenant=request.tenant, sale=sale)
-        services.void_payment(payment, request.user)
-        messages.success(request, "Pago anulado correctamente.")
+        allocation = get_object_or_404(PaymentAllocation, pk=allocation_pk, tenant=request.tenant, sale=sale)
+        services.reverse_allocation(allocation, request.user)
+        messages.success(request, "Pago revertido de esta venta correctamente.")
         return redirect("sales:sale_detail", pk=sale.pk)
 
 
@@ -534,7 +542,13 @@ class SaleReceiptView(LoginRequiredMixin, TenantRequiredMixin, View):
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         return render(
             request, "sales/sale_receipt.html",
-            {"sale": sale, "items": services.get_sale_items(sale), "payments": Payment.objects.filter(sale=sale, status=Payment.Status.CONFIRMED)},
+            {
+                "sale": sale,
+                "items": services.get_sale_items(sale),
+                "payments": PaymentAllocation.objects.filter(
+                    sale=sale, status=PaymentAllocation.Status.ACTIVE, payment__status=Payment.Status.CONFIRMED
+                ).select_related("payment"),
+            },
         )
 
 

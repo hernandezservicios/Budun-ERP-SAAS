@@ -67,11 +67,15 @@ gestión de inventario (FASE 8), no al motor de ventas.
 ## `Refund`: reembolsos de dinero
 
 `record_refund(payment, *, amount, user, reason="", return_document=None)`:
-valida que la suma de reembolsos `COMPLETED` de ese pago (incluyendo
-este) nunca supere `payment.amount`. Sin integración real de pasarela
-todavía: se registra como `COMPLETED` de inmediato (`Refund.Status`
-también prevé `PENDING`/`FAILED` para cuando FASE 16 conecte un
-proveedor real con confirmación asíncrona).
+valida que el monto nunca supere el saldo SIN APLICAR del pago
+(`services.get_unallocated_payment_amount`, ampliación "Payment +
+PaymentAllocation" — ver `docs/payments.md`), no `payment.amount`
+directamente: si el dinero ya está aplicado a una factura, primero hay
+que revertir esa aplicación (`reverse_allocation`) antes de poder
+reembolsarlo. Sin integración real de pasarela todavía: se registra
+como `COMPLETED` de inmediato (`Refund.Status` también prevé
+`PENDING`/`FAILED` para cuando FASE 16 conecte un proveedor real con
+confirmación asíncrona).
 
 ## Multi-Tenancy
 
