@@ -38,3 +38,10 @@ Registrados durante FASE 5 (no bloqueantes para cerrar la fase):
 19. **Solo dos breakpoints responsive reales** (≤1024px y ≤640px), no cuatro distintos para "Desktop/Laptop/Tablet/Mobile" como se pidió literalmente: Desktop y Laptop comparten el layout expandido porque no hay todavía ninguna diferencia de contenido real que justifique un tercer breakpoint. Documentado explícitamente en `docs/design-system.md` en vez de simular una granularidad inexistente.
 20. **El componente Paginación es puramente presentacional**: no hay todavía ninguna lista real paginada en el sistema (los módulos de negocio llegan en FASE 8+). Queda listo para conectarse al `Paginator` de Django cuando se necesite.
 21. **La página `/estilo/` (Design System) es pública** (sin login) a propósito, para poder verificarla con smoke tests HTTP simples sin necesitar una sesión autenticada. No expone ningún dato real, solo componentes con datos de ejemplo.
+
+Registrados durante FASE 6 (no bloqueantes para cerrar la fase):
+
+22. **Los precios de `apps/core/pricing.py` son placeholders ilustrativos** ($0 / $29 / "Personalizado"), no una decisión de negocio real. El usuario debe revisarlos y ajustarlos antes de cualquier lanzamiento real; están centralizados en un único archivo para que ese cambio sea trivial. Ver `docs/landing.md`.
+23. **Sin `og:image` en las etiquetas Open Graph**: no existe todavía ningún activo de marca/logo real en el proyecto. Se puede agregar cuando exista un logo definitivo.
+24. **Responsive verificado por inspección de CSS, no con captura de pantalla real**: esta herramienta no tiene un navegador disponible para renderizar y fotografiar la página en distintos tamaños. Las cuadrículas usan `auto-fit`/`minmax`, que se adaptan de forma continua sin depender de puntos de quiebre fijos, y se probó con un breakpoint puntual en ≤640px.
+25. **La página de FASE 1 (`core/home.html`, "Fundación del proyecto lista") fue eliminada** y reemplazada por la landing real (`core/landing.html`); la URL (`core:home`, `/`) y el nombre de la vista no cambiaron, así que ningún enlace ni redirect existente se rompió.

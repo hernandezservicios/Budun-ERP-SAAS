@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}ERP SaaS — Sistema de gestión Multi-Tenant para tu negocio{% endblock %}
+{% block meta_description %}ERP SaaS Multi-Tenant en español: inventario, ventas, POS, compras, gastos y reportes en un solo sistema, con seguridad de nivel empresarial e integración futura a agentes CRM IA.{% endblock %}
+{% block og_title %}ERP SaaS — Sistema de gestión Multi-Tenant para tu negocio{% endblock %}
+{% block og_description %}Inventario, ventas, POS, compras, gastos y reportes en un solo sistema, en español, con aislamiento Multi-Tenant real.{% endblock %}
+
+{% block content %}
+<main id="contenido-principal">
+
+    {# ---------- HERO ---------- #}
+    <section class="landing-hero" aria-labelledby="landing-hero-titulo">
+        <h1 id="landing-hero-titulo">El ERP Multi-Tenant que ordena tu negocio, en español</h1>
+        <p>
+            Inventario, ventas, punto de venta, compras, gastos y reportes en un solo sistema,
+            con el aislamiento de datos y la seguridad que necesita tu empresa.
+        </p>
+        <div class="landing-hero__cta">
+            <a class="btn btn--primario btn--lg" href="{% url 'accounts:registro' %}">Crear cuenta gratis</a>
+            <a class="btn btn--contorno btn--lg" href="#precios">Ver precios</a>
+        </div>
+        <p class="landing-hero__confianza">Multi-Tenant real · PostgreSQL · Aislamiento de datos verificado con pruebas automatizadas</p>
+    </section>
+
+    {# ---------- PARA QUIÉN ES ---------- #}
+    <section class="landing-seccion landing-seccion--alterna" aria-labelledby="titulo-audiencia">
+        <h2 id="titulo-audiencia">¿Para quién es?</h2>
+        <p class="landing-seccion__intro">Pensado para negocios que hoy manejan su operación en hojas de cálculo o varios sistemas sueltos.</p>
+        <div class="landing-grid">
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🏪</div>
+                <h3>Comercios y retail</h3>
+                <p>Control de inventario y punto de venta en un mismo lugar.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🏭</div>
+                <h3>Distribuidoras</h3>
+                <p>Compras, proveedores y movimientos de inventario ordenados.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🧾</div>
+                <h3>Empresas de servicios</h3>
+                <p>Gastos, reportes y control financiero básico centralizados.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🏢</div>
+                <h3>Grupos con varias empresas</h3>
+                <p>Cada empresa (tenant) con sus datos completamente aislados.</p>
+            </div>
+        </div>
+    </section>
+
+    {# ---------- PROBLEMAS QUE RESUELVE ---------- #}
+    <section class="landing-seccion" aria-labelledby="titulo-problemas">
+        <h2 id="titulo-problemas">Problemas que resuelve</h2>
+        <div class="landing-grid">
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">📉</div>
+                <h3>Datos dispersos en hojas de cálculo</h3>
+                <p>Un solo sistema con la información de tu negocio en un lugar, no en archivos sueltos.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🔓</div>
+                <h3>Falta de control de acceso</h3>
+                <p>Roles y membresías por empresa: cada persona ve solo lo que le corresponde.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🧩</div>
+                <h3>Sistemas que no se hablan entre sí</h3>
+                <p>Inventario, ventas y compras conectados de forma nativa, no integraciones frágiles.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🌎</div>
+                <h3>Software pensado en otro idioma</h3>
+                <p>Toda la interfaz en español, sin traducciones a medias.</p>
+            </div>
+        </div>
+    </section>
+
+    {# ---------- MÓDULOS ---------- #}
+    <section class="landing-seccion landing-seccion--alterna" aria-labelledby="titulo-modulos">
+        <h2 id="titulo-modulos">Qué incluye</h2>
+        <p class="landing-seccion__intro">Un ERP completo que se construye módulo por módulo, con la misma base sólida en todos.</p>
+        <div class="landing-grid">
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">📦</div>
+                <h3>Productos e inventario</h3>
+                <p>Catálogo, categorías, existencias y movimientos.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">👥</div>
+                <h3>Clientes y proveedores</h3>
+                <p>Todo tu directorio de negocio en un solo lugar.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">💳</div>
+                <h3>Ventas</h3>
+                <p>Motor de ventas con control de existencias en tiempo real.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🖥️</div>
+                <h3>Punto de venta (POS)</h3>
+                <p>Rápido y táctil, pensado para el mostrador.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🛒</div>
+                <h3>Compras</h3>
+                <p>Órdenes de compra y recepción de mercancía.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">💸</div>
+                <h3>Gastos</h3>
+                <p>Registro y control de los gastos del negocio.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">📊</div>
+                <h3>Reportes</h3>
+                <p>Indicadores claros para tomar decisiones.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🔐</div>
+                <h3>Roles y auditoría</h3>
+                <p>Quién hizo qué y cuándo, con permisos por rol.</p>
+            </div>
+        </div>
+    </section>
+
+    {# ---------- CÓMO FUNCIONA ---------- #}
+    <section class="landing-seccion" aria-labelledby="titulo-como-funciona">
+        <h2 id="titulo-como-funciona">Cómo funciona</h2>
+        <p class="landing-seccion__intro">Empezar toma minutos, no semanas.</p>
+        <div class="landing-pasos">
+            <div class="landing-paso">
+                <h3>Crea tu cuenta</h3>
+                <p>Regístrate con tu correo electrónico en menos de un minuto.</p>
+            </div>
+            <div class="landing-paso">
+                <h3>Configura tu empresa</h3>
+                <p>Dale nombre a tu empresa: tus datos quedan aislados del resto de clientes.</p>
+            </div>
+            <div class="landing-paso">
+                <h3>Empieza a operar</h3>
+                <p>Agrega tu equipo con roles y comienza a usar el sistema.</p>
+            </div>
+        </div>
+    </section>
+
+    {# ---------- VENTAJAS ---------- #}
+    <section class="landing-seccion landing-seccion--alterna" aria-labelledby="titulo-ventajas">
+        <h2 id="titulo-ventajas">Ventajas</h2>
+        <div class="landing-grid">
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🏢</div>
+                <h3>Multi-Tenant real</h3>
+                <p>Aislamiento de datos verificado con pruebas automatizadas, no solo prometido.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🐘</div>
+                <h3>PostgreSQL de verdad</h3>
+                <p>Una base de datos profesional, con transacciones e integridad de datos.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">⚡</div>
+                <h3>Interfaz clara y rápida</h3>
+                <p>Diseño sobrio, pensado para trabajar, no para distraer.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🇪🇸</div>
+                <h3>100% en español</h3>
+                <p>Sin traducciones parciales ni términos sin traducir.</p>
+            </div>
+        </div>
+    </section>
+
+    {# ---------- SEGURIDAD ---------- #}
+    <section class="landing-seccion" aria-labelledby="titulo-seguridad">
+        <h2 id="titulo-seguridad">Seguridad</h2>
+        <p class="landing-seccion__intro">La seguridad no es una promesa de marketing: es parte del diseño desde el primer día.</p>
+        <div class="landing-grid">
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🔒</div>
+                <h3>Aislamiento entre empresas</h3>
+                <p>Cada consulta pasa por un mecanismo que determina el tenant en el backend; nunca se confía en datos enviados por el navegador.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🔑</div>
+                <h3>Contraseñas protegidas</h3>
+                <p>Contraseñas cifradas y validadas (longitud mínima, no comunes) antes de guardarse.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🛡️</div>
+                <h3>Protecciones estándar</h3>
+                <p>CSRF, cabeceras de seguridad y sesiones con cookies protegidas.</p>
+            </div>
+            <div class="landing-item">
+                <div class="landing-item__icono" aria-hidden="true">🗄️</div>
+                <h3>Base de datos autenticada</h3>
+                <p>Conexión a PostgreSQL con autenticación por contraseña cifrada (scram-sha-256).</p>
+            </div>
+        </div>
+    </section>
+
+    {# ---------- INTEGRACIÓN API / IA ---------- #}
+    <section class="landing-seccion landing-seccion--alterna" aria-labelledby="titulo-integracion">
+        <h2 id="titulo-integracion">Integración con agentes CRM IA <span class="badge badge--azul">Próximamente</span></h2>
+        <p class="landing-seccion__intro">
+            Tu inventario y tus productos podrán consultarse desde tus propios agentes de IA o tu CRM,
+            de forma seleccionable, segura y siempre limitada a tu empresa.
+        </p>
+        <div class="landing-flujo" role="img" aria-label="Flujo: tu ERP se conecta a una API de Inventario, y esa API se conecta a tu CRM o a agentes de IA">
+            <div class="landing-flujo__paso"><strong>Tu ERP</strong><p>Tus datos, en tu cuenta</p></div>
+            <span class="landing-flujo__flecha" aria-hidden="true">→</span>
+            <div class="landing-flujo__paso"><strong>API de Inventario</strong><p>Solo lectura, por API Key</p></div>
+            <span class="landing-flujo__flecha" aria-hidden="true">→</span>
+            <div class="landing-flujo__paso"><strong>CRM / Agentes IA</strong><p>Consultan tu inventario</p></div>
+        </div>
+        <p class="landing-seccion__intro">
+            La API será de <strong>solo lectura</strong> por defecto, con una API Key exclusiva de tu empresa,
+            límite de solicitudes y auditoría de accesos. Todavía no está disponible: se activará más adelante
+            en la hoja de ruta del producto.
+        </p>
+    </section>
+
+    {# ---------- PRECIOS ---------- #}
+    <section class="landing-seccion" id="precios" aria-labelledby="titulo-precios">
+        <h2 id="titulo-precios">Precios</h2>
+        <p class="landing-seccion__intro">Precios de referencia mientras el producto está en desarrollo; podrán ajustarse antes del lanzamiento.</p>
+        <div class="precios-grid">
+            {% for plan in planes %}
+            <div class="tarjeta precio-tarjeta {% if plan.destacado %}precio-tarjeta--destacada{% endif %}">
+                <div class="tarjeta__encabezado">
+                    {{ plan.nombre }}
+                    {% if plan.destacado %}<span class="badge badge--azul">Recomendado</span>{% endif %}
+                </div>
+                <div class="tarjeta__cuerpo" style="display:flex; flex-direction:column; flex-grow:1;">
+                    <p class="precio-tarjeta__monto">{{ plan.precio }}<span class="precio-tarjeta__periodo">{{ plan.periodo }}</span></p>
+                    <p>{{ plan.descripcion }}</p>
+                    <ul class="precio-tarjeta__lista">
+                        {% for caracteristica in plan.caracteristicas %}
+                        <li>{{ caracteristica }}</li>
+                        {% endfor %}
+                    </ul>
+                    <a class="btn {% if plan.destacado %}btn--primario{% else %}btn--contorno{% endif %} btn--bloque"
+                       href="{% url 'accounts:registro' %}">{{ plan.cta_texto }}</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {# ---------- FAQ ---------- #}
+    <section class="landing-seccion landing-seccion--alterna" aria-labelledby="titulo-faq">
+        <h2 id="titulo-faq">Preguntas frecuentes</h2>
+        <div class="acordeon">
+            <details class="acordeon__item">
+                <summary>¿Mis datos están separados de los de otras empresas?</summary>
+                <p>Sí. Cada empresa (tenant) tiene sus datos completamente aislados: el sistema determina tu empresa en el servidor y nunca confía en información enviada desde el navegador.</p>
+            </details>
+            <details class="acordeon__item">
+                <summary>¿Necesito instalar algo?</summary>
+                <p>No. El sistema funciona desde el navegador; solo necesitas crear una cuenta.</p>
+            </details>
+            <details class="acordeon__item">
+                <summary>¿Puedo cambiar de plan más adelante?</summary>
+                <p>Sí, podrás cambiar de plan cuando la facturación esté disponible.</p>
+            </details>
+            <details class="acordeon__item">
+                <summary>¿La API de Inventario ya está disponible?</summary>
+                <p>Todavía no: está en la hoja de ruta del producto. Cuando esté disponible, será de solo lectura y exclusiva de tu empresa.</p>
+            </details>
+            <details class="acordeon__item">
+                <summary>¿El sistema está en español?</summary>
+                <p>Sí, toda la interfaz visible está en español.</p>
+            </details>
+        </div>
+    </section>
+
+    {# ---------- CTA FINAL ---------- #}
+    <section class="landing-cta-final" aria-labelledby="titulo-cta-final">
+        <h2 id="titulo-cta-final">Empieza a ordenar tu negocio hoy</h2>
+        <a class="btn btn--primario btn--lg" href="{% url 'accounts:registro' %}">Crear cuenta gratis</a>
+    </section>
+
+</main>
+
+<footer style="text-align:center; padding: var(--espacio-6); color: var(--color-texto-tenue); font-size: var(--texto-sm);">
+    <p>ERP SaaS — Sistema en desarrollo. <a href="{% url 'core:design_system' %}">Design System</a></p>
+</footer>
+{% endblock %}

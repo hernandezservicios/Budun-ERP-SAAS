@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}ERP SaaS{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}ERP SaaS Multi-Tenant en español: inventario, ventas, POS, compras, gastos y reportes en un solo sistema, con integración a agentes CRM IA.{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}ERP SaaS{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}ERP SaaS Multi-Tenant en español para pequeñas y medianas empresas.{% endblock %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/design-system.css' %}">
     {% block extra_head %}{% endblock %}
