@@ -25,6 +25,7 @@
         {% endfor %}
         <button type="submit">Iniciar sesión</button>
     </form>
+    <a class="enlace-secundario" href="{% url 'accounts:password_reset' %}">¿Olvidaste tu contraseña?</a>
     <a class="enlace-secundario" href="{% url 'accounts:registro' %}">¿No tienes cuenta? Regístrate</a>
 </main>
 {% endblock %}

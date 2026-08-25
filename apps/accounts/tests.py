@@ -9,8 +9,12 @@ construye los objetos directamente) — ver
 """
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 
 from apps.tenants.models import Membership, Tenant
 from apps.tenants.services import create_isolation_sample
@@ -268,3 +272,105 @@ class MultiTenantRegressionTests(TestCase):
         respuesta = cliente_a.get(reverse("accounts:perfil"))
         self.assertContains(respuesta, "Empresa Manip A")
         self.assertNotContains(respuesta, "Empresa Manip B")
+
+
+class PasswordResetTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="reset@example.com", password="clave-original-987"
+        )
+
+    def test_solicitar_reset_envia_correo_y_no_revela_si_el_email_no_existe(self):
+        respuesta = self.client.post(
+            reverse("accounts:password_reset"), {"email": "reset@example.com"}
+        )
+        self.assertRedirects(respuesta, reverse("accounts:password_reset_done"))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("reset@example.com", mail.outbox[0].to)
+
+        mail.outbox.clear()
+        respuesta_inexistente = self.client.post(
+            reverse("accounts:password_reset"), {"email": "no-existe@example.com"}
+        )
+        # Misma redirección de "éxito" aunque el correo no exista: Django
+        # no revela si una cuenta existe o no.
+        self.assertRedirects(respuesta_inexistente, reverse("accounts:password_reset_done"))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_flujo_completo_de_reset_permite_iniciar_sesion_con_la_nueva_contrasena(self):
+        uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+        token = default_token_generator.make_token(self.user)
+
+        # Django exige visitar primero la URL con el token "crudo" (la que
+        # llega por correo); redirige a una segunda URL con un token
+        # provisional guardado en sesión, desde donde ya se puede postear.
+        url_inicial = reverse(
+            "accounts:password_reset_confirm", kwargs={"uidb64": uid, "token": token}
+        )
+        respuesta_inicial = self.client.get(url_inicial)
+        self.assertEqual(respuesta_inicial.status_code, 302)
+
+        respuesta_form = self.client.get(respuesta_inicial.url)
+        self.assertEqual(respuesta_form.status_code, 200)
+
+        respuesta_post = self.client.post(
+            respuesta_inicial.url,
+            {"new_password1": "clave-nueva-987!", "new_password2": "clave-nueva-987!"},
+        )
+        self.assertRedirects(respuesta_post, reverse("accounts:password_reset_complete"))
+
+        self.assertFalse(
+            self.client.login(username="reset@example.com", password="clave-original-987")
+        )
+        self.assertTrue(
+            self.client.login(username="reset@example.com", password="clave-nueva-987!")
+        )
+
+    def test_token_invalido_no_permite_cambiar_la_contrasena(self):
+        uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+        url = reverse(
+            "accounts:password_reset_confirm",
+            kwargs={"uidb64": uid, "token": "token-invalido-000"},
+        )
+        respuesta = self.client.get(url, follow=True)
+        self.assertContains(respuesta, "no es válido")
+
+
+class PasswordChangeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="cambio@example.com", password="clave-original-987"
+        )
+        self.client.login(username="cambio@example.com", password="clave-original-987")
+
+    def test_requiere_login(self):
+        self.client.logout()
+        respuesta = self.client.get(reverse("accounts:password_change"))
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_cambio_exitoso_mantiene_la_sesion_activa(self):
+        respuesta = self.client.post(
+            reverse("accounts:password_change"),
+            {
+                "old_password": "clave-original-987",
+                "new_password1": "clave-nueva-2024!",
+                "new_password2": "clave-nueva-2024!",
+            },
+        )
+        self.assertRedirects(respuesta, reverse("accounts:password_change_done"))
+
+        # La sesión sigue activa (Django actualiza el hash de sesión tras
+        # el cambio, en vez de forzar un logout).
+        respuesta_perfil = self.client.get(reverse("accounts:perfil"))
+        self.assertEqual(respuesta_perfil.status_code, 200)
+
+    def test_rechaza_contrasena_actual_incorrecta(self):
+        respuesta = self.client.post(
+            reverse("accounts:password_change"),
+            {
+                "old_password": "esta-no-es-la-actual",
+                "new_password1": "clave-nueva-2024!",
+                "new_password2": "clave-nueva-2024!",
+            },
+        )
+        self.assertFalse(respuesta.context["form"].is_valid())

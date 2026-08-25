@@ -1,11 +1,20 @@
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import (
+    LoginView,
+    LogoutView,
+    PasswordChangeDoneView,
+    PasswordChangeView,
+    PasswordResetCompleteView,
+    PasswordResetConfirmView,
+    PasswordResetDoneView,
+    PasswordResetView,
+)
 from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.text import slugify
-from django.views.generic import CreateView, FormView, TemplateView, UpdateView
+from django.views.generic import CreateView, FormView, UpdateView
 
 from apps.tenants.models import Membership, Tenant
 
@@ -122,3 +131,43 @@ class ProfileView(LoginRequiredMixin, UpdateView):
         context["tenant"] = getattr(self.request, "tenant", None)
         context["membership"] = getattr(self.request, "membership", None)
         return context
+
+
+# ----------------------------------------------------------------------
+# Recuperación y cambio de contraseña.
+#
+# Se reutilizan las vistas integradas de Django (ya cubren generación de
+# token seguro de un solo uso con expiración, invalidación tras el uso,
+# y — en PasswordChangeView — mantener la sesión viva tras el cambio
+# mediante `update_session_auth_hash`). Solo se personalizan plantillas y
+# URLs de redirección.
+# ----------------------------------------------------------------------
+
+
+class AccountPasswordResetView(PasswordResetView):
+    template_name = "accounts/password_reset_form.html"
+    email_template_name = "accounts/password_reset_email.html"
+    subject_template_name = "accounts/password_reset_subject.txt"
+    success_url = reverse_lazy("accounts:password_reset_done")
+
+
+class AccountPasswordResetDoneView(PasswordResetDoneView):
+    template_name = "accounts/password_reset_done.html"
+
+
+class AccountPasswordResetConfirmView(PasswordResetConfirmView):
+    template_name = "accounts/password_reset_confirm.html"
+    success_url = reverse_lazy("accounts:password_reset_complete")
+
+
+class AccountPasswordResetCompleteView(PasswordResetCompleteView):
+    template_name = "accounts/password_reset_complete.html"
+
+
+class AccountPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
+    template_name = "accounts/password_change_form.html"
+    success_url = reverse_lazy("accounts:password_change_done")
+
+
+class AccountPasswordChangeDoneView(LoginRequiredMixin, PasswordChangeDoneView):
+    template_name = "accounts/password_change_done.html"
