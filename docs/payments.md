@@ -252,3 +252,21 @@ tenant siempre da 404 vía HTTP; `allocate_payment` además rechaza
 explícitamente a nivel de servicio cualquier intento de aplicar un pago
 de un tenant a una venta de otro (segunda barrera, nunca confiada solo
 al filtrado de las vistas).
+
+## Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
+
+`Payment.currency` (y `Sale.currency`/`Quotation.currency`/
+`ProformaInvoice.currency`) ya existen como `CharField(max_length=3)` —
+un snapshot de texto simple, sin ningún catálogo real detrás. La
+doctrina oficial de moneda (`docs/currency.md`) define `Currency`/
+`CurrencyDenomination` como el catálogo real, sin migrar ni reemplazar
+estos campos con este documento — siguen siendo válidos exactamente
+como están. Preparado, no construido: `Payment.amount_received`/
+`change_amount` (nulos, solo relevantes para `method=CASH`, ver
+`docs/currency.md` sección 9) para registrar el detalle de cuánto
+entregó el cliente y cuánto cambio recibió, sin que eso cambie el
+principio ya vigente de que el `CashMovement`/monto aplicado a la venta
+sigue siendo siempre el neto. Pagos multi-moneda (un `Payment` en una
+moneda distinta a la del documento que paga) quedan preparados
+conceptualmente vía `CurrencyConfiguration`/tipos de cambio futuros —
+ningún motor de conversión (FX) se construye todavía.

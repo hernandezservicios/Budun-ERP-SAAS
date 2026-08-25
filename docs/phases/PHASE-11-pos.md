@@ -181,6 +181,22 @@ deben releerse antes de implementar, no re-derivarse desde cero.
 - Documentado en `docs/pos.md` (nuevo); `docs/cash-registers.md`, `docs/approvals.md`, `docs/accounts-receivable.md` actualizados de especificación a "construido"; `docs/sales.md`/`docs/payments.md`/`docs/customers.md` referencian los documentos nuevos donde corresponde.
 - Ningún módulo de negocio adicional (Compras, Gastos, Reportes, Roles/Audit/API, PayPal, Billing) fue construido; permisos granulares por acción más allá de caja/descuentos/crédito quedan para FASE 15; override de supervisor con PIN en el mismo terminal y escaneo por cámara/QR quedan documentados como simplificaciones deliberadas de UX (no de seguridad) en `docs/pos.md`.
 
+## Nota de sincronización — Moneda, denominaciones y cierre de caja (posterior a FASE 12)
+
+Doctrina oficial agregada en `docs/currency.md` (sin implementación,
+sin cambios de código en `apps.pos`): `CashRegister` no tiene hoy
+ningún campo de moneda — el diseño oficial prevé agregarle `currency`
+(FK a un futuro `Currency`) para que su `CashSession` cuente
+físicamente en una sola moneda. `CashDenominationCount`/`CashClosing`
+(cierre por denominaciones, inmutable) quedan especificados, no
+construidos. **Confirmado, sin cambio de código**: el vocabulario
+`amount_due`/`amount_received`/`change_amount` y el efecto neto de
+`CashMovement` en una venta con cambio (ej. venta 1275, cliente entrega
+2000 → movimiento `+1275`, nunca `+2000`/`-725`) ya estaban
+implementados correctamente en `CheckoutView`/`checkout_sale` desde el
+cierre de esta fase — la sincronización solo los nombra oficialmente.
+Ver `docs/currency.md`/`docs/cash-registers.md` secciones 11-12/`docs/pos.md`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

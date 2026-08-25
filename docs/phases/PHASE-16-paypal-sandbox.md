@@ -69,6 +69,15 @@ aplicado desde FASE 8):
   nunca crear un segundo registro paralelo cuando el evento llega
   duplicado o fuera de orden.
 
+## Nota de sincronización — Moneda
+
+Doctrina oficial agregada en `docs/currency.md`/`docs/paypal.md`: esta
+fase debe usar la moneda del `Payment`/documento cuando sea compatible
+con PayPal, nunca hardcodear una sola moneda. Campos de reconciliación
+adicionales, sin agregarlos todavía: `provider_currency`/
+`provider_amount` (junto a `external_id`/`provider`/`provider_status`
+ya previstos arriba).
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

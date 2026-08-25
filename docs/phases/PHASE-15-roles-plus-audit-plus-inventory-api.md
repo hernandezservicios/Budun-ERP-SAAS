@@ -123,6 +123,17 @@ exponerlos/auditarlos, no si construirlos):
   usuario/rol/tenant); esta fase es responsable de generalizarla si el
   proyecto necesita roles más allá de OWNER/MEMBER.
 
+## Nota de sincronización — Moneda, caja y denominaciones (Audit/API)
+
+Doctrina oficial agregada en `docs/currency.md`: cuando esta fase
+extienda el audit log transversal y la API, `Currency`/
+`CurrencyDenomination`/`CurrencyConfiguration`/`CashClosing`/
+`CashDenominationCount` (especificación, no construidos) deben seguir
+el mismo principio ya aplicado a `Payment`/`CashRegister` en este
+documento: entidades auditables/expuestas bajo su propio scope, nunca
+por defecto ni heredando el scope de otro dominio. No exponer
+configuraciones sensibles de moneda/caja sin scopes explícitos.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

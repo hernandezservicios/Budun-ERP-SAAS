@@ -54,5 +54,8 @@ Incorporado oficialmente a partir de FASE 12 (`apps/purchases`, ver `docs/purcha
 
 `SupplierPayment`/`SupplierPaymentAllocation` son estructuralmente idénticos a `Payment`/`PaymentAllocation` (mismas reglas de sobre-aplicación, mismo ledger append-only) pero **nunca mezclados**: `SupplierPayment` no referencia `Customer`, `Payment` no referencia `Supplier` — dos ledgers paralelos e independientes.
 
+## Moneda, denominaciones y cierre de caja (especificación, ver `docs/currency.md`)
+Doctrina oficial: el ERP es internacional, nunca hardcodea una moneda ni sus denominaciones. `Currency`/`CurrencyDenomination` es el catálogo real (una moneda puede tener cualquier cantidad de denominaciones — billete o moneda, con orden de presentación); `CurrencyConfiguration` por tenant define moneda funcional/monedas habilitadas y prepara tipos de cambio (sin motor de FX). `CashRegister` tendrá una moneda operativa principal (campo nuevo); su `CashSession` cuenta físicamente en esa única moneda, sin mezclar denominaciones de monedas distintas. `CashDenominationCount` (siempre referenciando `CurrencyDenomination`, nunca un segundo catálogo) es el modo profesional de cierre; `CashClosing` es inmutable, con "sobrante"/"faltante" como lecturas de `difference`, nunca campos redundantes. El vocabulario `amount_due`/`amount_received`/`change_amount` y el efecto neto de `CashMovement` en una venta con cambio ya están correctamente implementados desde FASE 11 — esta doctrina los formaliza sin cambiar código.
+
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

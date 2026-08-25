@@ -107,7 +107,21 @@ Pago(s), todo consultable end-to-end con usuario y fecha en cada paso —
 mismo estándar que `Quotation → ProformaInvoice → Sale → Payment` en
 FASE 10.
 
-## 9. Qué NO se construyó en esta fase (deliberado)
+## 9. Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
+
+`PurchaseOrder.currency`/`SupplierInvoice.currency`/`SupplierPayment.currency`
+ya existen como `CharField(max_length=3)`, snapshot de texto simple —
+la doctrina oficial de moneda (`docs/currency.md`) no los migra ni
+reemplaza con este documento. Preparado, no construido: moneda del
+proveedor (ya vive en `Supplier.currency`, FASE 9, sin cambios), tipo
+de cambio entre la moneda de la orden y la funcional del tenant
+(`ExchangeRate`, conceptual) para reportes consolidados — sin motor de
+conversión (FX) completo. Los costos históricos (`unit_cost` congelado
+por línea, ver sección 3) se preservan exactamente igual, en la moneda
+del documento en el momento de crearse, nunca reconvertidos
+retroactivamente si cambia una tasa de cambio futura.
+
+## 10. Qué NO se construyó en esta fase (deliberado)
 
 - **Contabilidad general**: ningún libro mayor contable, ningún asiento
   de partida doble — el ledger de Cuentas por Pagar es una agregación de

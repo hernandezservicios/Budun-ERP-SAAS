@@ -166,6 +166,16 @@ recalculando el saldo con una consulta propia):
 - **Descuentos autorizados / créditos aprobados excepcionalmente**:
   agregando `ApprovalRequest` por tipo/estado — ver `docs/approvals.md`.
 
+## Nota de sincronización — Moneda, denominaciones y filtros de caja
+
+Doctrina oficial agregada en `docs/currency.md`: los reportes de Caja
+deben poder filtrarse por caja, usuario, fecha y **moneda** una vez que
+`CashRegister.currency`/`Currency` existan — ningún reporte debe sumar
+montos de monedas distintas como si fueran la misma unidad. Se agrega
+un reporte de denominaciones (denominación, cantidad, subtotal, moneda,
+cierre) como agregación sobre `CashDenominationCount`/`CashClosing`
+(especificación, no construidos). Ver `docs/reports.md`/`docs/currency.md`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

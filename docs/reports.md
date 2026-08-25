@@ -23,7 +23,8 @@ fuente real (mismo principio ya aplicado desde FASE 8 a `StockMovement`/
 | Ventas | por cliente/producto/serial/vendedor, cotizaciones/conversiones, descuentos/impuestos | `apps.sales.services`/`SaleItem` (snapshot histórico ya congelado por línea) |
 | Pagos / cuentas por cobrar | pendientes, allocations, anticipos, saldo a favor, notas de crédito, refunds, estado de cuenta | `apps.sales.services` (`get_sale_balance_due`, `get_customer_pending_sales`, `get_customer_credit_balance`) |
 | Caja | aperturas/cierres, ventas en efectivo, entradas/salidas, refunds, sobrantes/faltantes | `apps.pos.services` (`get_expected_cash`, `CashSession`, `CashMovement`) |
-| Compras / cuentas por pagar | equivalentes a ventas/cuentas por cobrar, del lado proveedor | `apps.purchases` (FASE 12, cuando exista — ver `docs/purchases.md`) |
+| Compras / cuentas por pagar | equivalentes a ventas/cuentas por cobrar, del lado proveedor | `apps.purchases` (FASE 12, construido — ver `docs/purchases.md`) |
+| Denominaciones de caja | denominación, cantidad, subtotal, moneda, cierre | `apps.pos` (especificación futura — `CashDenominationCount`, ver `docs/currency.md`) |
 | Gastos | por categoría/proveedor/método/fecha | `apps.expenses` (FASE 13, cuando exista) |
 
 ## Multi-Tenancy y performance
@@ -36,6 +37,16 @@ listar facturas pendientes de un cliente) es el estándar a seguir: si
 un reporte necesita el mismo dato derivado para muchas filas, se
 calcula en una agregación SQL, nunca en un bucle Python que repita la
 consulta por fila.
+
+## Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
+
+Los reportes de Caja deben poder filtrarse por caja, usuario, fecha **y
+moneda** una vez que `CashRegister.currency`/`Currency` existan (ver
+`docs/currency.md`) — ningún reporte debe sumar montos de monedas
+distintas como si fueran la misma unidad. Reportes de denominaciones
+(fila agregada arriba) son una agregación de solo lectura sobre
+`CashDenominationCount`/`CashClosing`, igual criterio que el resto de
+este documento: nunca una fuente de verdad nueva.
 
 ## Qué NO se construye con este documento
 

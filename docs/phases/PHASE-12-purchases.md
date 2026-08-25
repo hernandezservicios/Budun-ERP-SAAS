@@ -146,10 +146,23 @@ cual, nunca reimplementar su lógica:
 - Documentado en `docs/purchases.md` (actualizado de especificación a "construido"); nuevos `docs/purchase-orders.md`, `docs/receiving.md`, `docs/supplier-invoices.md`, `docs/accounts-payable.md`, `docs/supplier-returns.md`. `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md` actualizados con la doctrina permanente de Compras y Cuentas por Pagar.
 - Ningún módulo de negocio adicional (Gastos, Reportes, Roles/Audit/API, PayPal, Billing) fue construido; prorrateo de landed cost y varios de los 6 escenarios de autorización mencionados quedan como primitivas genéricas reutilizables sin UI dedicada — ver `KNOWN_ISSUES.md` #77/#78.
 
+## Nota de sincronización — Moneda, denominaciones y cierre de caja
+
+Doctrina oficial agregada en `docs/currency.md` (sin implementación,
+sin cambios de código en `apps.purchases`): `PurchaseOrder.currency`/
+`SupplierInvoice.currency`/`SupplierPayment.currency`, ya existentes,
+siguen siendo válidos exactamente como están — el catálogo real
+(`Currency`/`CurrencyDenomination`) no los migra ni reemplaza. Tipo de
+cambio y costos históricos preservados en la moneda del documento
+quedan preparados conceptualmente, sin motor de FX completo. Ver
+`docs/currency.md`/`docs/purchases.md` sección "Moneda".
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
 ## Cierre
 No cerrar la fase sin evidencia. Al cerrarla, detenerse y esperar autorización para iniciar la siguiente, salvo instrucción explícita del usuario.
 
-**Estado: PASS.** Fase cerrada. Suite completa del proyecto: 552/552 tests OK (502 de fases anteriores sin cambios de lógica + 50 nuevos de `apps.purchases`). Esperando autorización explícita para iniciar FASE 13 — Expenses.
+**Estado: PASS.** Fase cerrada. Suite completa del proyecto: 554/554 tests OK (502 de fases anteriores sin cambios de lógica + 52 nuevos de `apps.purchases`, incluyendo los 2 tests de regresión del bug de `unit_cost` agregados después de la primera corrida de verificación — corregido en la sincronización de Moneda posterior, ver nota más abajo). Esperando autorización explícita para iniciar FASE 13 — Expenses.
+
+**Corrección de conteo (sincronización de Moneda posterior a esta fase)**: el reporte de cierre original de esta fase citó "552/552 tests OK", contado por una corrida de verificación que arrancó como proceso justo antes de agregarse los 2 tests de regresión de `unit_cost` a `test_receiving.py` — ambos tests ya estaban en el commit de esta fase (`fa077f9`), simplemente no alcanzaron a contarse en esa corrida puntual. Una corrida completa posterior confirmó el conteo real: 554/554, sin ningún cambio de código adicional.

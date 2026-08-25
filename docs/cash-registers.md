@@ -5,7 +5,10 @@
 > diseño se implementó tal como está descrito aquí, sin desviaciones.
 > Ver `docs/pos.md` para el resumen operacional completo (checkout,
 > descuentos, cobros) y detalles de implementación adicionales
-> (`IntegrityError` traducido, fondo inicial en 0, etc.).
+> (`IntegrityError` traducido, fondo inicial en 0, etc.). Ver
+> `docs/currency.md` (sincronización posterior a FASE 12, especificación
+> pura) para la doctrina de moneda por caja, denominaciones, cierre por
+> denominaciones y vocabulario oficial de cambio — secciones 11-12.
 
 ## 1. Múltiples cajas por tenant (requisito oficial)
 
@@ -161,7 +164,36 @@ verdad de ventas/pagos:
 - Una "devolución en efectivo" sigue siendo `services.record_refund(...)`
   con el método heredado del `Payment` original.
 
-## 10. Estado de implementación (FASE 11)
+## 11. Moneda, denominaciones y cierre por denominaciones (especificación futura, ver `docs/currency.md`)
+
+Sincronización posterior a FASE 12: `CashRegister` no tiene hoy ningún
+campo de moneda — la doctrina oficial (`docs/currency.md`) prevé
+agregarle `currency` (FK a un futuro `Currency`), de modo que su
+`CashSession` cuente físicamente en una sola moneda, sin mezclar
+denominaciones de monedas distintas en un mismo conteo. El cierre por
+denominaciones (`CashDenominationCount`, referenciando siempre
+`CurrencyDenomination` — nunca un segundo catálogo) es el modo
+profesional recomendado, con un modo rápido por total como opción
+administrativa. `CashClosing` formaliza el cierre como entidad propia
+(hoy esos datos viven en los campos de `CashSession` descritos en la
+sección 2) — inmutable una vez cerrado, con "sobrante"/"faltante" como
+lecturas de `difference`, nunca campos nuevos que puedan
+desincronizarse. **Nada de esto está construido todavía** — ver
+`docs/currency.md` para el diseño completo antes de implementar.
+
+## 12. Cambio, pagos mixtos y `CashMovement` neto — ya correcto (confirmado)
+
+`docs/currency.md` formaliza el vocabulario oficial `amount_due`/
+`amount_received`/`change_amount` y confirma, tras revisión explícita,
+que el comportamiento actual de `apps.pos` (`CheckoutView`/
+`checkout_sale`) **ya cumple correctamente** ambas reglas: el cambio se
+calcula solo sobre la parte en efectivo de un pago mixto, y el
+`CashMovement` de una venta con cambio registra siempre el efecto neto
+(ej. venta 1275, cliente entrega 2000 → movimiento de `+1275`, nunca
+`+2000`/`-725` por separado) — nunca se modificó código con esta
+sincronización, solo se confirmó y nombró oficialmente lo ya existente.
+
+## 13. Estado de implementación (FASE 11)
 
 `CashRegister`, `CashSession` y `CashMovement` están construidos en
 `apps/pos` tal como se diseñó aquí, con una diferencia menor respecto

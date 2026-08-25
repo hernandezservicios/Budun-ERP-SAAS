@@ -61,6 +61,14 @@ Incorporado oficialmente a partir de FASE 12 (`apps/purchases`; diseño completo
 - Pago a proveedor en efectivo exige una `CashSession` abierta (`apps.pos`) y genera `CashMovement` (`SUPPLIER_PAYMENT_CASH`/`SUPPLIER_ADVANCE_CASH`) — otros medios no afectan el efectivo físico; no toda compra requiere caja, solo el pago en efectivo.
 - Compra sobre el límite y sobre-recepción se autorizan vía `apps.approvals` (`ApprovalPolicy.max_purchase_order_amount`/`max_over_receiving_percent`, `ApprovalRequest.ActionType.PURCHASE_OVER_THRESHOLD`/`OVER_RECEIVING`) — mismas primitivas reutilizables que descuentos/crédito excedido, jerarquía usuario → rol → tenant → negar, propietario siempre autorizado.
 
+## Moneda, denominaciones y cierre de caja (doctrina, especificación — ver `docs/currency.md`)
+El ERP es internacional: nunca hardcodear DOP (ni ninguna otra moneda) ni sus denominaciones como arquitectura fija. `Currency`/`CurrencyDenomination` es el catálogo real (una moneda puede tener cualquier cantidad de denominaciones, cada una billete o moneda, con orden de presentación); `CurrencyConfiguration` define por tenant la moneda funcional, las monedas habilitadas y prepara tipos de cambio futuros (sin motor de FX completo). Reglas permanentes para cuando se implemente:
+- `CashRegister` tendrá una moneda operativa principal; su `CashSession` cuenta físicamente en esa única moneda — nunca mezclar denominaciones de monedas distintas en un mismo conteo.
+- El cierre por denominaciones (`CashDenominationCount`, referenciando siempre `CurrencyDenomination` — nunca un segundo catálogo) es el modo profesional recomendado; el modo por total manual queda como opción administrativa, nunca el diseño por defecto.
+- `CashClosing` es inmutable una vez cerrado (mismo principio que `Return`/`PaymentAllocation` revertida): correcciones posteriores son un nuevo `CashMovement` `ADJUSTMENT` autorizado en una sesión nueva, nunca una edición del cierre histórico. "Sobrante"/"faltante" son lecturas de `difference`, nunca campos nuevos que puedan desincronizarse.
+- Vocabulario oficial de cambio en el POS: `amount_due`/`amount_received`/`change_amount`, con el cambio calculado únicamente sobre la parte en efectivo de un pago mixto — **ya implementado correctamente desde FASE 11** (`CheckoutView`), esta doctrina solo lo formaliza. `CashMovement` de una venta con cambio registra siempre el efecto neto (ej. venta 1275, cliente entrega 2000, cambio 725 → movimiento de `+1275`, nunca `+2000`/`-725` por separado) — también ya correcto hoy.
+- Sugerencia de cambio por denominaciones: preparada conceptualmente (cálculo codicioso sobre `CurrencyDenomination`), nunca obligatoria para el cajero.
+
 ## Fases
 Exactamente 25 fases: 0–24. No saltar, fusionar ni crear nuevas fases sin justificación documentada.
 

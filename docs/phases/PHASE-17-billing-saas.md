@@ -54,6 +54,17 @@ uso, no un acoplamiento estructural), sería una agregación de solo
 lectura sobre `apps.sales`/`apps.accounts_receivable` (cuando exista),
 nunca una relación directa entre `Subscription` y `Customer`.
 
+## Nota de sincronización — Moneda del plan/suscripción
+
+Doctrina oficial agregada en `docs/currency.md`/`docs/billing.md`:
+`Plan.currency`/`Subscription.currency` (snapshot al momento de
+suscribirse, un cambio de precio/moneda del plan después nunca altera
+lo que ya paga un tenant suscrito) y `provider_currency` (PayPal
+Subscriptions) — ninguno existe hoy. Sigue sin mezclarse con la moneda
+de las ventas/cuentas por cobrar de cada tenant (`Sale.currency`/
+`Payment.currency`) — la separación ERP Accounts Receivable / SaaS
+Billing de la tabla de arriba aplica también a la moneda.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

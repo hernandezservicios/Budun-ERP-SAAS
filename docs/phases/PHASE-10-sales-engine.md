@@ -148,6 +148,18 @@ implementación real de todo lo que seguía pendiente en esta lista**
 sincronización** — `docs/accounts-receivable.md` es la fuente de
 verdad completa para cuando una fase futura los construya.
 
+## Nota de sincronización — Moneda, denominaciones y cierre de caja (posterior a FASE 12)
+
+Doctrina oficial agregada en `docs/currency.md` (sin implementación,
+sin cambios de código en `apps.sales`): `Payment.currency`/
+`Sale.currency`/`Quotation.currency`/`ProformaInvoice.currency`, ya
+existentes como `CharField(max_length=3)`, siguen siendo válidos
+exactamente como están — el catálogo real (`Currency`/
+`CurrencyDenomination`) no los migra ni reemplaza. Preparado, no
+construido: `Payment.amount_received`/`change_amount` (nulos, solo
+relevantes para `method=CASH`). Ver `docs/currency.md`/`docs/payments.md`
+sección "Moneda".
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

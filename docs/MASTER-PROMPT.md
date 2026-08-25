@@ -136,6 +136,10 @@ Incorporado oficialmente a partir de FASE 12 (`apps/purchases`) — ver `docs/pu
 - **Caja**: pago a proveedor en efectivo exige `CashSession` abierta y genera `CashMovement` propio; otros medios no afectan el efectivo físico.
 - **Autorizaciones**: compra sobre el límite y sobre-recepción vía `apps.approvals`, mismas primitivas que descuentos/crédito excedido.
 
+## Moneda, denominaciones y cierre de caja (especificación — ver `docs/currency.md`)
+
+El ERP es internacional: `Currency`/`CurrencyDenomination` es el catálogo real (nunca DOP ni sus denominaciones hardcodeadas en código; cada moneda define su propia lista de billetes/monedas con orden de presentación). `CurrencyConfiguration` por tenant define moneda funcional, monedas habilitadas y prepara tipos de cambio (sin motor de FX completo). `CashRegister` tendrá una moneda operativa principal (campo nuevo, no existe hoy); su `CashSession` cuenta físicamente en esa única moneda, nunca mezclando denominaciones de monedas distintas. El cierre por denominaciones (`CashDenominationCount`, siempre referenciando `CurrencyDenomination`, nunca un segundo catálogo) es el modo profesional recomendado; `CashClosing` es inmutable una vez cerrado, con "sobrante"/"faltante" como lecturas de `difference` (nunca campos redundantes). El vocabulario oficial de cambio (`amount_due`/`amount_received`/`change_amount`, cambio calculado solo sobre la parte en efectivo de un pago mixto) y el efecto neto de `CashMovement` en una venta con cambio **ya están correctamente implementados desde FASE 11** — esta doctrina los formaliza sin cambiar código. Sugerencia de cambio por denominaciones: preparada, nunca obligatoria para el cajero.
+
 ## PayPal
 
 Implementar primero Sandbox. Consultar documentación oficial vigente para API y MCP. No inventar herramientas MCP ni endpoints. El frontend se comunica con Django; Django usa una capa de servicios de pago; MCP es herramienta del agente/desarrollo/operación.

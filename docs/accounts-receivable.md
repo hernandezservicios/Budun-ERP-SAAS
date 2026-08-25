@@ -214,7 +214,27 @@ originó) y **a dónde fue aplicado** (qué factura, o si sigue sin
 aplicar). Mismo estándar de trazabilidad documental que
 `Quotation → ProformaInvoice → Sale` en FASE 10 (ver `docs/sales.md`).
 
-## 8. Qué se construyó y qué sigue pendiente
+## 8. Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
+
+`Payment.currency`/`Sale.currency`/`CreditNote` (sin campo `currency`
+propio hoy — hereda implícitamente la moneda del `Customer`/`Sale` que
+la origina) son snapshots de texto libre, sin catálogo real detrás —
+ver `docs/currency.md` para la doctrina oficial (`Currency`/
+`CurrencyDenomination`), que no los migra con este documento.
+**Hallazgo documentado (no corregido, fuera de alcance de una
+sincronización documental)**: `get_customer_credit_balance` suma el
+saldo sin aplicar de los `Payment`/`CreditNote` de un cliente sin
+verificar que todos compartan la misma moneda — si un tenant llegara a
+registrar pagos de un mismo cliente en monedas distintas, la suma hoy
+mezclaría montos de monedas diferentes como si fueran la misma unidad.
+No es un caso real hoy (todo el proyecto usa `"USD"` como default sin
+que ninguna fase haya registrado documentos en monedas distintas para
+un mismo cliente), pero queda anotado en `KNOWN_ISSUES.md` para que la
+fase que implemente `Currency`/`CurrencyConfiguration` decida si
+`get_customer_credit_balance` debe agrupar/validar por moneda antes de
+sumar.
+
+## 9. Qué se construyó y qué sigue pendiente
 
 **Construido (FASE 10 + FASE 11)**: `Payment`, `PaymentAllocation`,
 `CreditNote`, `CreditNoteApplication`; `get_customer_credit_balance`/

@@ -52,6 +52,20 @@ MCP es una herramienta del entorno de agente/desarrollo/operaciones,
 no un sustituto del backend de pagos — el flujo real de cobro nunca
 depende de que el agente esté disponible.
 
+## Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
+
+Cuando esta fase integre PayPal real, debe usar la moneda del
+`Payment`/documento cuando sea compatible con lo que PayPal soporta —
+nunca hardcodear una sola moneda en la integración. Mantener, junto con
+los campos de reconciliación ya previstos arriba (`external_id`/
+`provider`/`provider_status`): `provider_currency` (la moneda que
+PayPal reporta para la transacción, que puede diferir de
+`Payment.currency` si hubo conversión del lado del proveedor) y
+`provider_amount` (el monto exacto que PayPal procesó, en su moneda) —
+ninguno existe hoy, mismo principio de "nunca una columna sin uso real"
+ya aplicado en este documento. Idempotencia, webhook y `external_id`
+siguen exactamente igual (ver arriba).
+
 ## Qué NO se construye con este documento
 
 Ninguna integración real, ningún campo en `Payment`/`Refund`, ningún

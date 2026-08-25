@@ -203,6 +203,28 @@ cobros del POS, evitando el N+1 que tendría iterar
 mucho historial. Verificado con comparación de conteo de queries
 (pocas vs. muchas facturas/líneas de carrito).
 
+## Moneda, denominaciones y cierre de caja (sincronización posterior a FASE 12, ver `docs/currency.md`)
+
+El vocabulario oficial de cambio (`amount_due`/`amount_received`/
+`change_amount`) y la regla de "el cambio se calcula solo sobre la
+parte en efectivo de un pago mixto" **ya están implementados
+correctamente** en `CheckoutView`/`checkout_sale` (ver arriba,
+"Checkout: confirmar + cobrar") — esta sincronización solo formaliza
+ese comportamiento como doctrina, sin ningún cambio de código. El
+`CashMovement` de una venta con cambio ya registra el efecto neto
+(nunca el bruto recibido y el cambio como dos movimientos separados).
+
+Pendiente como especificación pura (nada de esto construido): moneda
+operativa por `CashRegister`, catálogo `Currency`/`CurrencyDenomination`,
+cierre por denominaciones (`CashDenominationCount`/`CashClosing`,
+inmutable), y sugerencia de cambio por denominaciones (nunca
+obligatoria para el cajero). Ver `docs/currency.md` para el diseño
+completo. Hallazgo documentado (no corregido, fuera de alcance de una
+sincronización documental): `checkout_sale` no bloquea explícitamente
+un cobro insuficiente cuando la venta no tiene cliente o el cliente no
+tiene crédito habilitado — ver `docs/currency.md` sección 7 y
+`KNOWN_ISSUES.md`.
+
 ## Qué NO se construyó en esta fase (deliberado)
 
 - **Override de supervisor con PIN en el mismo terminal**: el flujo de

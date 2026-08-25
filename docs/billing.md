@@ -39,6 +39,20 @@ relación estructural directa entre `Subscription` y `Customer`.
   cancelar (fuera de alcance decidir aquí — requiere una política de
   retención explícita del usuario cuando llegue la fase).
 
+## Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
+
+`Plan.currency` (la moneda en la que se fija el precio del plan) y
+`Subscription.currency` (heredada del plan al momento de suscribirse,
+snapshot histórico — un cambio de precio/moneda del plan después nunca
+debe alterar lo que ya paga un tenant suscrito, mismo principio de
+snapshot que `SaleItem`/`PurchaseOrderItem`) — ninguno de los dos campos
+existe hoy. `provider_currency` (la moneda que PayPal Subscriptions
+reporta) se mantiene igual que en `docs/paypal.md`. Esto sigue sin
+mezclarse con la moneda de las ventas/cuentas por cobrar del ERP de
+cada tenant (`Sale.currency`/`Payment.currency`) — la separación
+ERP Accounts Receivable / SaaS Billing (ver arriba) aplica también a la
+moneda: cada eje tiene la suya, nunca una FK compartida entre ambos.
+
 ## Qué NO se construye con este documento
 
 Ningún modelo (`Plan`, `Subscription`), ninguna integración con
