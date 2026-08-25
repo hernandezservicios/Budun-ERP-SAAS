@@ -1,14 +1,14 @@
 # Estado actual del proyecto
 
 ```text
-Fase actual: 3
-Estado: PASS (cerrada, pendiente de autorización para FASE 4)
-Última fase cerrada: FASE 3 — Multi-Tenancy
-Próxima acción: esperar autorización explícita del usuario para iniciar FASE 4 — Authentication
+Fase actual: 4
+Estado: PASS (cerrada, pendiente de autorización para FASE 5)
+Última fase cerrada: FASE 4 — Authentication
+Próxima acción: esperar autorización explícita del usuario para iniciar FASE 5 — Design System
 ```
 
 ## Regla
 Claude debe actualizar este archivo al inicio y al cierre de cada fase.
 
-## Resumen de FASE 3
-Se introdujo el Custom User Model (`accounts.User`, `AUTH_USER_MODEL`), la app `tenants` (modelos `Tenant` y `Membership`), el mecanismo de "Tenant Context" (`contextvars`), `TenantMiddleware` (determina el tenant activo del usuario autenticado, nunca del frontend), `TenantManager`/`TenantQuerySet`/`TenantScopedModel` (aislamiento automático para futuros modelos de negocio desde FASE 8), controles de autorización por rol (`require_tenant`/`require_role`), una capa de servicios de ejemplo y un modelo de referencia (`IsolationSample`, no es una entidad de negocio) usado exclusivamente por las pruebas. Requirió resetear el esquema `public` de `erp_saas_dev` (vacío, sin datos reales, confirmado por el usuario) para poder fijar `AUTH_USER_MODEL` antes de la primera migración. 19/19 tests OK (16 nuevos de aislamiento + 3 de FASE 1), incluyendo Tenant A/Tenant B con datos privados verificados como no accesibles entre sí, a nivel de manager, servicio y vista HTTP completa. `manage.py check` en verde. Smoke test HTTP real OK. Arquitectura documentada en `docs/multi-tenancy.md`. Ningún módulo de negocio (POS, ventas, inventario, API, PayPal, Billing) fue construido.
+## Resumen de FASE 4
+Se implementó el ciclo completo de autenticación sobre el Custom User Model de FASE 3: login por correo electrónico (se eliminó `username`, verificado 0 usuarios reales antes del cambio), registro, logout, recuperación y cambio de contraseña (reutilizando las vistas integradas de Django), perfil editable, y onboarding con creación **transaccional** de `Tenant` + `Membership` (rol `OWNER`). Se preservaron intactas todas las protecciones Multi-Tenant de FASE 3 (Tenant Context, managers/querysets tenant-aware, fail-closed, prohibición de `tenant_id` desde el cliente, `all_objects` fuera de vistas de negocio, `IsolationSample` solo como soporte de pruebas) — documentado explícitamente en `docs/authentication.md`. 45/45 tests OK (incluyendo los 16 de FASE 3 sin cambios de lógica, y 2 nuevos de regresión Multi-Tenant que ejercitan el aislamiento vía el flujo HTTP real de registro/login/onboarding). `manage.py check` en verde. Smoke tests HTTP reales de todas las páginas nuevas. Ningún módulo de negocio (POS, ventas, inventario, API, PayPal, Billing) fue construido; el Design System completo queda para FASE 5.
