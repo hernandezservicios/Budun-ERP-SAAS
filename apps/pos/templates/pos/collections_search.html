@@ -1,0 +1,44 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Cobros — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Cobros</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Cobros</h1>
+        <p class="encabezado-pagina__descripcion">Busca un cliente para cobrar facturas pendientes, registrar anticipos, aplicar saldo a favor o notas de crédito.</p>
+    </div>
+</div>
+
+<form method="get" style="display:flex; gap: var(--espacio-3); margin-bottom: var(--espacio-6);">
+    <input type="text" name="q" value="{{ query }}" placeholder="Nombre, identificación, correo o teléfono" style="flex:1;">
+    <button type="submit" class="btn btn--primario">Buscar</button>
+</form>
+
+{% if clientes %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Cliente</th><th>Identificación</th><th>Teléfono</th><th></th></tr></thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente.display_name }}</td>
+                <td>{{ cliente.identification_number|default:"—" }}</td>
+                <td>{{ cliente.phone|default:"—" }}</td>
+                <td><a href="{% url 'pos:customer_collections' cliente.pk %}" class="btn btn--contorno btn--sm">Cobrar</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% elif query %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🔍</div><h3>Sin resultados para «{{ query }}»</h3></div>
+{% endif %}
+{% endblock %}

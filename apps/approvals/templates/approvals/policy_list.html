@@ -1,0 +1,59 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Políticas de autorización — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'approvals:pending_list' %}">Autorizaciones</a></li>
+        <li aria-current="page">Políticas</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Políticas de autorización</h1>
+        <p class="encabezado-pagina__descripcion">Límites de descuento y crédito por rol — jerarquía: usuario específico → rol → predeterminada del tenant → negar.</p>
+    </div>
+</div>
+
+{% if politicas %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Alcance</th><th>Descuento máx. (%)</th><th>Descuento máx. (monto)</th><th>Exceso de crédito autorizable</th><th>Puede aprobar</th><th>Notas</th></tr></thead>
+        <tbody>
+            {% for politica in politicas %}
+            <tr>
+                <td>{{ politica }}</td>
+                <td>{{ politica.max_discount_percent }}%</td>
+                <td>${{ politica.max_discount_amount }}</td>
+                <td>${{ politica.max_credit_overage }}</td>
+                <td>{% if politica.can_approve %}<span class="badge badge--verde">Sí</span>{% else %}<span class="badge badge--neutro">No</span>{% endif %}</td>
+                <td>{{ politica.notes|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">🔐</div>
+    <h3>Sin políticas configuradas todavía</h3>
+    <p>Sin una política, cualquier descuento o crédito excedido requiere autorización (límite 0 por defecto) — salvo el propietario, que siempre está autorizado.</p>
+</div>
+{% endif %}
+
+<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Configurar política de rol</h3>
+        <form method="post" action="{% url 'approvals:role_policy_set' %}" novalidate>
+            {% csrf_token %}
+            {% for field in role_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Guardar política</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

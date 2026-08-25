@@ -1,0 +1,97 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Autorizaciones — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Autorizaciones</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Autorizaciones</h1>
+        <p class="encabezado-pagina__descripcion">Solicitudes de descuento, crédito excedido y otras operaciones que superan el límite del usuario.</p>
+    </div>
+    <a href="{% url 'approvals:policy_list' %}" class="btn btn--contorno">Configurar políticas</a>
+</div>
+
+<h2 class="panel-seccion__titulo">Pendientes</h2>
+{% if solicitudes %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Tipo</th>
+                <th>Solicitado</th>
+                <th>Límite</th>
+                <th>Motivo</th>
+                <th>Solicitante</th>
+                <th>Fecha</th>
+                {% if puede_resolver %}<th><span class="visualmente-oculto">Acciones</span></th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for solicitud in solicitudes %}
+            <tr>
+                <td>{{ solicitud.get_action_type_display }}</td>
+                <td>{{ solicitud.requested_value|default:"—" }}</td>
+                <td>{{ solicitud.allowed_limit|default:"—" }}</td>
+                <td>{{ solicitud.reason|default:"—" }}</td>
+                <td>{% firstof solicitud.requested_by.get_full_name solicitud.requested_by.email "—" %}</td>
+                <td>{{ solicitud.requested_at|date:"d M Y H:i" }}</td>
+                {% if puede_resolver %}
+                <td>
+                    <form action="{% url 'approvals:approval_resolve' solicitud.pk %}" method="post" style="display:flex; gap: var(--espacio-2); align-items:center;">
+                        {% csrf_token %}
+                        <input type="hidden" name="decision" value="approve">
+                        <button type="submit" class="btn btn--primario btn--sm">Aprobar</button>
+                    </form>
+                    <form action="{% url 'approvals:approval_resolve' solicitud.pk %}" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="decision" value="reject">
+                        <button type="submit" class="btn btn--contorno btn--sm">Rechazar</button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">✅</div>
+    <h3>Sin solicitudes pendientes</h3>
+</div>
+{% endif %}
+
+<h2 class="panel-seccion__titulo" style="margin-top: var(--espacio-8);">Historial reciente</h2>
+{% if historial %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tipo</th><th>Estado</th><th>Solicitado</th><th>Aprobado</th><th>Resuelto por</th><th>Fecha</th></tr></thead>
+        <tbody>
+            {% for solicitud in historial %}
+            <tr>
+                <td>{{ solicitud.get_action_type_display }}</td>
+                <td>
+                    {% if solicitud.status == "approved" %}<span class="badge badge--verde">Aprobada</span>
+                    {% elif solicitud.status == "rejected" %}<span class="badge badge--peligro">Rechazada</span>
+                    {% else %}<span class="badge badge--neutro">{{ solicitud.get_status_display }}</span>{% endif %}
+                </td>
+                <td>{{ solicitud.requested_value|default:"—" }}</td>
+                <td>{{ solicitud.approved_value|default:"—" }}</td>
+                <td>{% firstof solicitud.approved_by.get_full_name solicitud.approved_by.email "—" %}</td>
+                <td>{{ solicitud.decided_at|date:"d M Y H:i" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🗂️</div><h3>Sin historial todavía</h3></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Cerrar caja — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Cerrar caja</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Cerrar caja — {{ sesion.cash_register.code }}</h1>
+        <p class="encabezado-pagina__descripcion">El resultado del cierre queda registrado permanentemente y no puede editarse después.</p>
+    </div>
+</div>
+
+<div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
+    <div class="kpi"><p class="kpi__etiqueta">Fondo inicial</p><p class="kpi__valor">${{ sesion.opening_amount }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Efectivo esperado</p><p class="kpi__valor">${{ esperado }}</p></div>
+</div>
+
+<div class="tarjeta" style="max-width: 28rem; margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Cerrar caja</button>
+        </form>
+    </div>
+</div>
+
+{% if movimientos %}
+<h2 class="panel-seccion__titulo">Movimientos de la sesión</h2>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tipo</th><th>Monto</th><th>Motivo</th><th>Usuario</th><th>Fecha</th></tr></thead>
+        <tbody>
+            {% for movimiento in movimientos %}
+            <tr>
+                <td>{{ movimiento.get_movement_type_display }}</td>
+                <td>${{ movimiento.amount }}</td>
+                <td>{{ movimiento.reason|default:"—" }}</td>
+                <td>{% firstof movimiento.user.get_full_name movimiento.user.email "—" %}</td>
+                <td>{{ movimiento.created_at|date:"d M Y H:i" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

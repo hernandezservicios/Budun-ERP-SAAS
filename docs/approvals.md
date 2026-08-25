@@ -1,11 +1,12 @@
-# Autorizaciones (`ApprovalRequest` / `ApprovalService`) — especificación
+# Autorizaciones (`ApprovalRequest` / `ApprovalService`)
 
-> **Estado: ESPECIFICACIÓN, no implementación.** Diseño aprobado de un
-> servicio de autorizaciones **centralizado y reutilizable** — ninguna
-> fase debe implementar su propia lógica de autorización duplicada
-> (el POS no debe reinventar "aprobar un descuento", ni Compras
-> reinventar "aprobar un ajuste de inventario"). Ningún modelo, campo
-> ni migración se crea a partir de este documento.
+> **Estado: CONSTRUIDO en FASE 11** (`apps/approvals`), consumido por
+> el POS (`apps/pos`) para descuentos y crédito excedido — los únicos
+> dos consumidores reales hoy, tal como se anticipó en este documento.
+> El resto de operaciones autorizables de la sección 7 (reembolsos
+> especiales, anulaciones sensibles, ajustes de inventario, etc.)
+> siguen sin construirse; `ApprovalService` ya está listo para que una
+> fase futura los conecte sin duplicar esta lógica. Ver `docs/pos.md`.
 
 ## 1. Principio central: un solo servicio, muchos consumidores
 
@@ -134,22 +135,34 @@ patrón de solicitud/resolución/auditoría.
 
 ## 8. Dónde vive esto (relación con las fases)
 
-`ApprovalRequest`/`ApprovalService` son consumidos primero por FASE 11
-(POS), que es donde surge la primera necesidad operativa real
-(descuentos y crédito excedido durante una venta de mostrador) — ver
-`docs/phases/PHASE-11-pos.md`. La infraestructura de roles/permisos más
-rica (de dónde salen las políticas por rol) es responsabilidad de
-FASE 15 (Roles + Audit + API, ver
+`ApprovalRequest`/`ApprovalService` se construyeron en `apps.approvals`
+(app propia, reutilizable — ni dentro de `apps.pos` ni de
+`apps.tenants`), consumidos primero por FASE 11 (POS), que es donde
+surgió la primera necesidad operativa real (descuentos y crédito
+excedido durante una venta de mostrador) — ver
+`docs/phases/PHASE-11-pos.md` y `docs/pos.md`. La infraestructura de
+roles/permisos más rica (políticas más allá de OWNER/MEMBER) sigue
+siendo responsabilidad de FASE 15 (Roles + Audit + API, ver
 `docs/phases/PHASE-15-roles-plus-audit-plus-inventory-api.md`), que
-debe **extender**, no sustituir, el modelo de `Membership.Role` ya
-existente desde FASE 3. La fase que construya `ApprovalService` decide
-el detalle final de dónde vive el modelo de políticas (¿en
-`apps.tenants`? ¿en una nueva `apps.approvals`?), respetando el
-contrato de jerarquía de resolución de la sección 3.
+debe **extender**, no sustituir, el modelo `ApprovalPolicy`/
+`Membership.Role` ya existente desde esta fase.
 
-## 9. Qué NO se construye con este documento
+## 9. Estado de implementación (FASE 11)
 
-Ningún modelo (`ApprovalRequest`), ninguna política de rol/usuario
-configurable, ninguna integración con descuentos/crédito/caja. Diseño
-aprobado como contrato para que FASE 11 y siguientes lo implementen sin
-duplicar lógica de autorización en cada módulo.
+`ApprovalRequest`/`ApprovalPolicy` están construidos en `apps/approvals`
+tal como se diseñó aquí: jerarquía usuario→rol→tenant→negar
+(`services.get_effective_policy`), consumo de descuentos y crédito
+excedido desde `apps.pos`, consumo de la resolución (`can_user_approve`)
+gateado por el propietario del tenant o por `ApprovalPolicy.can_approve`.
+Se agregó un mecanismo no anticipado explícitamente en la
+especificación original pero necesario para cumplir "nunca reutilizar
+una autorización dos veces": `ApprovalRequest.consumed_at`/
+`consumed_by` (`services.mark_consumed`/`get_usable_approved_request`)
+— sin esto, una misma solicitud aprobada podría aplicarse a múltiples
+descuentos distintos dentro de la misma venta. Ver `docs/pos.md` para
+el flujo completo bloquear→solicitar→aprobar→reintentar.
+
+Sigue sin construirse: reembolsos especiales, anulaciones sensibles,
+ajustes de inventario y movimientos de caja especiales como
+operaciones autorizables (sección 7) — el servicio ya está listo para
+que una fase futura los conecte sin duplicar esta lógica.

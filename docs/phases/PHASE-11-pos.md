@@ -7,18 +7,18 @@ POS rápido y usable: búsqueda, barcode, carrito, cliente, pago, cambio, recibo
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
 
 ## Criterios de aceptación
-- [ ] flujo completo
-- [ ] mobile/touch usable
-- [ ] no duplicados
+- [x] flujo completo — buscar → carrito → cliente → descuento → cobrar (uno o varios métodos) → recibo; más caja (abrir/cerrar) y cobros de cuentas por cobrar (facturas pendientes/anticipos/saldo a favor/notas de crédito/refunds).
+- [x] mobile/touch usable — Design System de FASE 5 (responsive ya establecido), sin componentes que dependan de hover/mouse.
+- [x] no duplicados — mismo `SaleItem`/`InventoryUnit` no se puede vender dos veces (máquina de estados de FASE 8 a nivel de inventario); el POS reutiliza literalmente `apps.sales`/`apps.inventory`/`apps.customers`/`apps.approvals`, sin un segundo motor de ventas.
 
 ## Verificación
-- [ ] `python manage.py check` o la validación equivalente está en verde.
-- [ ] Tests relevantes ejecutados.
-- [ ] Smoke test realizado cuando aplique.
-- [ ] Seguridad revisada para el alcance de la fase.
-- [ ] Documentación actualizada.
-- [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
-- [ ] Git commit creado.
+- [x] `python manage.py check` en verde.
+- [x] Tests relevantes ejecutados — ver "Evidencia".
+- [x] Smoke test HTTP real contra PostgreSQL de desarrollo (flujo completo caja→carrito→descuento con autorización→checkout multi-pago→cierre de caja→cobros→anticipo→nota de crédito→refund a crédito, más aislamiento Multi-Tenant).
+- [x] Seguridad revisada — autorización (`LoginRequiredMixin`+`TenantRequiredMixin`+permiso de caja/propietario), IDs manipulados (404), CSRF, descuentos/crédito excedido nunca aplicables sin autorización real (servidor, no frontend).
+- [x] Documentación actualizada — `docs/pos.md` (nuevo); `docs/cash-registers.md`/`docs/approvals.md`/`docs/accounts-receivable.md` actualizados de especificación a "construido".
+- [x] `docs/project-status/CURRENT_PHASE.md`, `PHASE_HISTORY.md` y `KNOWN_ISSUES.md` actualizados.
+- [x] Git commit creado. — Ver historial de Git.
 
 ## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
 
@@ -114,12 +114,12 @@ ventas". Reutilizar tal cual:
   unidad dos veces al carrito EN PANTALLA (antes de confirmar), por
   UX, revisando `unit.pk` en el estado del carrito.
 
-## Nota de sincronización — Cajas, Cuentas por Cobrar y Autorizaciones a construir en esta fase
+## Cajas, Cuentas por Cobrar y Autorizaciones — construido en esta fase
 
 Sincronización de doctrina ordenada por el usuario tras aprobar la
-ampliación Payment + PaymentAllocation, previa a iniciar esta fase.
-Documentación y arquitectura únicamente — nada de esto se implementó
-todavía. FASE 11 debe construir, además del POS en sí:
+ampliación Payment + PaymentAllocation, previa a iniciar esta fase
+(documentación y arquitectura en ese momento). Todo lo siguiente ya
+está construido:
 
 - **Múltiples cajas/terminales (`CashRegister`)**: el tenant puede
   crear cualquier cantidad de cajas, sin límite fijo de diseño. Ver
@@ -164,8 +164,27 @@ Estos documentos (`docs/accounts-receivable.md`, `docs/cash-registers.md`,
 `docs/approvals.md`) son la fuente de verdad de diseño para esta fase;
 deben releerse antes de implementar, no re-derivarse desde cero.
 
+## Evidencia (FASE 11)
+
+- Arquitectura: `apps/pos` (POS + caja, orquestación pura sobre `apps.sales`/`apps.inventory`/`apps.customers`/`apps.approvals`) y `apps/approvals` (autorizaciones, app nueva y reutilizable) — dos apps pequeñas y enfocadas, nunca un segundo motor de ventas.
+- `CashRegister`/`CashSession`/`CashMovement`: ilimitadas por tenant; exclusividad por caja (`select_for_update()`) y por usuario (`UniqueConstraint` global, `IntegrityError` traducido a `InvalidPosOperation`); fondo inicial en 0 válido; solo el efectivo afecta el efectivo esperado; cierre calcula esperado/contado/diferencia y rechaza (no permite) cerrar una sesión ya cerrada.
+- `ApprovalPolicy`/`ApprovalRequest`: jerarquía usuario→rol→tenant→negar; descuentos autorizables por % Y por monto (exceder cualquiera de los dos exige autorización); crédito excedido; `consumed_at`/`consumed_by` para que una aprobación nunca se reutilice; propietario del tenant siempre autorizado (regla explícita).
+- `CreditNote`/`CreditNoteApplication` (en `apps.sales`): estructuralmente análogos a `Payment`/`PaymentAllocation`, misma disciplina de validación; `get_customer_credit_balance`/`get_sale_paid_amount` generalizados para sumar ambos ledgers — `CustomerCreditLedger` como tabla separada se descartó deliberadamente.
+- Checkout: `confirm_sale` + uno o varios `record_payment_for_sale` (reutilizados literalmente); "cambio" calculado en la vista; crédito excedido y descuentos verificados antes de confirmar.
+- Cobros: facturas pendientes (`apply_payment_to_sales`, un pago a varias facturas), anticipos (`Payment` sin aplicar), saldo a favor (agota pagos sin aplicar antes que notas de crédito, preserva el resto), refunds efectivo (con `CashMovement`) o a crédito (`convert_refund_to_credit`).
+- 2 bugs reales encontrados y corregidos durante el desarrollo de los tests: `checkout_sale` devolvía `Sale.payment_status` desactualizado (`.update()` en base de datos nunca refresca la instancia en memoria — se agregó `refresh_from_db()`); `CashMovement` rechazaba fondo inicial 0 (`CheckConstraint` corregido para permitirlo solo en `OPENING`).
+- 1 N+1 real encontrado y corregido: `get_customer_pending_sales` recalculaba el saldo de cada factura por separado — resuelto con `get_sale_balance_due_bulk` (3 consultas totales, nunca 2×N), verificado con comparación de conteo de queries.
+- Concurrencia: 2 tests con hilos reales (`TransactionTestCase`) — doble apertura de la misma caja, doble apertura del mismo usuario en cajas distintas — exactamente una gana en ambos casos.
+- Multi-Tenant: cobertura exhaustiva en `apps/pos/tests/test_isolation.py` y `apps/approvals/tests/test_isolation.py` (carrito, checkout, cobros, apertura de caja, `ApprovalRequest`, `apply_credit_note` cross-tenant a nivel de servicio).
+- Seguridad: `LoginRequiredMixin`+`TenantRequiredMixin` en toda vista; permiso de caja (propietario o `authorized_users`) y de aprobación (propietario o `can_approve`) verificados en el servidor, nunca solo ocultando botones; IDs manipulados → 404; descuentos/crédito excedido nunca aplicables sin autorización real.
+- 113 tests nuevos (68 en `apps.pos`, 45 en `apps.approvals` + notas de crédito de `apps.sales`) — 502/502 tests OK en total (389 de fases anteriores + 113 de FASE 11). Smoke test HTTP real contra PostgreSQL de desarrollo (44 verificaciones: apertura de caja con/sin autorización, carrito con producto por cantidad y serializado, descuento con flujo de autorización completo, checkout multi-pago, cierre de caja, cobro de factura pendiente, anticipo, nota de crédito, saldo a favor, refund a crédito, aislamiento Multi-Tenant), sin tenants huérfanos tras la limpieza.
+- Documentado en `docs/pos.md` (nuevo); `docs/cash-registers.md`, `docs/approvals.md`, `docs/accounts-receivable.md` actualizados de especificación a "construido"; `docs/sales.md`/`docs/payments.md`/`docs/customers.md` referencian los documentos nuevos donde corresponde.
+- Ningún módulo de negocio adicional (Compras, Gastos, Reportes, Roles/Audit/API, PayPal, Billing) fue construido; permisos granulares por acción más allá de caja/descuentos/crédito quedan para FASE 15; override de supervisor con PIN en el mismo terminal y escaneo por cámara/QR quedan documentados como simplificaciones deliberadas de UX (no de seguridad) en `docs/pos.md`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
 ## Cierre
 No cerrar la fase sin evidencia. Al cerrarla, detenerse y esperar autorización para iniciar la siguiente, salvo instrucción explícita del usuario.
+
+**Estado: PASS.** Fase cerrada. Esperando autorización explícita para iniciar FASE 12 — Purchases.

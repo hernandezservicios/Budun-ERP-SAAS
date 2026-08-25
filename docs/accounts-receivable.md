@@ -1,16 +1,17 @@
-# Cuentas por Cobrar: Anticipos, Saldo a Favor, Notas de Crédito (especificación)
+# Cuentas por Cobrar: Anticipos, Saldo a Favor, Notas de Crédito
 
-> **Estado: ESPECIFICACIÓN, no implementación.** Este documento define
-> oficialmente el dominio de cuentas por cobrar del ERP como fuente de
-> verdad arquitectónica — para que ninguna fase futura (FASE 11 y
-> siguientes) invente un diseño incompatible. Los modelos `Payment` y
-> `PaymentAllocation` (FASE 10 + su ampliación, ver `docs/payments.md`)
-> **ya están construidos y en producción**; `CustomerCreditLedger`,
-> `CustomerAdvance` (como concepto, no necesariamente un modelo nuevo —
-> ver más abajo) y `CreditNote`/`CreditNoteApplication` son diseño
-> aprobado, pendiente de construcción en la fase que los requiera. No
-> se agrega ningún modelo, campo ni migración a partir de este
-> documento.
+> **Estado: `Payment`/`PaymentAllocation` (FASE 10 + ampliación) y
+> `CreditNote`/`CreditNoteApplication` (FASE 11) están CONSTRUIDOS y en
+> producción.** Anticipo/saldo a favor son 100% funcionales — ver
+> `docs/pos.md` para el flujo operacional completo desde el POS.
+> `CustomerCreditLedger` como TABLA separada **deliberadamente no se
+> construyó**: la "Regla de no-duplicación" (sección 1) se resolvió con
+> la opción 1 (generalizar `get_customer_credit_balance`/
+> `get_sale_paid_amount` para sumar también `CreditNote`), no con la
+> opción 2 — nunca hicieron falta las dos a la vez. Este documento
+> sigue siendo la fuente de verdad de diseño; se actualizó para
+> reflejar exactamente qué se construyó y qué sigue siendo
+> especificación pura (`Customer Statement` como vista, sección 6).
 
 ## 1. Los tres conceptos, unificados en un solo saldo
 
@@ -64,7 +65,7 @@ anticipo de una venta anónima se queda como saldo sin aplicar del
 `Payment` (recuperable solo por reembolso directo), nunca como crédito
 de cuenta.
 
-## 3. `CustomerCreditLedger` (append-only, diseño futuro)
+## 3. `CustomerCreditLedger` — resuelto SIN una tabla nueva (FASE 11)
 
 Mismo principio que `StockMovement` (FASE 8) y `PaymentAllocation`
 (FASE 10): **el saldo se deriva siempre de la suma de movimientos,
@@ -73,7 +74,18 @@ nunca se guarda como un número editable.** Un campo `balance` en
 proyecto evita desde FASE 8 ("nunca un campo desnormalizado sin fuente
 real").
 
-Movimientos conceptuales (`CustomerCreditLedger.MovementType`):
+**Decisión final (FASE 11)**: no se construyó una tabla
+`CustomerCreditLedger` separada. `Payment`/`PaymentAllocation` (FASE 10)
+y `CreditNote`/`CreditNoteApplication` (FASE 11, sección 4) son, juntos,
+los dos ledgers append-only reales — construir una TERCERA tabla que
+resumiera movimientos de ambos habría sido exactamente la segunda
+fuente de verdad que este documento prohíbe en la sección 1 ("Regla de
+no-duplicación"). En su lugar, `apps.sales.services.get_customer_credit_balance`
+se generalizó para sumar el saldo sin aplicar de ambas fuentes en una
+sola función — la tabla siguiente documenta los movimientos
+CONCEPTUALES tal como se pidieron, y de dónde sale cada uno hoy:
+
+Movimientos conceptuales (mapeados a los dos ledgers reales, no a una tabla `CustomerCreditLedger`):
 
 | Tipo | Signo | Origen | Ejemplo |
 |---|---|---|---|
@@ -84,21 +96,19 @@ Movimientos conceptuales (`CustomerCreditLedger.MovementType`):
 | `APPLICATION` | − | El crédito se aplica a una factura/proforma | Se usa el saldo a favor para pagar una factura nueva. |
 | `REVERSAL` | ± | Corrige un movimiento anterior (nunca se edita el original) | Una aplicación equivocada se revierte con un movimiento inverso. |
 
-Cada fila: `tenant`, `customer`, `movement_type`, `amount` (siempre
-positivo; el signo lo determina `movement_type`, nunca un monto
-negativo almacenado), `source_type`/`source_id` (referencia genérica
-al `Payment`/`CreditNote`/`Refund`/factura de origen — mismo patrón de
-referencia genérica ya usado por `SalesDocumentAttachment`/
-`SalesActivityLog` en `apps.sales`), `user`, `created_at`, `notes`.
-Nunca se edita una fila existente; una corrección es un nuevo
-movimiento `REVERSAL` que referencia al original — misma filosofía de
-inmutabilidad que `PaymentAllocation`/`Return`.
+`REVERSAL` existe en dos formas reales, una por ledger: `reverse_allocation`
+(`PaymentAllocation`) y `reverse_credit_note_application`
+(`CreditNoteApplication`) — ambas nunca editan la fila original,
+siempre crean el estado `REVERSED` con auditoría (`reversed_at`/
+`reversed_by`), misma filosofía de inmutabilidad que `Return`.
 
-El saldo del cliente es siempre: `suma(movimientos positivos activos) −
-suma(movimientos de aplicación activos)`, calculado en el momento de la
-consulta (agregación SQL), nunca cacheado sin recalcular.
+El saldo del cliente (`get_customer_credit_balance`) es siempre:
+`suma(saldo sin aplicar de cada Payment CONFIRMADO) + suma(saldo sin
+aplicar de cada CreditNote ISSUED/PARTIALLY_APPLIED)`, calculado en el
+momento de la consulta (agregación SQL sobre las filas reales), nunca
+cacheado sin recalcular.
 
-## 4. `CreditNote` / `CreditNoteApplication`
+## 4. `CreditNote` / `CreditNoteApplication` — CONSTRUIDO en FASE 11
 
 Una nota de crédito es un **crédito compensatorio a favor del
 cliente**, independiente de que haya existido o no una devolución
@@ -146,39 +156,31 @@ reglas de validación:
 Puede aplicarse a facturas **nuevas** o **pendientes** (parcial o
 totalmente) — la misma factura puede recibir simultáneamente
 `PaymentAllocation` (de uno o varios `Payment`) y `CreditNoteApplication`
-(de una o varias `CreditNote`); el saldo pendiente de la factura
-(`get_sale_balance_due`, cuando se generalice) deberá restar ambas
-fuentes, nunca solo una. También podrá aplicarse a una `ProformaInvoice`
-cuando la política del tenant lo permita explícitamente (por defecto,
-no — una proforma no es todavía un compromiso definitivo, mismo
-razonamiento que ya impide que una proforma reduzca inventario por sí
-sola, ver `docs/proforma-invoices.md`); esa política es una decisión de
-la fase que implemente `CreditNoteApplication`, no de este documento.
+(de una o varias `CreditNote`); `get_sale_paid_amount`/
+`get_sale_balance_due` **ya están generalizados** (FASE 11) para restar
+ambas fuentes juntas, nunca solo una. Aplicar a una `ProformaInvoice`
+sigue sin construirse (por defecto, no — una proforma no es todavía un
+compromiso definitivo, mismo razonamiento que ya impide que una
+proforma reduzca inventario por sí sola, ver
+`docs/proforma-invoices.md`); queda como extensión futura si una fase
+posterior la necesita.
 
-## 5. `Refund`: relación con crédito y con notas de crédito
+## 5. `Refund`: relación con crédito y con notas de crédito — CONSTRUIDO
 
-`Refund` (ya construido, ver `docs/returns.md`/`docs/payments.md`)
-sigue significando **dinero que sale del sistema**. La ampliación
-conceptual pedida aquí es que un reembolso pueda, alternativamente,
-**convertirse en crédito** en vez de salir como dinero físico — decisión
-del negocio en el momento de atenderlo, no una regla automática. Esto
-NO cambia el modelo `Refund` existente hoy; el diseño futuro es:
-
-- `record_refund` (dinero sale) sigue exactamente igual — ninguna
-  fase futura debe romper su contrato actual.
-- Una función nueva (p. ej. `convert_refund_to_credit(payment, amount,
-  user, ...)`, sin construir todavía) generaría un movimiento
-  `REFUND_TO_CREDIT` en el ledger en vez de un `Refund` `COMPLETED` —
-  el dinero nunca sale del negocio, el cliente recibe saldo a favor.
-- Ambos caminos deben referenciar siempre el `Payment` original (nunca
-  un reembolso "huérfano" sin origen) y quedar auditados con acciones
-  distintas.
-- Este documento **no decide todavía** si `Refund` gana un campo
-  `converted_to_credit`/`credit_note_generated` o si
-  `convert_refund_to_credit` vive como una función separada que nunca
-  toca `Refund` — es una decisión de diseño de la fase que lo
-  construya, con la única restricción de no crear un segundo tipo de
-  "reembolso" incompatible con el actual.
+`Refund` (ver `docs/returns.md`/`docs/payments.md`) sigue significando
+**dinero que sale del sistema**, con su contrato exactamente intacto
+(`record_refund` no cambió). `services.convert_refund_to_credit(payment,
+amount, user, reason="")` (FASE 11) es la alternativa: en vez de crear
+un `Refund`, emite y activa una `CreditNote` (`source_type=REFUND`,
+`source_payment=payment`) por ese monto — el dinero nunca sale del
+negocio, el cliente recibe saldo a favor. Decisión de diseño final: no
+se agregó ningún campo a `Refund` (`converted_to_credit` nunca se
+construyó) — es una función separada que nunca toca el modelo
+`Refund`, exactamente la opción que este documento dejaba abierta.
+`get_unallocated_payment_amount(payment)` se generalizó para restar
+también lo ya convertido a crédito desde ese pago (consultando
+`CreditNote.source_payment`), así que el mismo dinero nunca puede
+reembolsarse Y convertirse a crédito a la vez.
 
 ## 6. Estado de cuenta del cliente (`Customer Statement`, vista futura)
 
@@ -212,13 +214,18 @@ originó) y **a dónde fue aplicado** (qué factura, o si sigue sin
 aplicar). Mismo estándar de trazabilidad documental que
 `Quotation → ProformaInvoice → Sale` en FASE 10 (ver `docs/sales.md`).
 
-## 8. Qué NO se construye con este documento
+## 8. Qué se construyó y qué sigue pendiente
 
-Este documento es una especificación aprobada, no una implementación.
-No se creó: ningún modelo (`CustomerCreditLedger`, `CreditNote`,
-`CreditNoteApplication`), ningún campo nuevo en `Payment`/`Refund`,
-ninguna migración, ninguna vista de "Estado de cuenta". La fase que
-primero necesite uno de estos conceptos (probablemente FASE 11 para
-anticipos/saldo a favor operacional, o una fase de Cuentas por
-Cobrar dedicada si el usuario la autoriza) debe releer este documento
-antes de diseñar, no partir de cero.
+**Construido (FASE 10 + FASE 11)**: `Payment`, `PaymentAllocation`,
+`CreditNote`, `CreditNoteApplication`; `get_customer_credit_balance`/
+`get_sale_paid_amount`/`get_sale_balance_due`/
+`get_unallocated_payment_amount` generalizados para sumar ambos
+ledgers; `convert_refund_to_credit`; anticipos y saldo a favor
+operacionales desde el POS (`docs/pos.md`).
+
+**Sigue sin construirse**: ninguna tabla `CustomerCreditLedger` (ver
+sección 3 — decisión final de no construirla), ninguna vista de
+"Estado de cuenta" (`Customer Statement`, sección 6 — sigue siendo
+FASE 14), aplicación de `CreditNoteApplication`/saldo a favor a una
+`ProformaInvoice` (sección 4). Cualquier fase futura que los necesite
+debe releer este documento antes de diseñar, no partir de cero.

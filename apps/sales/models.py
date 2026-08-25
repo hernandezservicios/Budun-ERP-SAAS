@@ -147,6 +147,7 @@ class DocumentSequence(TenantScopedModel):
         PROFORMA = "proforma", "Proforma"
         SALE = "sale", "Venta / Factura"
         RETURN = "return", "Devolución"
+        CREDIT_NOTE = "credit_note", "Nota de crédito"
 
     document_type = models.CharField("tipo de documento", max_length=20, choices=DocumentType.choices)
     prefix = models.CharField("prefijo", max_length=10)
@@ -638,6 +639,147 @@ class Refund(TenantScopedModel):
 
 
 # ---------------------------------------------------------------------
+# Notas de crédito (FASE 11: cuentas por cobrar reales — ver
+# docs/accounts-receivable.md, especificado desde la sincronización
+# previa a FASE 11). Estructuralmente análoga a Payment/PaymentAllocation:
+# `CreditNoteApplication` es el mismo tipo de ledger append-only, con la
+# misma disciplina de validación (nunca sobre-aplica, nunca cruza
+# tenant/cliente, corrige con reversa nunca con edición). El saldo a
+# favor del cliente (`services.get_customer_credit_balance`) se
+# generaliza para sumar también el saldo sin aplicar de sus notas de
+# crédito — nunca un segundo balance paralelo al de `Payment`.
+# ---------------------------------------------------------------------
+
+
+class CreditNote(TenantScopedModel):
+    """Crédito compensatorio a favor de un cliente, independiente de que
+    exista o no una devolución física asociada. Nunca altera una factura
+    histórica — la nota de crédito es el instrumento que compensa la
+    diferencia, no una edición retroactiva."""
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Borrador"
+        ISSUED = "issued", "Emitida"
+        PARTIALLY_APPLIED = "partially_applied", "Aplicada parcialmente"
+        FULLY_APPLIED = "fully_applied", "Aplicada por completo"
+        CANCELED = "canceled", "Cancelada"
+
+    class SourceType(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        RETURN = "return", "Devolución de mercancía"
+        REFUND = "refund", "Reembolso convertido a crédito"
+
+    customer = models.ForeignKey(Customer, verbose_name="cliente", on_delete=models.PROTECT, related_name="+")
+    number = models.CharField("número", max_length=30)
+    amount = models.DecimalField("monto", max_digits=12, decimal_places=2)
+    reason = models.CharField("motivo", max_length=255, blank=True)
+    status = models.CharField("estado", max_length=20, choices=Status.choices, default=Status.DRAFT)
+    source_type = models.CharField("origen", max_length=20, choices=SourceType.choices, default=SourceType.MANUAL)
+    source_return = models.ForeignKey(
+        "Return",
+        verbose_name="devolución de origen",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="credit_notes",
+    )
+    source_payment = models.ForeignKey(
+        Payment,
+        verbose_name="pago de origen (reembolso convertido a crédito)",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="credit_notes_generated",
+    )
+    issue_date = models.DateField("fecha de emisión", default=timezone.localdate)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="emitida por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField("creada", auto_now_add=True)
+    canceled_at = models.DateTimeField("cancelada el", null=True, blank=True)
+    canceled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="cancelada por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "nota de crédito"
+        verbose_name_plural = "notas de crédito"
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "number"], name="unique_creditnote_tenant_numero"),
+            models.CheckConstraint(check=models.Q(amount__gt=0), name="creditnote_monto_positivo"),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "customer", "status"], name="idx_creditnote_tenant_cliente"),
+        ]
+
+    def __str__(self):
+        return self.number
+
+
+class CreditNoteApplication(TenantScopedModel):
+    """Cuánto de una `CreditNote` se aplicó a qué `Sale` — el ledger
+    append-only, mismo patrón que `PaymentAllocation`. Nunca se edita:
+    una aplicación equivocada se corrige con `status=REVERSED`."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Activa"
+        REVERSED = "reversed", "Reversada"
+
+    credit_note = models.ForeignKey(
+        CreditNote, verbose_name="nota de crédito", on_delete=models.PROTECT, related_name="applications"
+    )
+    sale = models.ForeignKey(
+        Sale, verbose_name="venta", on_delete=models.PROTECT, related_name="credit_note_applications"
+    )
+    amount = models.DecimalField("monto aplicado", max_digits=12, decimal_places=2)
+    status = models.CharField("estado", max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="aplicada por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField("fecha", auto_now_add=True)
+    reversed_at = models.DateTimeField("reversada el", null=True, blank=True)
+    reversed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="reversada por",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "aplicación de nota de crédito"
+        verbose_name_plural = "aplicaciones de nota de crédito"
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(check=models.Q(amount__gt=0), name="creditnoteapp_monto_positivo"),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "credit_note", "status"], name="idx_cnapp_tenant_nota"),
+            models.Index(fields=["tenant", "sale", "status"], name="idx_cnapp_tenant_venta"),
+        ]
+
+    def __str__(self):
+        return f"{self.amount} — nota {self.credit_note.number} → {self.sale.number}"
+
+
+# ---------------------------------------------------------------------
 # Reservas
 # ---------------------------------------------------------------------
 
@@ -864,6 +1006,11 @@ class SalesActivityLog(TenantScopedModel):
         PAYMENT_ALLOCATION_REVERSED = "payment_allocation_reversed", "Aplicación de pago reversada"
         RETURNED = "returned", "Devuelta"
         REFUNDED = "refunded", "Reembolsada"
+        REFUND_CONVERTED_TO_CREDIT = "refund_converted_to_credit", "Reembolso convertido a crédito"
+        CREDIT_NOTE_ISSUED = "credit_note_issued", "Nota de crédito emitida"
+        CREDIT_NOTE_APPLIED = "credit_note_applied", "Nota de crédito aplicada a factura"
+        CREDIT_NOTE_APP_REVERSED = "credit_note_app_reversed", "Aplicación de nota de crédito reversada"
+        CREDIT_NOTE_CANCELED = "credit_note_canceled", "Nota de crédito cancelada"
         ATTACHMENT_UPLOADED = "attachment_uploaded", "Adjunto subido"
         ATTACHMENT_DELETED = "attachment_deleted", "Adjunto eliminado"
 

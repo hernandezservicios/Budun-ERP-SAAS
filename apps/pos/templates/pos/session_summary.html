@@ -1,0 +1,50 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Cierre de caja — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Cierre de caja</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Cierre de caja — {{ sesion.cash_register.code }}</h1>
+        <p class="encabezado-pagina__descripcion">{{ sesion.user.get_full_name|default:sesion.user.email }} · {{ sesion.opened_at|date:"d M Y H:i" }} — {{ sesion.closed_at|date:"d M Y H:i" }}</p>
+    </div>
+</div>
+
+<div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
+    <div class="kpi"><p class="kpi__etiqueta">Fondo inicial</p><p class="kpi__valor">${{ sesion.opening_amount }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Efectivo esperado</p><p class="kpi__valor">${{ sesion.expected_cash }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Efectivo contado</p><p class="kpi__valor">${{ sesion.counted_cash }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Diferencia</p><p class="kpi__valor">${{ sesion.difference }}</p></div>
+</div>
+
+{% if sesion.closing_notes %}<p class="campo__ayuda">Observaciones: {{ sesion.closing_notes }}</p>{% endif %}
+
+<h2 class="panel-seccion__titulo">Movimientos</h2>
+{% if movimientos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tipo</th><th>Monto</th><th>Motivo</th><th>Usuario</th><th>Fecha</th></tr></thead>
+        <tbody>
+            {% for movimiento in movimientos %}
+            <tr>
+                <td>{{ movimiento.get_movement_type_display }}</td>
+                <td>${{ movimiento.amount }}</td>
+                <td>{{ movimiento.reason|default:"—" }}</td>
+                <td>{% firstof movimiento.user.get_full_name movimiento.user.email "—" %}</td>
+                <td>{{ movimiento.created_at|date:"d M Y H:i" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🗂️</div><h3>Sin movimientos</h3></div>
+{% endif %}
+{% endblock %}

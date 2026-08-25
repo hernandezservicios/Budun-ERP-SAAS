@@ -1,0 +1,31 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Abrir caja — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Abrir caja</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Abrir caja</h1>
+        <p class="encabezado-pagina__descripcion">No puedes cobrar ventas de mostrador sin una sesión de caja abierta.</p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 28rem;">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Abrir caja</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

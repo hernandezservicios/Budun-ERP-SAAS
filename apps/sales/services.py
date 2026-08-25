@@ -41,6 +41,8 @@ from apps.inventory.services import (
 )
 
 from .models import (
+    CreditNote,
+    CreditNoteApplication,
     DocumentSequence,
     Payment,
     PaymentAllocation,
@@ -75,6 +77,7 @@ _PREFIJOS_POR_DEFECTO = {
     DocumentSequence.DocumentType.PROFORMA: "PRO",
     DocumentSequence.DocumentType.SALE: "FAC",
     DocumentSequence.DocumentType.RETURN: "DEV",
+    DocumentSequence.DocumentType.CREDIT_NOTE: "NC",
 }
 
 
@@ -762,6 +765,21 @@ def remove_sale_item(item):
 
 
 @transaction.atomic
+def set_sale_global_discount(sale, *, percent=None, amount=None):
+    """Actualiza el descuento GLOBAL de una venta en `DRAFT` (usado por
+    FASE 11/POS, donde el descuento puede decidirse en cualquier
+    momento del armado del carrito, no solo al crear la venta).
+    Porcentaje tiene prioridad sobre monto fijo — mismo criterio que el
+    descuento por línea, ver `recalculate_document_totals`."""
+    _require_editable_sale(sale)
+    sale.global_discount_percent = percent or Decimal("0")
+    sale.global_discount_amount = amount or Decimal("0")
+    sale.save(update_fields=["global_discount_percent", "global_discount_amount", "updated_at"])
+    recalculate_document_totals(sale)
+    return sale
+
+
+@transaction.atomic
 def confirm_sale(sale, user):
     """Confirma la venta: aplica los efectos reales en inventario
     (QUANTITY → `register_stock_out`; SERIALIZED →
@@ -841,12 +859,17 @@ def cancel_sale(sale, user, reason=""):
 
 
 def get_sale_paid_amount(sale):
-    """Suma de asignaciones ACTIVAS de pagos CONFIRMADOS aplicadas a
-    esta venta — única fuente de verdad de "cuánto se ha pagado"."""
-    total = PaymentAllocation.all_objects.filter(
+    """Suma de asignaciones ACTIVAS de pagos CONFIRMADOS Y de notas de
+    crédito aplicadas a esta venta — única fuente de verdad de "cuánto
+    se ha cubierto" (dinero + crédito juntos, nunca dos totales
+    separados: ver docs/accounts-receivable.md)."""
+    pagado = PaymentAllocation.all_objects.filter(
         tenant=sale.tenant, sale=sale, status=PaymentAllocation.Status.ACTIVE, payment__status=Payment.Status.CONFIRMED
-    ).aggregate(total=Sum("amount"))["total"]
-    return total or Decimal("0")
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    acreditado = CreditNoteApplication.all_objects.filter(
+        tenant=sale.tenant, sale=sale, status=CreditNoteApplication.Status.ACTIVE
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    return pagado + acreditado
 
 
 def get_sale_balance_due(sale):
@@ -877,38 +900,101 @@ def recompute_payment_status(sale):
 
 def get_unallocated_payment_amount(payment):
     """Saldo del pago sin aplicar a ninguna factura — monto total menos
-    lo asignado (activo) menos lo ya reembolsado. Es el "saldo a favor"
-    de ese pago concreto si nunca se aplica a nada."""
+    lo asignado (activo), menos lo ya reembolsado, menos lo ya
+    convertido en crédito (`convert_refund_to_credit`, que mueve
+    permanentemente ese monto al ledger de la `CreditNote` generada, a
+    menos que esa nota se cancele). Es el "saldo a favor" de ese pago
+    concreto si nunca se aplica a nada."""
     asignado = PaymentAllocation.all_objects.filter(
         tenant=payment.tenant, payment=payment, status=PaymentAllocation.Status.ACTIVE
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
     reembolsado = Refund.all_objects.filter(
         tenant=payment.tenant, payment=payment, status=Refund.Status.COMPLETED
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    return payment.amount - asignado - reembolsado
+    convertido_a_credito = (
+        CreditNote.all_objects.filter(tenant=payment.tenant, source_payment=payment)
+        .exclude(status=CreditNote.Status.CANCELED)
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+    return payment.amount - asignado - reembolsado - convertido_a_credito
+
+
+def get_credit_note_remaining(credit_note):
+    """Saldo de la nota de crédito sin aplicar todavía a ninguna
+    factura — mismo principio que `get_unallocated_payment_amount`,
+    calculado siempre desde `CreditNoteApplication` (nunca un campo
+    desnormalizado)."""
+    aplicado = CreditNoteApplication.all_objects.filter(
+        tenant=credit_note.tenant, credit_note=credit_note, status=CreditNoteApplication.Status.ACTIVE
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    return credit_note.amount - aplicado
 
 
 def get_customer_credit_balance(customer):
     """Saldo a favor TOTAL de un cliente: suma del saldo sin aplicar de
-    todos sus pagos confirmados. Preparación explícita para una fase
-    posterior de cuentas por cobrar con ledger completo — aquí es solo
-    una agregación de lectura sobre `Payment`/`PaymentAllocation`/
-    `Refund` ya existentes, nunca un campo ni tabla nueva de saldo."""
+    todos sus pagos confirmados MÁS el saldo sin aplicar de todas sus
+    notas de crédito emitidas — un ÚNICO saldo (nunca dos balances
+    paralelos, ver docs/accounts-receivable.md), siempre una agregación
+    de lectura sobre `Payment`/`PaymentAllocation`/`CreditNote`/
+    `CreditNoteApplication` ya existentes, nunca un campo ni tabla
+    nueva de saldo."""
     total = Decimal("0")
     pagos = Payment.all_objects.filter(tenant=customer.tenant, customer=customer, status=Payment.Status.CONFIRMED)
     for pago in pagos:
         total += get_unallocated_payment_amount(pago)
+    notas = CreditNote.all_objects.filter(
+        tenant=customer.tenant, customer=customer,
+        status__in=[CreditNote.Status.ISSUED, CreditNote.Status.PARTIALLY_APPLIED],
+    )
+    for nota in notas:
+        total += get_credit_note_remaining(nota)
     return total
+
+
+def get_sale_balance_due_bulk(sales):
+    """Saldo pendiente de VARIAS ventas en una sola pasada (3 consultas
+    en total, nunca 2×N) — usado por listados como "facturas
+    pendientes de un cliente" para evitar N+1 (FASE 11, requisito
+    explícito de revisión de performance). Devuelve `{sale.pk: saldo}`;
+    el resultado es idéntico a llamar `get_sale_balance_due` por cada
+    venta, una por una."""
+    sales = list(sales)
+    if not sales:
+        return {}
+    ids_ventas = [venta.pk for venta in sales]
+    tenant = sales[0].tenant
+
+    pagos_por_venta = dict(
+        PaymentAllocation.all_objects.filter(
+            tenant=tenant, sale_id__in=ids_ventas, status=PaymentAllocation.Status.ACTIVE,
+            payment__status=Payment.Status.CONFIRMED,
+        ).values("sale_id").annotate(total=Sum("amount")).values_list("sale_id", "total")
+    )
+    creditos_por_venta = dict(
+        CreditNoteApplication.all_objects.filter(
+            tenant=tenant, sale_id__in=ids_ventas, status=CreditNoteApplication.Status.ACTIVE,
+        ).values("sale_id").annotate(total=Sum("amount")).values_list("sale_id", "total")
+    )
+    return {
+        venta.pk: venta.total
+        - (pagos_por_venta.get(venta.pk) or Decimal("0"))
+        - (creditos_por_venta.get(venta.pk) or Decimal("0"))
+        for venta in sales
+    }
 
 
 def get_customer_pending_sales(customer):
     """Ventas confirmadas (o parcialmente devueltas) del cliente con
     saldo pendiente > 0 — las "facturas pendientes" que FASE 11 (POS)
-    debe poder cobrar. Consulta reutilizable, no un reporte (FASE 14)."""
-    ventas = Sale.all_objects.filter(
+    debe poder cobrar. Consulta reutilizable, no un reporte (FASE 14).
+    Usa `get_sale_balance_due_bulk` internamente — nunca N+1 sin
+    importar cuántas ventas tenga el cliente."""
+    ventas = list(Sale.all_objects.filter(
         tenant=customer.tenant, customer=customer, status__in=[Sale.Status.CONFIRMED, Sale.Status.PARTIALLY_RETURNED]
-    ).order_by("issue_date", "id")
-    return [venta for venta in ventas if get_sale_balance_due(venta) > 0]
+    ).order_by("issue_date", "id"))
+    saldos = get_sale_balance_due_bulk(ventas)
+    return [venta for venta in ventas if saldos.get(venta.pk, Decimal("0")) > 0]
 
 
 @transaction.atomic
@@ -1166,6 +1252,210 @@ def record_refund(payment, *, amount, user, reason="", return_document=None):
         action=SalesActivityLog.Action.REFUNDED, user=user, details=f"{refund.amount}",
     )
     return refund
+
+
+# ------------------------------------------------------------------
+# Notas de crédito (FASE 11 — ver docs/accounts-receivable.md)
+#
+# Estructuralmente análoga a Payment/PaymentAllocation: misma
+# disciplina de validación (select_for_update() sobre ambas filas,
+# nunca sobre-aplica, nunca cruza tenant/cliente, corrige con reversa
+# nunca con edición). El saldo a favor de un cliente y el saldo
+# pendiente de una factura ya suman esto automáticamente (ver
+# `get_customer_credit_balance`/`get_sale_paid_amount` arriba).
+# ------------------------------------------------------------------
+
+
+@transaction.atomic
+def create_credit_note(tenant, *, customer, amount, user, reason="", source_type=CreditNote.SourceType.MANUAL, source_return=None, source_payment=None, issue_date=None):
+    """Crea una nota de crédito en DRAFT — todavía no genera saldo a
+    favor (mismo principio que `Quotation` DRAFT: existe pero no
+    compromete nada). Emitirla (`issue_credit_note`) es el paso que la
+    activa."""
+    if customer is None:
+        raise InvalidSalesOperation("Una nota de crédito siempre debe tener un cliente.")
+    if amount is None or amount <= 0:
+        raise InvalidSalesOperation("El monto de la nota de crédito debe ser mayor que cero.")
+    numero = generate_document_number(tenant, DocumentSequence.DocumentType.CREDIT_NOTE)
+    nota = CreditNote.all_objects.create(
+        tenant=tenant, customer=customer, number=numero, amount=amount, reason=reason,
+        source_type=source_type, source_return=source_return, source_payment=source_payment,
+        issue_date=issue_date or timezone.localdate(), user=user,
+    )
+    log_activity(
+        tenant, entity_type="credit_note", entity_id=nota.pk, entity_label=numero,
+        action=SalesActivityLog.Action.CREATED, user=user, details=reason,
+    )
+    return nota
+
+
+@transaction.atomic
+def issue_credit_note(credit_note, user):
+    """DRAFT → ISSUED: a partir de aquí la nota genera saldo a favor
+    real (`get_customer_credit_balance` ya la cuenta). Idempotente:
+    emitir una nota ya emitida es un no-op."""
+    locked = CreditNote.all_objects.select_for_update().get(pk=credit_note.pk, tenant=credit_note.tenant)
+    if locked.status == CreditNote.Status.ISSUED:
+        return locked
+    if locked.status != CreditNote.Status.DRAFT:
+        raise InvalidSalesOperation(
+            f"La nota de crédito «{locked.number}» no se puede emitir desde {locked.get_status_display()}."
+        )
+    locked.status = CreditNote.Status.ISSUED
+    locked.save(update_fields=["status"])
+    log_activity(
+        locked.tenant, entity_type="credit_note", entity_id=locked.pk, entity_label=locked.number,
+        action=SalesActivityLog.Action.CREDIT_NOTE_ISSUED, user=user,
+    )
+    return locked
+
+
+def _recompute_credit_note_status(nota):
+    """Deriva el estado de la nota ÚNICAMENTE de su saldo restante
+    (`get_credit_note_remaining`) — nunca asumido. `CANCELED` es
+    terminal y nunca se recalcula desde aquí."""
+    if nota.status == CreditNote.Status.CANCELED:
+        return nota.status
+    restante = get_credit_note_remaining(nota)
+    if restante <= 0:
+        estado = CreditNote.Status.FULLY_APPLIED
+    elif restante < nota.amount:
+        estado = CreditNote.Status.PARTIALLY_APPLIED
+    else:
+        estado = CreditNote.Status.ISSUED
+    CreditNote.all_objects.filter(pk=nota.pk).update(status=estado)
+    return estado
+
+
+@transaction.atomic
+def apply_credit_note(credit_note, sale, amount, user):
+    """Aplica `amount` de una nota de crédito a una factura concreta —
+    mismas reglas que `allocate_payment`: bloquea ambas filas antes de
+    validar, nunca excede el saldo de la nota ni el saldo pendiente de
+    la factura, nunca cruza tenant ni cliente."""
+    locked_note = CreditNote.all_objects.select_for_update().get(pk=credit_note.pk, tenant=credit_note.tenant)
+    locked_sale = Sale.all_objects.select_for_update().get(pk=sale.pk, tenant=sale.tenant)
+
+    if locked_note.tenant_id != locked_sale.tenant_id:
+        raise InvalidSalesOperation("La nota de crédito y la venta deben pertenecer al mismo tenant.")
+    if locked_note.customer_id != locked_sale.customer_id:
+        raise InvalidSalesOperation("Una nota de crédito solo puede aplicarse a facturas del mismo cliente.")
+    if locked_note.status not in (CreditNote.Status.ISSUED, CreditNote.Status.PARTIALLY_APPLIED):
+        raise InvalidSalesOperation(
+            f"Solo una nota de crédito emitida puede aplicarse (estado actual: {locked_note.get_status_display()})."
+        )
+    if locked_sale.status not in (Sale.Status.CONFIRMED, Sale.Status.PARTIALLY_RETURNED):
+        raise InvalidSalesOperation(
+            f"Solo se puede aplicar una nota de crédito a una venta confirmada (estado actual: {locked_sale.get_status_display()})."
+        )
+    if amount is None or amount <= 0:
+        raise InvalidSalesOperation("El monto a aplicar debe ser mayor que cero.")
+
+    disponible_nota = get_credit_note_remaining(locked_note)
+    if amount > disponible_nota:
+        raise InvalidSalesOperation(f"La nota de crédito solo tiene {disponible_nota} disponible sin aplicar.")
+    saldo_factura = get_sale_balance_due(locked_sale)
+    if amount > saldo_factura:
+        raise InvalidSalesOperation(f"La venta «{locked_sale.number}» solo tiene {saldo_factura} pendiente.")
+
+    aplicacion = CreditNoteApplication.all_objects.create(
+        tenant=locked_note.tenant, credit_note=locked_note, sale=locked_sale, amount=amount, user=user,
+    )
+    _recompute_credit_note_status(locked_note)
+    recompute_payment_status(locked_sale)
+    log_activity(
+        locked_sale.tenant, entity_type="sale", entity_id=locked_sale.pk, entity_label=locked_sale.number,
+        action=SalesActivityLog.Action.CREDIT_NOTE_APPLIED, user=user,
+        details=f"{amount} de la nota {locked_note.number}",
+    )
+    return aplicacion
+
+
+@transaction.atomic
+def reverse_credit_note_application(application, user):
+    """Deshace una aplicación de nota de crédito: libera el saldo
+    pendiente de la factura y devuelve el monto al saldo sin aplicar de
+    la nota. Idempotente."""
+    locked = CreditNoteApplication.all_objects.select_for_update().get(pk=application.pk, tenant=application.tenant)
+    if locked.status == CreditNoteApplication.Status.REVERSED:
+        return locked
+    locked.status = CreditNoteApplication.Status.REVERSED
+    locked.reversed_at = timezone.now()
+    locked.reversed_by = user
+    locked.save(update_fields=["status", "reversed_at", "reversed_by"])
+
+    nota = CreditNote.all_objects.select_for_update().get(pk=locked.credit_note_id, tenant=locked.tenant)
+    _recompute_credit_note_status(nota)
+    recompute_payment_status(locked.sale)
+    log_activity(
+        locked.tenant, entity_type="sale", entity_id=locked.sale_id, entity_label=locked.sale.number,
+        action=SalesActivityLog.Action.CREDIT_NOTE_APP_REVERSED, user=user,
+        details=f"{locked.amount} de la nota {nota.number}",
+    )
+    return locked
+
+
+@transaction.atomic
+def cancel_credit_note(credit_note, user, reason=""):
+    """Solo se puede cancelar una nota `DRAFT` o `ISSUED` SIN
+    aplicaciones activas — mismo principio que `Return`: nunca dos
+    caminos de reversión que puedan divergir. Si ya tiene aplicaciones,
+    hay que revertirlas primero con `reverse_credit_note_application`.
+    Idempotente."""
+    locked = CreditNote.all_objects.select_for_update().get(pk=credit_note.pk, tenant=credit_note.tenant)
+    if locked.status == CreditNote.Status.CANCELED:
+        return locked
+    if locked.status not in (CreditNote.Status.DRAFT, CreditNote.Status.ISSUED):
+        raise InvalidSalesOperation(
+            f"La nota de crédito «{locked.number}» no se puede cancelar desde {locked.get_status_display()}."
+        )
+    if CreditNoteApplication.all_objects.filter(
+        tenant=locked.tenant, credit_note=locked, status=CreditNoteApplication.Status.ACTIVE
+    ).exists():
+        raise InvalidSalesOperation(
+            "No se puede cancelar una nota de crédito con aplicaciones activas: revierte las aplicaciones primero."
+        )
+    locked.status = CreditNote.Status.CANCELED
+    locked.canceled_at = timezone.now()
+    locked.canceled_by = user
+    locked.save(update_fields=["status", "canceled_at", "canceled_by"])
+    log_activity(
+        locked.tenant, entity_type="credit_note", entity_id=locked.pk, entity_label=locked.number,
+        action=SalesActivityLog.Action.CREDIT_NOTE_CANCELED, user=user, details=reason,
+    )
+    return locked
+
+
+@transaction.atomic
+def convert_refund_to_credit(payment, amount, user, reason=""):
+    """Alternativa a `record_refund`: en vez de sacar dinero del
+    sistema, emite una `CreditNote` a favor del cliente del pago por el
+    monto indicado — el dinero nunca sale del negocio. Misma validación
+    que un reembolso real: solo puede salir del saldo SIN APLICAR del
+    pago (`get_unallocated_payment_amount`, que ya excluye lo
+    previamente convertido). Preserva intacto el contrato de
+    `record_refund` — ver docs/accounts-receivable.md sección 5."""
+    locked_payment = Payment.all_objects.select_for_update().get(pk=payment.pk, tenant=payment.tenant)
+    if locked_payment.customer_id is None:
+        raise InvalidSalesOperation("Un pago sin cliente no puede convertirse en crédito: no hay a quién atribuírselo.")
+    if amount is None or amount <= 0:
+        raise InvalidSalesOperation("El monto a convertir en crédito debe ser mayor que cero.")
+    disponible = get_unallocated_payment_amount(locked_payment)
+    if amount > disponible:
+        raise InvalidSalesOperation(f"Solo hay {disponible} sin aplicar en este pago para convertir en crédito.")
+
+    nota = create_credit_note(
+        locked_payment.tenant, customer=locked_payment.customer, amount=amount, user=user, reason=reason,
+        source_type=CreditNote.SourceType.REFUND, source_payment=locked_payment,
+    )
+    nota = issue_credit_note(nota, user)
+    log_activity(
+        locked_payment.tenant, entity_type="payment", entity_id=locked_payment.pk,
+        entity_label=f"{locked_payment.get_method_display()} {locked_payment.amount}",
+        action=SalesActivityLog.Action.REFUND_CONVERTED_TO_CREDIT, user=user,
+        details=f"{amount} → {nota.number}",
+    )
+    return nota
 
 
 # ------------------------------------------------------------------

@@ -1,6 +1,8 @@
 from django.contrib import admin
 
 from .models import (
+    CreditNote,
+    CreditNoteApplication,
     DocumentSequence,
     Payment,
     PaymentAllocation,
@@ -123,6 +125,37 @@ class PaymentAllocationAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return PaymentAllocation.all_objects.select_related("tenant", "payment", "sale")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CreditNote)
+class CreditNoteAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "customer", "status", "source_type", "amount", "issue_date")
+    list_filter = ("tenant", "status", "source_type")
+    search_fields = ("number",)
+
+    def get_queryset(self, request):
+        return CreditNote.all_objects.select_related("tenant", "customer")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CreditNoteApplication)
+class CreditNoteApplicationAdmin(admin.ModelAdmin):
+    list_display = ("credit_note", "sale", "tenant", "amount", "status", "created_at")
+    list_filter = ("tenant", "status")
+
+    def get_queryset(self, request):
+        return CreditNoteApplication.all_objects.select_related("tenant", "credit_note", "sale")
 
     def has_add_permission(self, request):
         return False

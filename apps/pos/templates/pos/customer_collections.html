@@ -1,0 +1,133 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Cobrar cliente — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'pos:collections_search' %}">Cobros</a></li>
+        <li aria-current="page">{{ customer.display_name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ customer.display_name }}</h1>
+        <p class="encabezado-pagina__descripcion">Cuentas por cobrar de este cliente.</p>
+    </div>
+</div>
+
+<div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
+    <div class="kpi"><p class="kpi__etiqueta">Saldo a favor</p><p class="kpi__valor">${{ resumen.balance }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Facturas pendientes</p><p class="kpi__valor">{{ pending_sales|length }}</p></div>
+</div>
+
+<h2 class="panel-seccion__titulo">Facturas pendientes</h2>
+{% if pending_sales %}
+<div class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <form method="post" action="{% url 'pos:collect_payment' customer.pk %}" novalidate>
+            {% csrf_token %}
+            <div class="tabla-envoltorio">
+                <table class="tabla">
+                    <thead><tr><th></th><th>Factura</th><th>Total</th><th>Saldo pendiente</th></tr></thead>
+                    <tbody>
+                        {% for fila in pending_sales %}
+                        <tr>
+                            <td><input type="checkbox" name="sale_ids" value="{{ fila.sale.pk }}"></td>
+                            <td><a href="{% url 'sales:sale_detail' fila.sale.pk %}">{{ fila.sale.number }}</a></td>
+                            <td>${{ fila.sale.total }}</td>
+                            <td>${{ fila.balance_due }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="campo__ayuda">Selecciona una o varias facturas — el pago se distribuye entre ellas en el orden mostrado hasta agotar el monto (aplicar un solo pago a varias facturas del mismo cliente).</p>
+            {% for field in collect_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Cobrar seleccionadas</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">✅</div><h3>Sin facturas pendientes</h3></div>
+{% endif %}
+
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--espacio-6);">
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <h3 class="panel-seccion__titulo">Registrar anticipo</h3>
+            <p class="campo__ayuda">Dinero recibido antes de una factura — no es una venta.</p>
+            <form method="post" action="{% url 'pos:register_advance' customer.pk %}" novalidate>
+                {% csrf_token %}
+                {% for field in advance_form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+                <button type="submit" class="btn btn--contorno">Registrar anticipo</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <h3 class="panel-seccion__titulo">Emitir nota de crédito</h3>
+            <form method="post" action="{% url 'pos:issue_credit_note' customer.pk %}" novalidate>
+                {% csrf_token %}
+                {% for field in credit_note_form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+                <button type="submit" class="btn btn--contorno">Emitir nota de crédito</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if pending_sales %}
+<div class="tarjeta" style="margin-top: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Aplicar saldo a favor a una factura</h3>
+        <form method="post" action="{% url 'pos:apply_credit' customer.pk pending_sales.0.sale.pk %}" novalidate>
+            {% csrf_token %}
+            <p class="campo__ayuda">Se aplicará a «{{ pending_sales.0.sale.number }}» (la más antigua pendiente). {{ credit_form.amount.label }}:</p>
+            {% for field in credit_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--contorno">Aplicar saldo a favor</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<h2 class="panel-seccion__titulo" style="margin-top: var(--espacio-8);">Pagos (reembolsos)</h2>
+{% if pagos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Método</th><th>Monto</th><th>Disponible sin aplicar</th><th>Fecha</th><th></th></tr></thead>
+        <tbody>
+            {% for fila in pagos %}
+            <tr>
+                <td>{{ fila.payment.get_method_display }}</td>
+                <td>${{ fila.payment.amount }}</td>
+                <td>${{ fila.disponible }}</td>
+                <td>{{ fila.payment.created_at|date:"d M Y" }}</td>
+                <td>
+                    {% if fila.disponible > 0 %}
+                    <form method="post" action="{% url 'pos:refund_payment' customer.pk fila.payment.pk %}" style="display:flex; gap: var(--espacio-2); align-items:center;">
+                        {% csrf_token %}
+                        {% for field in refund_form %}{{ field }}{% endfor %}
+                        <button type="submit" class="btn btn--contorno btn--sm">Reembolsar</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💳</div><h3>Sin pagos todavía</h3></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,171 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Punto de Venta — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<div class="encabezado-pagina">
+    <div>
+        <h1>Punto de Venta</h1>
+        <p class="encabezado-pagina__descripcion">Carrito {{ sale.number|default:"(sin número — se asigna al confirmar)" }}</p>
+    </div>
+    <form method="post" action="{% url 'pos:cancel_cart' sale.pk %}" onsubmit="return confirm('¿Cancelar este carrito?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--contorno">Cancelar carrito</button>
+    </form>
+</div>
+
+{% if sesion %}
+<div class="alerta alerta--info" style="margin-bottom: var(--espacio-4);">
+    Caja <strong>{{ sesion.cash_register.code }}</strong> abierta desde {{ sesion.opened_at|date:"d M Y H:i" }}.
+    <a href="{% url 'pos:session_close' %}">Cerrar caja</a>
+</div>
+{% else %}
+<div class="alerta alerta--advertencia" style="margin-bottom: var(--espacio-4);">
+    No tienes una sesión de caja abierta. <a href="{% url 'pos:session_open' %}">Abrir caja</a> antes de cobrar.
+</div>
+{% endif %}
+
+{% if solicitudes_aprobadas %}
+<div class="alerta alerta--exito" style="margin-bottom: var(--espacio-4);">
+    Tienes autorizaciones APROBADAS pendientes de usar en esta venta: reintenta agregar el mismo artículo/descuento.
+    {% for solicitud in solicitudes_aprobadas %}<div>#{{ solicitud.pk }} — {{ solicitud.get_action_type_display }} — {{ solicitud.approved_value }}</div>{% endfor %}
+</div>
+{% endif %}
+
+<div class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Buscar producto</h3>
+        <form method="get" style="display:flex; gap: var(--espacio-3); align-items:flex-end;">
+            {% for field in search_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Buscar</button>
+        </form>
+
+        {% if resultados %}
+        <div class="tabla-envoltorio" style="margin-top: var(--espacio-4);">
+            <table class="tabla">
+                <thead><tr><th>Producto</th><th>SKU</th><th>Precio</th><th>Unidad</th><th>Cantidad</th><th>Descuento %</th><th>Descuento $</th><th></th></tr></thead>
+                <tbody>
+                    {% for resultado in resultados %}
+                    <tr>
+                        <td>{{ resultado.product.name }}</td>
+                        <td>{{ resultado.product.sku }}</td>
+                        <td>${{ resultado.product.sale_price }}</td>
+                        <td>
+                            {% if resultado.requires_unit_selection %}
+                            <span class="badge badge--advertencia">Requiere IMEI/serie</span>
+                            {% elif resultado.unit %}
+                            {% firstof resultado.unit.serial resultado.unit.imei_1 %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td colspan="3">
+                            <form method="post" action="{% url 'pos:add_item' sale.pk %}" style="display:flex; gap: var(--espacio-2); align-items:center;">
+                                {% csrf_token %}
+                                <input type="hidden" name="product_id" value="{{ resultado.product.pk }}">
+                                {% if resultado.unit %}
+                                <input type="hidden" name="unit_identifier" value="{% firstof resultado.unit.serial resultado.unit.imei_1 %}">
+                                {% elif resultado.requires_unit_selection %}
+                                <input type="text" name="unit_identifier" placeholder="IMEI/serie" required style="width:9rem;">
+                                {% endif %}
+                                <input type="number" name="quantity" value="1" min="0.001" step="0.001" style="width:5rem;">
+                                <input type="number" name="discount_percent" placeholder="%" min="0" max="100" step="0.01" style="width:5rem;">
+                                <input type="number" name="discount_amount" placeholder="$" min="0" step="0.01" style="width:5rem;">
+                                <button type="submit" class="btn btn--primario btn--sm">Agregar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% elif search_form.q.value %}
+        <p class="campo__ayuda">Sin resultados para «{{ search_form.q.value }}».</p>
+        {% endif %}
+    </div>
+</div>
+
+<h2 class="panel-seccion__titulo">Carrito</h2>
+{% if items %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Producto</th><th>Unidad</th><th>Cant.</th><th>Precio</th><th>Descuento</th><th>Impuesto</th><th>Total</th><th></th></tr></thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.description }}</td>
+                <td>{% if item.inventory_unit %}···{{ item.inventory_unit.serial|default:item.inventory_unit.imei_1|slice:"-4:" }}{% else %}—{% endif %}</td>
+                <td>{{ item.quantity|floatformat:"-3" }}</td>
+                <td>${{ item.unit_price }}</td>
+                <td>${{ item.discount_amount }}</td>
+                <td>${{ item.tax_amount }}</td>
+                <td>${{ item.total }}</td>
+                <td>
+                    <form method="post" action="{% url 'pos:remove_item' sale.pk item.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--contorno btn--sm">Quitar</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🛒</div><h3>Carrito vacío</h3><p>Busca un producto arriba para agregarlo.</p></div>
+{% endif %}
+
+<div class="kpi-grid" style="margin: var(--espacio-6) 0;">
+    <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor">${{ sale.subtotal }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor">${{ sale.discount_total }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor">${{ sale.tax_total }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Total</p><p class="kpi__valor">${{ sale.total }}</p></div>
+</div>
+
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--espacio-6);">
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <h3 class="panel-seccion__titulo">Cliente</h3>
+            <p class="campo__ayuda">Actual: {% if sale.customer %}{{ sale.customer.display_name }}{% else %}Consumidor final{% endif %}</p>
+            <form method="post" action="{% url 'pos:set_customer' sale.pk %}" novalidate>
+                {% csrf_token %}
+                {% for field in customer_form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+                <button type="submit" class="btn btn--contorno">Actualizar cliente</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <h3 class="panel-seccion__titulo">Descuento global</h3>
+            <form method="post" action="{% url 'pos:set_global_discount' sale.pk %}" novalidate>
+                {% csrf_token %}
+                {% for field in discount_form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+                <button type="submit" class="btn btn--contorno">Aplicar descuento</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="tarjeta" style="margin-top: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Cobrar</h3>
+        <form method="post" action="{% url 'pos:checkout' sale.pk %}" novalidate>
+            {% csrf_token %}
+            {{ payment_formset.management_form }}
+            {% for pago_form in payment_formset %}
+            <div style="display:flex; gap: var(--espacio-3); margin-bottom: var(--espacio-2);">
+                {% for field in pago_form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Confirmar y cobrar</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

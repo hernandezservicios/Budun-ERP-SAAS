@@ -1,9 +1,11 @@
-# Cajas y Sesiones de Caja (especificación)
+# Cajas y Sesiones de Caja
 
-> **Estado: ESPECIFICACIÓN, no implementación.** `CashRegister` y
-> `CashSession` son diseño aprobado para FASE 11 (POS) — ningún modelo,
-> vista ni migración se crea a partir de este documento. FASE 11 debe
-> releerlo antes de implementar el módulo de caja.
+> **Estado: CONSTRUIDO en FASE 11** (`apps/pos`). Este documento se
+> escribió originalmente como especificación previa a la fase; el
+> diseño se implementó tal como está descrito aquí, sin desviaciones.
+> Ver `docs/pos.md` para el resumen operacional completo (checkout,
+> descuentos, cobros) y detalles de implementación adicionales
+> (`IntegrityError` traducido, fondo inicial en 0, etc.).
 
 ## 1. Múltiples cajas por tenant (requisito oficial)
 
@@ -156,10 +158,18 @@ verdad de ventas/pagos:
 - Una "devolución en efectivo" sigue siendo `services.record_refund(...)`
   con el método heredado del `Payment` original.
 
-## 10. Qué NO se construye con este documento
+## 10. Estado de implementación (FASE 11)
 
-Ningún modelo (`CashRegister`, `CashSession`, `CashMovement`), ningún
-campo nuevo en `Payment` (`cash_session`), ninguna vista de apertura/
-cierre. Diseño aprobado para que FASE 11 lo implemente sin tener que
-re-derivarlo desde cero ni inventar una arquitectura incompatible con
-`apps.sales`.
+`CashRegister`, `CashSession` y `CashMovement` están construidos en
+`apps/pos` tal como se diseñó aquí, con una diferencia menor respecto
+a la sección 3: **no se agregó un campo `cash_session` a `Payment`**
+— en su lugar, `apps.pos.services` crea el `CashMovement`
+correspondiente (`SALE_CASH`/`CUSTOMER_ADVANCE_CASH`/`CASH_REFUND`)
+referenciando el `Payment`/`Refund` de origen mediante
+`reference_type`/`reference_id` (referencia genérica, mismo patrón ya
+usado por `SalesActivityLog`), evitando acoplar `apps.sales` a
+`apps.pos`. Ver `docs/pos.md` para el resto de detalles de
+implementación (incluyendo la exclusividad de sesión por usuario, que
+no tiene una única fila que bloquear con `select_for_update()` y se
+resuelve traduciendo el `IntegrityError` de la `UniqueConstraint` a
+`InvalidPosOperation`).
