@@ -1,0 +1,21 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error del servidor — ERP SaaS</title>
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/design-system.css' %}">
+</head>
+<body>
+    {# Django renderiza 500.html sin contexto de request (sin messages, #}
+    {# sin request.user): esta plantilla es deliberadamente autocontenida #}
+    {# y no depende de nada de eso, ni extiende base.html. #}
+    <main class="pagina-error" id="contenido-principal">
+        <div class="pagina-error__codigo">500</div>
+        <h1>Algo salió mal</h1>
+        <p>Ocurrió un error inesperado en el servidor. Ya quedó registrado; inténtalo de nuevo en unos minutos.</p>
+        <a class="btn btn--primario" href="/">Volver al inicio</a>
+    </main>
+</body>
+</html>

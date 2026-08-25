@@ -1,38 +1,49 @@
-{% load static %}<!DOCTYPE html>
+{% load static ui_extras %}<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}ERP SaaS{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/design-system.css' %}">
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
-    {% block topbar %}
-    <nav class="barra-superior">
-        <a class="marca" href="{% url 'core:home' %}">ERP SaaS</a>
-        <div class="enlaces">
+    <a class="enlace-saltar" href="#contenido-principal">Saltar al contenido principal</a>
+
+    {% if messages %}
+    <div class="toasts" role="region" aria-label="Notificaciones">
+        {% for message in messages %}
+        <div class="toast toast--{{ message.tags|clase_toast }}" role="status" aria-live="polite">
+            <span>{{ message }}</span>
+            <button type="button" class="toast__cerrar" aria-label="Cerrar notificación">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% block body %}
+    {% block navbar %}
+    <nav class="navbar-publico" aria-label="Navegación principal">
+        <a class="navbar-publico__marca" href="{% url 'core:home' %}">ERP SaaS</a>
+        <div class="navbar-publico__enlaces">
             {% if request.user.is_authenticated %}
                 <a href="{% url 'accounts:perfil' %}">Mi perfil</a>
-                <form action="{% url 'accounts:logout' %}" method="post" class="form-logout">
+                <form action="{% url 'accounts:logout' %}" method="post">
                     {% csrf_token %}
-                    <button type="submit">Cerrar sesión</button>
+                    <button type="submit" class="enlace-boton">Cerrar sesión</button>
                 </form>
             {% else %}
                 <a href="{% url 'accounts:login' %}">Iniciar sesión</a>
-                <a href="{% url 'accounts:registro' %}">Registrarse</a>
+                <a class="btn btn--primario btn--sm" href="{% url 'accounts:registro' %}">Registrarse</a>
             {% endif %}
         </div>
     </nav>
     {% endblock %}
-
-    {% if messages %}
-    <ul class="mensajes">
-        {% for message in messages %}
-        <li class="mensaje mensaje-{{ message.tags }}">{{ message }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-
     {% block content %}{% endblock %}
+    {% endblock %}
+
+    <script src="{% static 'js/ui.js' %}"></script>
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -3,18 +3,16 @@
 {% block title %}Configura tu empresa — ERP SaaS{% endblock %}
 
 {% block content %}
-<main class="contenedor-formulario">
+<main class="auth-card" id="contenido-principal">
     <h1>Configura tu empresa</h1>
     <p>Este será el nombre de tu empresa dentro del sistema. Podrás cambiarlo más adelante.</p>
     <form method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
-        <ul class="errores">
-            {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
-        </ul>
+        <div class="alerta alerta--peligro" role="alert">{{ form.non_field_errors }}</div>
         {% endif %}
         {% for field in form %}
-        <p>
+        <div class="campo">
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
             {{ field }}
             {% if field.errors %}
@@ -22,9 +20,9 @@
                 {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
             </ul>
             {% endif %}
-        </p>
+        </div>
         {% endfor %}
-        <button type="submit">Continuar</button>
+        <button type="submit" class="btn btn--primario btn--bloque">Continuar</button>
     </form>
 </main>
 {% endblock %}

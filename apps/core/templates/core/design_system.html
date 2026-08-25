@@ -1,0 +1,228 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Design System — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'core:home' %}">Inicio</a></li>
+        <li aria-current="page">Design System</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Design System</h1>
+        <p class="encabezado-pagina__descripcion">
+            Página de referencia interna (FASE 5): todos los componentes reutilizables del ERP,
+            con datos de ejemplo. No es una página de negocio.
+        </p>
+    </div>
+</div>
+
+<section aria-labelledby="titulo-botones">
+    <h2 id="titulo-botones">Botones</h2>
+    <div style="display:flex; flex-wrap:wrap; gap: var(--espacio-3); margin-bottom: var(--espacio-6);">
+        <button class="btn btn--primario">Primario</button>
+        <button class="btn btn--secundario">Secundario</button>
+        <button class="btn btn--contorno">Contorno</button>
+        <button class="btn btn--fantasma">Fantasma</button>
+        <button class="btn btn--peligro">Peligro</button>
+        <button class="btn btn--primario" disabled>Deshabilitado</button>
+        <button class="btn btn--primario btn--cargando">Cargando</button>
+        <button class="btn btn--primario btn--sm">Pequeño</button>
+        <button class="btn btn--primario btn--lg">Grande</button>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-formularios">
+    <h2 id="titulo-formularios">Formularios (inputs, selects)</h2>
+    <div class="tarjeta" style="margin-bottom: var(--espacio-6);">
+        <div class="tarjeta__cuerpo">
+            <div class="campo">
+                <label for="ds-nombre">Nombre</label>
+                <input type="text" id="ds-nombre" class="input" placeholder="Ej. Ana Pérez">
+                <p class="campo__ayuda">Texto de ayuda opcional.</p>
+            </div>
+            <div class="campo">
+                <label for="ds-email">Correo con error</label>
+                <input type="email" id="ds-email" class="input campo-invalido" value="correo-invalido">
+                <ul class="errores"><li>Introduce un correo electrónico válido.</li></ul>
+            </div>
+            <div class="campo">
+                <label for="ds-select">Selección</label>
+                <select id="ds-select" class="select">
+                    <option>Opción A</option>
+                    <option>Opción B</option>
+                </select>
+            </div>
+            <div class="campo">
+                <label for="ds-deshabilitado">Deshabilitado</label>
+                <input type="text" id="ds-deshabilitado" class="input" value="No editable" disabled>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-badges">
+    <h2 id="titulo-badges">Badges</h2>
+    <div style="display:flex; flex-wrap:wrap; gap: var(--espacio-2); margin-bottom: var(--espacio-6);">
+        <span class="badge badge--neutro">Neutro</span>
+        <span class="badge badge--azul">Azul</span>
+        <span class="badge badge--verde">Verde</span>
+        <span class="badge badge--advertencia">Advertencia</span>
+        <span class="badge badge--peligro">Peligro</span>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-alertas">
+    <h2 id="titulo-alertas">Alerts</h2>
+    <div class="alerta alerta--info" role="status">
+        <span>Alerta informativa: así se ve un mensaje neutro.</span>
+        <button type="button" class="alerta__cerrar" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="alerta alerta--exito" role="status">
+        <span>Alerta de éxito: la operación se completó correctamente.</span>
+        <button type="button" class="alerta__cerrar" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="alerta alerta--advertencia" role="status">
+        <span>Alerta de advertencia: revisa este dato antes de continuar.</span>
+        <button type="button" class="alerta__cerrar" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="alerta alerta--peligro" role="alert">
+        <span>Alerta de peligro: ocurrió un error al procesar la solicitud.</span>
+        <button type="button" class="alerta__cerrar" aria-label="Cerrar">&times;</button>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-toasts">
+    <h2 id="titulo-toasts">Toasts</h2>
+    <p>Los toasts reales aparecen arriba a la derecha (ver <code>django.contrib.messages</code> en <code>base.html</code>). Vista previa estática:</p>
+    <div style="position:relative; margin-bottom: var(--espacio-6);">
+        <div class="toast toast--exito" style="position:static; margin-bottom: var(--espacio-2);">
+            <span>Cambios guardados correctamente.</span>
+            <button type="button" class="toast__cerrar" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="toast toast--peligro" style="position:static;">
+            <span>No se pudo completar la operación.</span>
+            <button type="button" class="toast__cerrar" aria-label="Cerrar">&times;</button>
+        </div>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-tarjetas">
+    <h2 id="titulo-tarjetas">Cards</h2>
+    <div class="tarjeta" style="max-width: 360px; margin-bottom: var(--espacio-6);">
+        <div class="tarjeta__encabezado">Encabezado de la tarjeta</div>
+        <div class="tarjeta__cuerpo">Cuerpo de la tarjeta con contenido de ejemplo.</div>
+        <div class="tarjeta__pie"><button class="btn btn--primario btn--sm">Acción</button></div>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-tablas">
+    <h2 id="titulo-tablas">Tablas</h2>
+    <div class="tabla-envoltorio" style="margin-bottom: var(--espacio-3);">
+        <table class="tabla">
+            <thead>
+                <tr><th>Nombre</th><th>Estado</th><th>Fecha</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Registro de ejemplo 1</td><td><span class="badge badge--verde">Activo</span></td><td>2026-08-24</td></tr>
+                <tr><td>Registro de ejemplo 2</td><td><span class="badge badge--advertencia">Pendiente</span></td><td>2026-08-23</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+        <table class="tabla">
+            <thead><tr><th>Nombre</th></tr></thead>
+            <tbody>
+                <tr class="tabla__vacio"><td>No hay registros todavía.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <nav class="paginacion" aria-label="Paginación de ejemplo">
+        <span class="deshabilitado">&laquo; Anterior</span>
+        <span class="actual">1</span>
+        <a href="#">2</a>
+        <a href="#">3</a>
+        <a href="#">Siguiente &raquo;</a>
+    </nav>
+</section>
+
+<section aria-labelledby="titulo-tabs">
+    <h2 id="titulo-tabs">Tabs</h2>
+    <div data-tabs style="margin-bottom: var(--espacio-6);">
+        <div class="tabs__lista" role="tablist" aria-label="Ejemplo de pestañas">
+            <button class="tabs__boton" role="tab" id="tab-uno" aria-controls="panel-uno" aria-selected="true" tabindex="0">Pestaña uno</button>
+            <button class="tabs__boton" role="tab" id="tab-dos" aria-controls="panel-dos" aria-selected="false" tabindex="-1">Pestaña dos</button>
+        </div>
+        <div id="panel-uno" role="tabpanel" aria-labelledby="tab-uno" class="tabs__panel">Contenido de la primera pestaña.</div>
+        <div id="panel-dos" role="tabpanel" aria-labelledby="tab-dos" class="tabs__panel" hidden>Contenido de la segunda pestaña.</div>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-dropdown">
+    <h2 id="titulo-dropdown">Dropdown</h2>
+    <div class="dropdown" data-dropdown style="margin-bottom: var(--espacio-6);">
+        <button type="button" class="btn btn--contorno" data-dropdown-trigger aria-haspopup="true" aria-expanded="false">Opciones ▾</button>
+        <div class="dropdown__menu" data-dropdown-menu hidden role="menu">
+            <button type="button" class="dropdown__item" role="menuitem">Editar</button>
+            <button type="button" class="dropdown__item" role="menuitem">Duplicar</button>
+            <button type="button" class="dropdown__item" role="menuitem">Eliminar</button>
+        </div>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-modal">
+    <h2 id="titulo-modal">Modal</h2>
+    <div style="margin-bottom: var(--espacio-6);">
+        <button type="button" class="btn btn--primario" data-modal-open="modal-ejemplo">Abrir modal</button>
+        <dialog id="modal-ejemplo" class="modal">
+            <div class="modal__encabezado">
+                <h2>Confirmar acción</h2>
+                <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal__cuerpo">
+                <p>Este es un modal de ejemplo usando el elemento nativo <code>&lt;dialog&gt;</code> (foco y tecla Escape accesibles de forma nativa).</p>
+            </div>
+            <div class="modal__pie">
+                <button type="button" class="btn btn--contorno" data-modal-close>Cancelar</button>
+                <button type="button" class="btn btn--primario" data-modal-close>Confirmar</button>
+            </div>
+        </dialog>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-breadcrumbs">
+    <h2 id="titulo-breadcrumbs">Breadcrumbs</h2>
+    <p>Ver la ruta de navegación arriba de este título (Inicio / Design System).</p>
+</section>
+
+<section aria-labelledby="titulo-vacio">
+    <h2 id="titulo-vacio">Empty state</h2>
+    <div class="estado-vacio tarjeta" style="margin-bottom: var(--espacio-6);">
+        <div class="estado-vacio__icono" aria-hidden="true">📭</div>
+        <h3>No hay elementos todavía</h3>
+        <p>Cuando agregues el primer registro, aparecerá aquí.</p>
+        <button class="btn btn--primario">Agregar el primero</button>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-carga">
+    <h2 id="titulo-carga">Loading states</h2>
+    <div style="display:flex; align-items:center; gap: var(--espacio-4); margin-bottom: var(--espacio-3);">
+        <span class="spinner" role="status" aria-label="Cargando"></span>
+        <span>Spinner</span>
+    </div>
+    <div style="max-width: 320px; margin-bottom: var(--espacio-6);">
+        <div class="skeleton skeleton--linea" style="width: 100%;"></div>
+        <div class="skeleton skeleton--linea" style="width: 80%;"></div>
+        <div class="skeleton skeleton--linea" style="width: 60%;"></div>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-error">
+    <h2 id="titulo-error">Error states</h2>
+    <p>Ver también las páginas completas: <a href="{% url 'core:home' %}">404</a> (visita cualquier URL inexistente) y <code>templates/500.html</code>.</p>
+</section>
+{% endblock %}

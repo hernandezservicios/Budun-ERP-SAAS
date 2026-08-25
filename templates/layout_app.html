@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="shell">
+    <div class="sidebar__respaldo" data-sidebar-backdrop></div>
+    <aside class="sidebar" aria-label="Navegación principal">
+        <a class="sidebar__marca" href="{% url 'core:home' %}">ERP SaaS</a>
+        <ul class="sidebar__nav">
+            <li>
+                <a class="sidebar__enlace" href="{% url 'accounts:perfil' %}"
+                   {% if request.resolver_match.url_name == 'perfil' %}aria-current="page"{% endif %}>
+                    Mi perfil
+                </a>
+            </li>
+        </ul>
+    </aside>
+
+    <header class="navbar">
+        <button type="button" class="navbar__toggle" data-sidebar-toggle aria-expanded="false" aria-label="Abrir navegación">
+            ☰
+        </button>
+        <a class="navbar__marca" href="{% url 'core:home' %}">ERP SaaS</a>
+        <div class="navbar__acciones">
+            {% if tenant %}
+            <span class="badge badge--azul">{{ tenant.name }}</span>
+            {% endif %}
+            <div class="dropdown" data-dropdown>
+                <button type="button" class="btn btn--fantasma btn--sm" data-dropdown-trigger aria-haspopup="true" aria-expanded="false">
+                    {% firstof request.user.get_full_name request.user.email "Invitado" %}
+                </button>
+                <div class="dropdown__menu" data-dropdown-menu hidden role="menu">
+                    <a class="dropdown__item" href="{% url 'accounts:perfil' %}" role="menuitem">Mi perfil</a>
+                    <a class="dropdown__item" href="{% url 'accounts:password_change' %}" role="menuitem">Cambiar contraseña</a>
+                    <form action="{% url 'accounts:logout' %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="dropdown__item" role="menuitem">Cerrar sesión</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main" id="contenido-principal">
+        <div class="main__contenido">
+            {% block app_content %}{% endblock %}
+        </div>
+    </main>
+</div>
+{% endblock %}

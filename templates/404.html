@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Página no encontrada — ERP SaaS{% endblock %}
+
+{% block content %}
+<main class="pagina-error" id="contenido-principal">
+    <div class="pagina-error__codigo">404</div>
+    <h1>Página no encontrada</h1>
+    <p>La página que buscas no existe o fue movida.</p>
+    <a class="btn btn--primario" href="{% url 'core:home' %}">Volver al inicio</a>
+</main>
+{% endblock %}

@@ -1,190 +1,205 @@
 /*
-  Estilos base mínimos de FASE 1 (fundación).
-  El sistema de diseño completo (tipografía, componentes, tema azul/verde
-  definitivo) se construye en FASE 5 — Design System.
+  Fundamentos del Design System (FASE 5): tokens de diseño, reset y
+  estilos globales mínimos. Los componentes (botones, inputs, tablas,
+  modales, etc.) viven en static/css/design-system.css.
 */
 
 :root {
-    --color-azul: #1d4ed8;
-    --color-verde: #15803d;
-    --color-texto: #1f2937;
-    --color-fondo: #f8fafc;
+    /* --- Color: azul (primario/acción/navegación) --- */
+    --color-azul-50:  #eff6ff;
+    --color-azul-100: #dbeafe;
+    --color-azul-200: #bfdbfe;
+    --color-azul-500: #3b82f6;
+    --color-azul-600: #2563eb;
+    --color-azul-700: #1d4ed8;
+    --color-azul-800: #1e40af;
+
+    /* --- Color: verde (éxito/acción secundaria) --- */
+    --color-verde-50:  #ecfdf5;
+    --color-verde-100: #dcfce7;
+    --color-verde-200: #bbf7d0;
+    --color-verde-600: #16a34a;
+    --color-verde-700: #15803d;
+    --color-verde-800: #166534;
+
+    /* --- Semánticos --- */
+    --color-peligro-50:  #fef2f2;
+    --color-peligro-100: #fee2e2;
+    --color-peligro-700: #b91c1c;
+    --color-peligro-800: #991b1b;
+
+    --color-advertencia-50:  #fffbeb;
+    --color-advertencia-100: #fef3c7;
+    --color-advertencia-700: #b45309;
+    --color-advertencia-800: #92400e;
+
+    --color-info-50:  var(--color-azul-50);
+    --color-info-100: var(--color-azul-100);
+    --color-info-700: var(--color-azul-700);
+
+    /* --- Neutrales --- */
+    --gris-25:  #fafafa;
+    --gris-50:  #f8fafc;
+    --gris-100: #f1f5f9;
+    --gris-200: #e2e8f0;
+    --gris-300: #cbd5e1;
+    --gris-400: #94a3b8;
+    --gris-500: #64748b;
+    --gris-600: #475569;
+    --gris-700: #334155;
+    --gris-800: #1f2937;
+    --gris-900: #0f172a;
+
+    /* --- Roles semánticos de superficie/texto --- */
+    --color-fondo: var(--gris-50);
+    --color-superficie: #ffffff;
+    --color-borde: var(--gris-200);
+    --color-borde-fuerte: var(--gris-300);
+    --color-texto: var(--gris-800);
+    --color-texto-tenue: var(--gris-500);
+    --color-texto-invertido: #ffffff;
+
+    --color-primario: var(--color-azul-700);
+    --color-primario-hover: var(--color-azul-800);
+    --color-secundario: var(--color-verde-700);
+    --color-secundario-hover: var(--color-verde-800);
+
+    --color-foco: var(--color-azul-500);
+
+    /* --- Tipografía --- */
+    --fuente-base: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --texto-xs: 0.75rem;
+    --texto-sm: 0.875rem;
+    --texto-base: 1rem;
+    --texto-lg: 1.125rem;
+    --texto-xl: 1.25rem;
+    --texto-2xl: 1.5rem;
+    --texto-3xl: 1.875rem;
+    --interlineado-ajustado: 1.25;
+    --interlineado-normal: 1.5;
+
+    /* --- Espaciado (escala base 4px) --- */
+    --espacio-1: 0.25rem;
+    --espacio-2: 0.5rem;
+    --espacio-3: 0.75rem;
+    --espacio-4: 1rem;
+    --espacio-5: 1.25rem;
+    --espacio-6: 1.5rem;
+    --espacio-8: 2rem;
+    --espacio-10: 2.5rem;
+    --espacio-12: 3rem;
+
+    /* --- Bordes y sombras --- */
+    --radio-sm: 4px;
+    --radio-md: 6px;
+    --radio-lg: 10px;
+    --radio-completo: 999px;
+
+    --sombra-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+    --sombra-md: 0 2px 8px -2px rgb(15 23 42 / 0.10), 0 1px 2px -1px rgb(15 23 42 / 0.08);
+    --sombra-lg: 0 8px 24px -4px rgb(15 23 42 / 0.14);
+
+    /* --- Layout del shell autenticado --- */
+    --ancho-sidebar: 240px;
+    --alto-navbar: 60px;
+
+    /* --- Breakpoints (referencia para media queries; usar los valores
+       directamente en @media, las custom properties no son válidas ahí) --- */
+    --punto-movil: 640px;
+    --punto-tablet: 768px;
+    --punto-laptop: 1024px;
+    --punto-escritorio: 1280px;
 }
 
 * {
     box-sizing: border-box;
 }
 
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
 body {
     margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--fuente-base);
+    font-size: var(--texto-base);
+    line-height: var(--interlineado-normal);
     color: var(--color-texto);
     background-color: var(--color-fondo);
 }
 
+h1, h2, h3, h4, h5, h6 {
+    margin: 0 0 var(--espacio-4) 0;
+    font-weight: 600;
+    line-height: var(--interlineado-ajustado);
+    color: var(--gris-900);
+}
+
+p {
+    margin: 0 0 var(--espacio-4) 0;
+}
+
+a {
+    color: var(--color-primario);
+}
+
+/* Foco visible consistente y accesible en cualquier elemento interactivo. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--color-foco);
+    outline-offset: 2px;
+}
+
+/* Respeta la preferencia del usuario de reducir animaciones. */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}
+
+.visualmente-oculto {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.enlace-saltar {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 1000;
+    padding: var(--espacio-2) var(--espacio-4);
+    background: var(--color-primario);
+    color: #fff;
+    border-radius: 0 0 var(--radio-md) 0;
+}
+
+.enlace-saltar:focus {
+    left: 0;
+}
+
+/* --- Página de fundación pública (FASE 1), reutilizada como landing
+   provisional hasta FASE 6. --- */
 .pagina-fundacion {
     max-width: 640px;
     margin: 10vh auto;
-    padding: 2rem;
+    padding: var(--espacio-8);
     text-align: center;
-}
-
-.pagina-fundacion h1 {
-    color: var(--color-azul);
 }
 
 .pagina-fundacion .nota {
-    color: var(--color-verde);
-    font-size: 0.9rem;
-}
-
-/*
-  FASE 4 — Autenticación. Estilos mínimos y sobrios (formularios, barra
-  superior, mensajes). El sistema de diseño definitivo llega en FASE 5.
-*/
-
-.barra-superior {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.5rem;
-    background-color: #ffffff;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.barra-superior .marca {
-    font-weight: 600;
-    color: var(--color-azul);
-    text-decoration: none;
-}
-
-.barra-superior .enlaces {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.barra-superior a {
-    color: var(--color-texto);
-    text-decoration: none;
-}
-
-.barra-superior a:hover {
-    color: var(--color-azul);
-}
-
-.form-logout {
-    display: inline;
-}
-
-.form-logout button {
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: var(--color-texto);
-    cursor: pointer;
-}
-
-.form-logout button:hover {
-    color: var(--color-azul);
-}
-
-.mensajes {
-    list-style: none;
-    margin: 0;
-    padding: 0.75rem 1.5rem;
-}
-
-.mensaje {
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem;
-}
-
-.mensaje-success {
-    background-color: #dcfce7;
-    color: #166534;
-}
-
-.mensaje-error {
-    background-color: #fee2e2;
-    color: #991b1b;
-}
-
-.contenedor-formulario {
-    max-width: 420px;
-    margin: 8vh auto;
-    padding: 2rem;
-    background-color: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-}
-
-.contenedor-formulario h1 {
-    margin-top: 0;
-    color: var(--color-azul);
-    font-size: 1.4rem;
-}
-
-.contenedor-formulario form p {
-    margin-bottom: 1rem;
-}
-
-.contenedor-formulario label {
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: 0.9rem;
-    color: var(--color-texto);
-}
-
-.contenedor-formulario input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    font-size: 1rem;
-}
-
-.contenedor-formulario .errores,
-.contenedor-formulario .errorlist {
-    color: #991b1b;
-    font-size: 0.85rem;
-    margin: 0 0 0.5rem 0;
-    padding: 0;
-    list-style: none;
-}
-
-.contenedor-formulario button,
-.contenedor-formulario .boton {
-    display: inline-block;
-    background-color: var(--color-azul);
-    color: #ffffff;
-    border: none;
-    padding: 0.6rem 1.2rem;
-    border-radius: 4px;
-    font-size: 1rem;
-    cursor: pointer;
-}
-
-.contenedor-formulario button:hover,
-.contenedor-formulario .boton:hover {
-    opacity: 0.9;
-}
-
-.contenedor-formulario .enlace-secundario {
-    display: block;
-    margin-top: 1rem;
-    font-size: 0.9rem;
-    text-align: center;
-}
-
-.info-tenant {
-    background-color: #ecfdf5;
-    border: 1px solid #a7f3d0;
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 1.5rem;
-    font-size: 0.9rem;
+    color: var(--color-secundario);
+    font-size: var(--texto-sm);
 }
