@@ -58,7 +58,9 @@ class EmailLoginView(LoginView):
             user=self.request.user, is_active=True, tenant__is_active=True
         ).exists()
         if tiene_tenant:
-            return str(reverse_lazy("accounts:perfil"))
+            # FASE 7: el Panel es ahora el destino real tras iniciar
+            # sesión (antes, en FASE 4, era el perfil).
+            return str(reverse_lazy("dashboard:panel"))
         return str(reverse_lazy("accounts:onboarding"))
 
 
@@ -81,13 +83,13 @@ class OnboardingView(LoginRequiredMixin, FormView):
 
     form_class = OnboardingForm
     template_name = "accounts/onboarding.html"
-    success_url = reverse_lazy("accounts:perfil")
+    success_url = reverse_lazy("dashboard:panel")
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and Membership.objects.filter(
             user=request.user, is_active=True
         ).exists():
-            return redirect("accounts:perfil")
+            return redirect("dashboard:panel")
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):

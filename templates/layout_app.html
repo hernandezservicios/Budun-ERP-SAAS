@@ -7,6 +7,12 @@
         <a class="sidebar__marca" href="{% url 'core:home' %}">ERP SaaS</a>
         <ul class="sidebar__nav">
             <li>
+                <a class="sidebar__enlace" href="{% url 'dashboard:panel' %}"
+                   {% if request.resolver_match.view_name == 'dashboard:panel' %}aria-current="page"{% endif %}>
+                    Panel
+                </a>
+            </li>
+            <li>
                 <a class="sidebar__enlace" href="{% url 'accounts:perfil' %}"
                    {% if request.resolver_match.url_name == 'perfil' %}aria-current="page"{% endif %}>
                     Mi perfil
@@ -29,6 +35,7 @@
                     {% firstof request.user.get_full_name request.user.email "Invitado" %}
                 </button>
                 <div class="dropdown__menu" data-dropdown-menu hidden role="menu">
+                    <a class="dropdown__item" href="{% url 'dashboard:panel' %}" role="menuitem">Panel</a>
                     <a class="dropdown__item" href="{% url 'accounts:perfil' %}" role="menuitem">Mi perfil</a>
                     <a class="dropdown__item" href="{% url 'accounts:password_change' %}" role="menuitem">Cambiar contraseña</a>
                     <form action="{% url 'accounts:logout' %}" method="post">

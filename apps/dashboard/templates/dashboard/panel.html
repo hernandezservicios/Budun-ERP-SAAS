@@ -1,0 +1,112 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Panel — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li aria-current="page">Panel</li>
+    </ol>
+</nav>
+
+{# ---------- 1. ENCABEZADO Y CONTEXTO ---------- #}
+<div class="encabezado-pagina">
+    <div>
+        <h1>Hola, {% firstof request.user.get_full_name request.user.email "de nuevo" %}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ tenant.name }}{% if membership %} · {{ membership.get_role_display }}{% endif %}
+        </p>
+    </div>
+</div>
+
+{% if hubo_error %}
+<div class="alerta alerta--peligro" role="alert">
+    <span>No se pudieron cargar algunos datos del panel. Intenta de nuevo en unos minutos.</span>
+</div>
+{% endif %}
+
+{# ---------- 2. KPIs PRINCIPALES ---------- #}
+<section class="panel-seccion" aria-labelledby="titulo-kpis">
+    <h2 class="panel-seccion__titulo" id="titulo-kpis">Resumen</h2>
+    <div class="kpi-grid">
+        {% for kpi in kpis %}
+        <div class="kpi {% if kpi.estado == 'vacio' %}kpi--vacio{% endif %}">
+            <p class="kpi__etiqueta">{{ kpi.etiqueta }}</p>
+            <p class="kpi__valor">{{ kpi.valor }}</p>
+            {% if kpi.ayuda %}<p class="kpi__ayuda">{{ kpi.ayuda }}</p>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+{# ---------- 3. TENDENCIAS / ANÁLISIS ---------- #}
+<section class="panel-seccion" aria-labelledby="titulo-tendencias">
+    <h2 class="panel-seccion__titulo" id="titulo-tendencias">Tendencias</h2>
+    <div class="tendencia-preview" role="img" aria-label="Vista previa: aquí se mostrarán tus tendencias de ventas e inventario cuando haya datos suficientes">
+        <div class="tendencia-preview__barra" style="height:35%"></div>
+        <div class="tendencia-preview__barra" style="height:55%"></div>
+        <div class="tendencia-preview__barra" style="height:40%"></div>
+        <div class="tendencia-preview__barra" style="height:70%"></div>
+        <div class="tendencia-preview__barra" style="height:50%"></div>
+    </div>
+    <p class="campo__ayuda">Vista previa: esta sección se activará con datos reales cuando actives los módulos de ventas e inventario.</p>
+</section>
+
+{# ---------- 4. ALERTAS IMPORTANTES ---------- #}
+<section class="panel-seccion" aria-labelledby="titulo-alertas">
+    <h2 class="panel-seccion__titulo" id="titulo-alertas">Alertas</h2>
+    {% if alertas %}
+    <div class="panel-alertas">
+        {% for alerta in alertas %}
+        <div class="alerta alerta--{{ alerta.tipo }}" role="status">
+            <span>{{ alerta.mensaje }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="estado-vacio tarjeta">
+        <div class="estado-vacio__icono" aria-hidden="true">✅</div>
+        <h3>Sin alertas</h3>
+        <p>No hay nada que requiera tu atención en este momento.</p>
+    </div>
+    {% endif %}
+</section>
+
+{# ---------- 5. ACTIVIDAD RECIENTE ---------- #}
+<section class="panel-seccion" aria-labelledby="titulo-actividad">
+    <h2 class="panel-seccion__titulo" id="titulo-actividad">Actividad reciente</h2>
+    {% if actividad %}
+    <div class="tarjeta">
+        <ul class="actividad-lista">
+            {% for item in actividad %}
+            <li>
+                <span>{{ item.descripcion }}</span>
+                <time datetime="{{ item.fecha|date:'c' }}">{{ item.fecha|date:"d M Y" }}</time>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <div class="estado-vacio tarjeta">
+        <div class="estado-vacio__icono" aria-hidden="true">🕓</div>
+        <h3>Aún no hay actividad reciente</h3>
+        <p>Cuando invites a tu equipo o empieces a operar, la actividad aparecerá aquí.</p>
+    </div>
+    {% endif %}
+</section>
+
+{# ---------- 6. ACCIONES RÁPIDAS ---------- #}
+<section class="panel-seccion" aria-labelledby="titulo-acciones">
+    <h2 class="panel-seccion__titulo" id="titulo-acciones">Acciones rápidas</h2>
+    <div class="acciones-rapidas">
+        <a class="btn btn--primario" href="{% url 'accounts:perfil' %}">Ver mi perfil</a>
+        <a class="btn btn--contorno" href="{% url 'accounts:password_change' %}">Cambiar contraseña</a>
+        <button type="button" class="btn btn--contorno" disabled aria-disabled="true" title="Disponible cuando se active el módulo de Inventario">
+            Agregar producto <span class="badge badge--neutro">Próximamente</span>
+        </button>
+        <button type="button" class="btn btn--contorno" disabled aria-disabled="true" title="Disponible cuando se active el módulo de Ventas">
+            Registrar venta <span class="badge badge--neutro">Próximamente</span>
+        </button>
+    </div>
+</section>
+{% endblock %}

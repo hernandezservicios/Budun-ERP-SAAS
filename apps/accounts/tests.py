@@ -110,7 +110,9 @@ class LoginLogoutTests(TestCase):
         )
         self.assertRedirects(respuesta, reverse("accounts:onboarding"))
 
-    def test_login_correcto_redirige_a_perfil_si_ya_tiene_tenant(self):
+    def test_login_correcto_redirige_al_panel_si_ya_tiene_tenant(self):
+        """Desde FASE 7, el destino tras iniciar sesión con un tenant
+        activo es el Panel (antes, en FASE 4, era el perfil)."""
         tenant = Tenant.objects.create(name="Empresa X", slug="empresa-x")
         Membership.objects.create(user=self.user, tenant=tenant, role=Membership.Role.OWNER)
 
@@ -118,7 +120,7 @@ class LoginLogoutTests(TestCase):
             reverse("accounts:login"),
             {"username": "login@example.com", "password": "una-clave-larga-987"},
         )
-        self.assertRedirects(respuesta, reverse("accounts:perfil"))
+        self.assertRedirects(respuesta, reverse("dashboard:panel"))
 
     def test_login_con_contrasena_incorrecta_muestra_error_generico(self):
         respuesta = self.client.post(
@@ -149,7 +151,9 @@ class OnboardingTests(TestCase):
         respuesta = self.client.post(
             reverse("accounts:onboarding"), {"company_name": "Mi Empresa"}
         )
-        self.assertRedirects(respuesta, reverse("accounts:perfil"))
+        # Desde FASE 7, el onboarding redirige al Panel (antes, en FASE 4,
+        # era el perfil).
+        self.assertRedirects(respuesta, reverse("dashboard:panel"))
 
         tenant = Tenant.objects.get(slug="mi-empresa")
         self.assertEqual(tenant.name, "Mi Empresa")
@@ -167,7 +171,7 @@ class OnboardingTests(TestCase):
         Membership.objects.create(user=self.user, tenant=tenant, role=Membership.Role.OWNER)
 
         respuesta = self.client.get(reverse("accounts:onboarding"))
-        self.assertRedirects(respuesta, reverse("accounts:perfil"))
+        self.assertRedirects(respuesta, reverse("dashboard:panel"))
         self.assertEqual(Membership.objects.filter(user=self.user).count(), 1)
 
     def test_tenant_context_disponible_inmediatamente_tras_onboarding(self):

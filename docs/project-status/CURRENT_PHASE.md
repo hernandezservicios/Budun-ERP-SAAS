@@ -1,14 +1,14 @@
 # Estado actual del proyecto
 
 ```text
-Fase actual: 6
-Estado: PASS (cerrada, pendiente de autorización para FASE 7)
-Última fase cerrada: FASE 6 — Landing + Pricing
-Próxima acción: esperar autorización explícita del usuario para iniciar FASE 7 — Dashboard
+Fase actual: 7
+Estado: PASS (cerrada, pendiente de autorización para FASE 8)
+Última fase cerrada: FASE 7 — Dashboard
+Próxima acción: esperar autorización explícita del usuario para iniciar FASE 8 — Products + Inventory
 ```
 
 ## Regla
 Claude debe actualizar este archivo al inicio y al cierre de cada fase.
 
-## Resumen de FASE 6
-Se construyó la landing pública en `/` (reemplazando la página de verificación de FASE 1), con las 10 secciones pedidas (propuesta de valor, audiencia, problemas, módulos, cómo funciona, ventajas, seguridad, integración API/IA presentada como "Próximamente", precios, FAQ) usando exclusivamente el Design System de FASE 5. Los precios vienen de una única fuente configurable (`apps/core/pricing.py`, valores placeholder pendientes de decisión real de negocio) y se verificó con un test que ningún monto se duplica en otras plantillas. Se agregó SEO básico (meta description, Open Graph) como bloques reutilizables en `base.html`. FAQ implementado con `<details>/<summary>` nativos (accesible sin JS). Ninguna API ni PayPal funcional fue construida — solo se presentan como capacidad futura. 60/60 tests OK (regresión de FASE 3/4/5 sin cambios de lógica + nuevos de landing/pricing). `manage.py check` en verde. Smoke tests HTTP reales. Documentado en `docs/landing.md`.
+## Resumen de FASE 7
+Se construyó el Panel administrativo (`apps/dashboard`) en `/panel/`, ahora destino real tras login/onboarding (antes era el perfil). Jerarquía visual de 6 secciones (encabezado/contexto, KPIs, tendencias, alertas, actividad reciente, acciones rápidas) usando exclusivamente el Design System de FASE 5 — sin colección de cards: los KPI tienen un estilo propio distinto de `.tarjeta`. Capa de servicios (`apps/dashboard/services.py`) como punto de extensión: cada función de KPI que todavía no tiene módulo real se marca `estado="vacio"` (nunca un número inventado); el único dato real disponible hoy (miembros del equipo, actividad de altas) viene de PostgreSQL (`tenants_membership`), filtrado explícitamente por tenant en cada consulta. Se agregó un índice compuesto a `Membership` para el patrón de consulta del panel. Aislamiento Multi-Tenant y ausencia de N+1 verificados con tests explícitos (comparación de número de queries con 1 vs. 10 miembros). Manejo de error gracioso (una fuente de datos que falla no rompe la página). 73/73 tests OK (regresión de FASE 3/4/5/6 sin cambios de lógica salvo el redirect post-login/onboarding, ahora al Panel). `manage.py check` en verde. Documentado en `docs/dashboard.md`.

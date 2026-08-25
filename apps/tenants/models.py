@@ -58,6 +58,11 @@ class Membership(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["user", "tenant"], name="unique_membership_user_tenant"),
         ]
+        indexes = [
+            # Cubre las consultas del Panel (FASE 7): contar/():listar
+            # membresías activas de un tenant ordenadas por fecha.
+            models.Index(fields=["tenant", "is_active", "created_at"], name="idx_membership_tenant_activo"),
+        ]
 
     def __str__(self):
         return f"{self.user} @ {self.tenant} ({self.role})"
