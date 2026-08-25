@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Configura tu empresa — ERP SaaS{% endblock %}
+
+{% block content %}
+<main class="contenedor-formulario">
+    <h1>Configura tu empresa</h1>
+    <p>Este será el nombre de tu empresa dentro del sistema. Podrás cambiarlo más adelante.</p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <ul class="errores">
+            {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% for field in form %}
+        <p>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+            <ul class="errores">
+                {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </p>
+        {% endfor %}
+        <button type="submit">Continuar</button>
+    </form>
+</main>
+{% endblock %}

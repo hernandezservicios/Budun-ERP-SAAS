@@ -37,3 +37,154 @@ body {
     color: var(--color-verde);
     font-size: 0.9rem;
 }
+
+/*
+  FASE 4 — Autenticación. Estilos mínimos y sobrios (formularios, barra
+  superior, mensajes). El sistema de diseño definitivo llega en FASE 5.
+*/
+
+.barra-superior {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.barra-superior .marca {
+    font-weight: 600;
+    color: var(--color-azul);
+    text-decoration: none;
+}
+
+.barra-superior .enlaces {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.barra-superior a {
+    color: var(--color-texto);
+    text-decoration: none;
+}
+
+.barra-superior a:hover {
+    color: var(--color-azul);
+}
+
+.form-logout {
+    display: inline;
+}
+
+.form-logout button {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--color-texto);
+    cursor: pointer;
+}
+
+.form-logout button:hover {
+    color: var(--color-azul);
+}
+
+.mensajes {
+    list-style: none;
+    margin: 0;
+    padding: 0.75rem 1.5rem;
+}
+
+.mensaje {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.mensaje-success {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.mensaje-error {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.contenedor-formulario {
+    max-width: 420px;
+    margin: 8vh auto;
+    padding: 2rem;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.contenedor-formulario h1 {
+    margin-top: 0;
+    color: var(--color-azul);
+    font-size: 1.4rem;
+}
+
+.contenedor-formulario form p {
+    margin-bottom: 1rem;
+}
+
+.contenedor-formulario label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+    color: var(--color-texto);
+}
+
+.contenedor-formulario input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.contenedor-formulario .errores,
+.contenedor-formulario .errorlist {
+    color: #991b1b;
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem 0;
+    padding: 0;
+    list-style: none;
+}
+
+.contenedor-formulario button,
+.contenedor-formulario .boton {
+    display: inline-block;
+    background-color: var(--color-azul);
+    color: #ffffff;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.contenedor-formulario button:hover,
+.contenedor-formulario .boton:hover {
+    opacity: 0.9;
+}
+
+.contenedor-formulario .enlace-secundario {
+    display: block;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.info-tenant {
+    background-color: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}

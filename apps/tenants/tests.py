@@ -36,12 +36,8 @@ class TenantIsolationTestCase(TestCase):
         self.tenant_a = Tenant.objects.create(name="Tenant A", slug="tenant-a")
         self.tenant_b = Tenant.objects.create(name="Tenant B", slug="tenant-b")
 
-        self.user_a = User.objects.create_user(
-            username="user_a", email="a@example.com", password="clave-de-prueba-123"
-        )
-        self.user_b = User.objects.create_user(
-            username="user_b", email="b@example.com", password="clave-de-prueba-123"
-        )
+        self.user_a = User.objects.create_user(email="a@example.com", password="clave-de-prueba-123")
+        self.user_b = User.objects.create_user(email="b@example.com", password="clave-de-prueba-123")
 
         self.membership_a = Membership.objects.create(
             user=self.user_a, tenant=self.tenant_a, role=Membership.Role.OWNER
@@ -128,9 +124,7 @@ class TenantIsolationTestCase(TestCase):
         self.assertEqual(request_b.tenant, self.tenant_b)
 
     def test_usuario_sin_membresia_no_obtiene_ningun_tenant(self):
-        user_c = User.objects.create_user(
-            username="user_c", email="c@example.com", password="clave-de-prueba-123"
-        )
+        user_c = User.objects.create_user(email="c@example.com", password="clave-de-prueba-123")
         middleware = TenantMiddleware(get_response=lambda r: r)
         request_c = self._authenticated_request(user_c)
         middleware(request_c)
@@ -202,9 +196,7 @@ class TenantIsolationTestCase(TestCase):
         self.assertEqual(datos_b["registros"], ["dato-privado-B"])
 
     def test_vista_protegida_rechaza_a_quien_no_tiene_tenant(self):
-        user_c = User.objects.create_user(
-            username="user_c2", email="c2@example.com", password="clave-de-prueba-123"
-        )
+        user_c = User.objects.create_user(email="c2@example.com", password="clave-de-prueba-123")
         middleware = TenantMiddleware(get_response=whoami_view)
         with self.assertRaises(PermissionDenied):
             middleware(self._authenticated_request(user_c))
@@ -221,9 +213,7 @@ class TenantIsolationTestCase(TestCase):
         self.assertEqual(membership, self.membership_a)
 
     def test_require_role_bloquea_a_quien_no_tiene_el_rol_requerido(self):
-        user_member = User.objects.create_user(
-            username="user_member", email="member@example.com", password="clave-de-prueba-123"
-        )
+        user_member = User.objects.create_user(email="member@example.com", password="clave-de-prueba-123")
         Membership.objects.create(user=user_member, tenant=self.tenant_a, role=Membership.Role.MEMBER)
 
         request = self._authenticated_request(user_member)

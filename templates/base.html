@@ -7,6 +7,32 @@
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
 </head>
 <body>
+    {% block topbar %}
+    <nav class="barra-superior">
+        <a class="marca" href="{% url 'core:home' %}">ERP SaaS</a>
+        <div class="enlaces">
+            {% if request.user.is_authenticated %}
+                <a href="{% url 'accounts:perfil' %}">Mi perfil</a>
+                <form action="{% url 'accounts:logout' %}" method="post" class="form-logout">
+                    {% csrf_token %}
+                    <button type="submit">Cerrar sesión</button>
+                </form>
+            {% else %}
+                <a href="{% url 'accounts:login' %}">Iniciar sesión</a>
+                <a href="{% url 'accounts:registro' %}">Registrarse</a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endblock %}
+
+    {% if messages %}
+    <ul class="mensajes">
+        {% for message in messages %}
+        <li class="mensaje mensaje-{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
     {% block content %}{% endblock %}
 </body>
 </html>

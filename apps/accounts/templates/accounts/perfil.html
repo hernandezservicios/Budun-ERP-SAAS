@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Mi perfil — ERP SaaS{% endblock %}
+
+{% block content %}
+<main class="contenedor-formulario">
+    <h1>Mi perfil</h1>
+
+    {% if tenant %}
+    <div class="info-tenant">
+        Empresa: <strong>{{ tenant.name }}</strong>
+        {% if membership %} — Rol: {{ membership.get_role_display }}{% endif %}
+    </div>
+    {% else %}
+    <div class="info-tenant">
+        Todavía no has configurado tu empresa.
+        <a href="{% url 'accounts:onboarding' %}">Configurarla ahora</a>.
+    </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <ul class="errores">
+            {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% for field in form %}
+        <p>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+            <ul class="errores">
+                {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </p>
+        {% endfor %}
+        <button type="submit">Guardar cambios</button>
+    </form>
+</main>
+{% endblock %}

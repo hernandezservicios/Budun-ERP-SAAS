@@ -1,25 +1,55 @@
+from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
+class UserManager(BaseUserManager):
+    """Manager personalizado porque el login es por email, no por
+    username (ver `User.USERNAME_FIELD`). Basado en el patrón oficial de
+    Django para modelos de usuario sin username."""
+
+    use_in_migrations = True
+
+    def _create_user(self, email, password, **extra_fields):
+        if not email:
+            raise ValueError("El correo electrónico es obligatorio.")
+        email = self.normalize_email(email).lower()
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_user(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
+        return self._create_user(email, password, **extra_fields)
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("El superusuario debe tener is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("El superusuario debe tener is_superuser=True.")
+        return self._create_user(email, password, **extra_fields)
+
+
 class User(AbstractUser):
-    """Custom User Model del proyecto (FASE 3).
+    """Custom User Model del proyecto (introducido en FASE 3).
 
-    Se introduce en FASE 3 (y no más tarde) porque Django exige definir
-    AUTH_USER_MODEL antes de la primera migración: cambiarlo después de que
-    existan tablas basadas en el modelo por defecto requiere una migración
-    manual compleja. Los flujos de autenticación reales (registro, login,
-    logout, recuperación de contraseña, perfil) son alcance de FASE 4 —
-    Authentication; aquí solo se establece el modelo base para que ese
-    trabajo futuro no requiera romper la base de datos.
-
-    Se añade `email` único porque el inicio de sesión de un SaaS
-    normalmente se hace por correo; el resto de campos de `AbstractUser`
-    (username, first_name, last_name, password, is_active, etc.) se
-    conservan tal cual para no anticipar decisiones de FASE 4.
+    FASE 4 decide la mecánica concreta de login: por correo electrónico
+    (convención habitual en un SaaS), no por username. Se verificó que no
+    existía ningún usuario real en la base antes de este cambio (0 filas),
+    por lo que no hay ninguna migración de datos que hacer.
     """
 
+    username = None
     email = models.EmailField("correo electrónico", unique=True)
 
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+
+    objects = UserManager()
+
     def __str__(self):
-        return self.email or self.username
+        return self.email

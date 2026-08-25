@@ -7,4 +7,38 @@ from .models import User
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     """Registro mínimo en Django Admin, solo como herramienta interna de
-    staff (nunca la UI principal del producto, ver CLAUDE.md)."""
+    staff (nunca la UI principal del producto, ver CLAUDE.md).
+
+    Se redefinen los fieldsets porque `DjangoUserAdmin` asume un campo
+    `username` que este modelo no tiene (login por email, ver models.py).
+    """
+
+    ordering = ("email",)
+    list_display = ("email", "first_name", "last_name", "is_staff", "is_active")
+    search_fields = ("email", "first_name", "last_name")
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        ("Información personal", {"fields": ("first_name", "last_name")}),
+        (
+            "Permisos",
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                )
+            },
+        ),
+        ("Fechas importantes", {"fields": ("last_login", "date_joined")}),
+    )
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("email", "password1", "password2"),
+            },
+        ),
+    )

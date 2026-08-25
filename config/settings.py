@@ -127,6 +127,22 @@ DATABASES = {
     }
 }
 
+# --- Autenticación (FASE 4) -----------------------------------------------
+LOGIN_URL = "accounts:login"
+# Los redirects "inteligentes" (a onboarding vs. a perfil) se resuelven en
+# las vistas (ver apps/accounts/views.py) según request.tenant; estos son
+# solo el fallback genérico que exige el framework.
+LOGIN_REDIRECT_URL = "accounts:perfil"
+LOGOUT_REDIRECT_URL = "core:home"
+
+# Email (FASE 4): en desarrollo se usa el backend de consola (no se envía
+# nada real, solo se imprime en la terminal/log). Un proveedor SMTP real
+# es una decisión de FASE 21 — Hostinger Deployment.
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@erp-saas.local")
+
 # --- Validación de contraseñas -------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
