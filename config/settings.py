@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "apps.tenants",
     "apps.core",
     "apps.dashboard",
+    "apps.inventory",
 ]
 
 # Custom User Model (FASE 3). Debe fijarse antes de la primera migración

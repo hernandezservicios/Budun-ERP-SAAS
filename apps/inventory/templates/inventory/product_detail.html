@@ -1,0 +1,111 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ product.name }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'inventory:product_list' %}">Inventario</a></li>
+        <li aria-current="page">{{ product.name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ product.name }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            SKU: {{ product.sku }}
+            {% if product.barcode %} · Código de barras: {{ product.barcode }}{% endif %}
+            {% if product.category %} · {{ product.category.name }}{% endif %}
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'inventory:product_update' product.pk %}">Editar</a>
+        <form action="{% url 'inventory:product_deactivate' product.pk %}" method="post"
+              onsubmit="return confirm('¿Desactivar «{{ product.name }}»? Podrás reactivarlo editándolo.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Desactivar</button>
+        </form>
+    </div>
+</div>
+
+{% if is_low_stock %}
+<div class="alerta alerta--advertencia" role="alert">
+    <span>Este producto está en o por debajo de su stock mínimo ({{ product.min_stock|floatformat:"-3" }}).</span>
+</div>
+{% endif %}
+
+<div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
+    <div class="kpi {% if is_low_stock %}kpi--vacio{% endif %}">
+        <p class="kpi__etiqueta">Stock actual</p>
+        <p class="kpi__valor">{{ current_stock|floatformat:"-3" }}</p>
+    </div>
+    <div class="kpi">
+        <p class="kpi__etiqueta">Precio de compra</p>
+        <p class="kpi__valor">${{ product.purchase_price }}</p>
+    </div>
+    <div class="kpi">
+        <p class="kpi__etiqueta">Precio de venta</p>
+        <p class="kpi__valor">${{ product.sale_price }}</p>
+    </div>
+    <div class="kpi">
+        <p class="kpi__etiqueta">Stock mínimo</p>
+        <p class="kpi__valor">{{ product.min_stock|floatformat:"-3" }}</p>
+    </div>
+</div>
+
+<div class="acciones-rapidas" style="margin-bottom: var(--espacio-6);">
+    <a class="btn btn--primario" href="{% url 'inventory:stock_in' product.pk %}">Registrar entrada</a>
+    <a class="btn btn--contorno" href="{% url 'inventory:stock_out' product.pk %}">Registrar salida</a>
+    <a class="btn btn--contorno" href="{% url 'inventory:stock_adjustment' product.pk %}">Ajustar stock</a>
+</div>
+
+<section aria-labelledby="titulo-historial">
+    <h2 class="panel-seccion__titulo" id="titulo-historial">Historial de movimientos</h2>
+    {% if movements %}
+    <div class="tabla-envoltorio">
+        <table class="tabla">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Stock anterior</th>
+                    <th>Stock posterior</th>
+                    <th>Usuario</th>
+                    <th>Notas</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movement in movements %}
+                <tr>
+                    <td><time datetime="{{ movement.created_at|date:'c' }}">{{ movement.created_at|date:"d M Y H:i" }}</time></td>
+                    <td>
+                        {% if movement.movement_type == "in" %}
+                        <span class="badge badge--verde">Entrada</span>
+                        {% elif movement.movement_type == "out" %}
+                        <span class="badge badge--peligro">Salida</span>
+                        {% else %}
+                        <span class="badge badge--azul">Ajuste</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ movement.quantity|floatformat:"-3" }}</td>
+                    <td>{{ movement.stock_before|floatformat:"-3" }}</td>
+                    <td>{{ movement.stock_after|floatformat:"-3" }}</td>
+                    <td>{% firstof movement.user.get_full_name movement.user.email "—" %}</td>
+                    <td>{{ movement.notes|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="estado-vacio tarjeta">
+        <div class="estado-vacio__icono" aria-hidden="true">🕓</div>
+        <h3>Sin movimientos todavía</h3>
+        <p>Registra una entrada de stock para empezar.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

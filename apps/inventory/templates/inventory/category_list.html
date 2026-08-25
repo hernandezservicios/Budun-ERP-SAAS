@@ -1,0 +1,70 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Categorías — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'inventory:product_list' %}">Inventario</a></li>
+        <li aria-current="page">Categorías</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Categorías</h1>
+        <p class="encabezado-pagina__descripcion">Organiza tus productos por categoría.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--primario" href="{% url 'inventory:category_create' %}">Nueva categoría</a>
+    </div>
+</div>
+
+{% if categories %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Orden</th>
+                <th>Estado</th>
+                <th>Productos</th>
+                <th><span class="visualmente-oculto">Acciones</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for category in categories %}
+            <tr>
+                <td>{{ category.name }}</td>
+                <td>{{ category.order }}</td>
+                <td>
+                    {% if category.is_active %}
+                    <span class="badge badge--verde">Activa</span>
+                    {% else %}
+                    <span class="badge badge--neutro">Inactiva</span>
+                    {% endif %}
+                </td>
+                <td>{{ category.product_count }}</td>
+                <td>
+                    <a class="btn btn--contorno btn--sm" href="{% url 'inventory:category_update' category.pk %}">Editar</a>
+                    <form action="{% url 'inventory:category_delete' category.pk %}" method="post" style="display:inline;"
+                          onsubmit="return confirm('¿Eliminar la categoría «{{ category.name }}»? Esta acción no se puede deshacer.');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">🗂️</div>
+    <h3>Todavía no tienes categorías</h3>
+    <p>Crea tu primera categoría para empezar a organizar tus productos.</p>
+    <a class="btn btn--primario" href="{% url 'inventory:category_create' %}">Nueva categoría</a>
+</div>
+{% endif %}
+{% endblock %}

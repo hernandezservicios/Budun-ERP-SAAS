@@ -17,6 +17,8 @@ CLAUDE.md — Multi-tenancy).
 import dataclasses
 import logging
 
+from apps.inventory.models import Product
+from apps.inventory.services import get_low_stock_products
 from apps.tenants.models import Membership
 
 logger = logging.getLogger(__name__)
@@ -46,13 +48,15 @@ class Alerta:
 def obtener_kpis(tenant):
     """KPIs principales del tenant activo.
 
-    "Miembros del equipo" es un dato REAL de PostgreSQL (tabla
-    `tenants_membership`, filtrada por tenant). Los demás son
-    placeholders honestos: no hay todavía módulo de ventas, inventario ni
-    gastos (eso es FASE 8+), así que se muestran como "estado vacío" en
-    vez de simular un número.
+    "Miembros del equipo" y, desde FASE 8, "Productos en inventario" son
+    datos REALES de PostgreSQL. Ventas y Gastos siguen siendo placeholders
+    honestos: esos módulos todavía no existen, así que se muestran como
+    "estado vacío" en vez de simular un número.
     """
     total_miembros = Membership.objects.filter(tenant=tenant, is_active=True).count()
+    # all_objects + filtro explícito por tenant (no `objects`/TenantManager):
+    # ver la nota de diseño en apps/inventory/services.py.
+    total_productos = Product.all_objects.filter(tenant=tenant, is_active=True).count()
 
     return [
         KPI(
@@ -71,9 +75,9 @@ def obtener_kpis(tenant):
         KPI(
             clave="inventario",
             etiqueta="Productos en inventario",
-            valor="—",
-            estado="vacio",
-            ayuda="Se activará con el módulo de Inventario.",
+            valor=str(total_productos),
+            estado="ok" if total_productos else "vacio",
+            ayuda="" if total_productos else "Crea tu primer producto en Inventario.",
         ),
         KPI(
             clave="gastos",
@@ -115,6 +119,16 @@ def obtener_alertas(tenant):
             Alerta(
                 tipo="info",
                 mensaje="Todavía eres el único miembro de tu equipo en esta empresa.",
+            )
+        )
+
+    total_stock_bajo = get_low_stock_products(tenant).count()
+    if total_stock_bajo:
+        plural = "producto" if total_stock_bajo == 1 else "productos"
+        alertas.append(
+            Alerta(
+                tipo="advertencia",
+                mensaje=f"{total_stock_bajo} {plural} con stock en o por debajo del mínimo.",
             )
         )
     return alertas

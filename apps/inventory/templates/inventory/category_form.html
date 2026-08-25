@@ -1,0 +1,39 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{% if object %}Editar categoría{% else %}Nueva categoría{% endif %} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'inventory:category_list' %}">Categorías</a></li>
+        <li aria-current="page">{% if object %}Editar{% else %}Nueva{% endif %}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>{% if object %}Editar categoría{% else %}Nueva categoría{% endif %}</h1>
+</div>
+
+<div class="tarjeta" style="max-width: 480px;">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alerta alerta--peligro" role="alert">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% for field in form %}
+            <div class="campo">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <ul class="errores">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Guardar</button>
+            <a class="btn btn--contorno" href="{% url 'inventory:category_list' %}">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -193,3 +193,48 @@ class DashboardPerformanceTests(TestCase):
             "El número de queries del Panel no debería depender de cuántos "
             "miembros tenga el tenant (indicaría un N+1).",
         )
+
+
+class DashboardInventoryIntegrationTests(TestCase):
+    """FASE 8: el KPI "Productos en inventario" y la alerta de stock bajo
+    ahora deben venir de datos reales de `apps.inventory`, no del
+    placeholder "vacío" de FASE 7."""
+
+    def setUp(self):
+        self.tenant = Tenant.objects.create(name="Empresa Con Inventario", slug="empresa-con-inventario")
+        self.user = User.objects.create_user(email="conv.inv@example.com", password="clave-de-prueba-987")
+        Membership.objects.create(user=self.user, tenant=self.tenant, role=Membership.Role.OWNER)
+        self.client.login(username="conv.inv@example.com", password="clave-de-prueba-987")
+
+    def test_sin_productos_el_kpi_sigue_siendo_honesto(self):
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertContains(respuesta, "Crea tu primer producto en Inventario.")
+
+    def test_con_productos_el_kpi_muestra_el_conteo_real(self):
+        from decimal import Decimal
+
+        from apps.inventory import services
+        from apps.inventory.models import Product
+
+        producto = Product.objects.create(
+            tenant=self.tenant, name="Producto Real", sku="REAL-1", min_stock=Decimal("10")
+        )
+        Product.objects.create(tenant=self.tenant, name="Producto Real 2", sku="REAL-2")
+
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertContains(respuesta, '<p class="kpi__valor">2</p>')
+
+        # Con stock por debajo del mínimo, debe aparecer la alerta.
+        services.register_stock_in(product=producto, quantity=Decimal("3"), user=self.user)
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertContains(respuesta, "con stock en o por debajo del mínimo")
+
+    def test_productos_de_otro_tenant_no_afectan_el_kpi(self):
+        from apps.inventory.models import Product
+        from apps.tenants.models import Tenant as TenantModel
+
+        otro_tenant = TenantModel.objects.create(name="Otro Tenant Inventario", slug="otro-tenant-inv")
+        Product.objects.create(tenant=otro_tenant, name="Ajeno", sku="AJENO-1")
+
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertContains(respuesta, "Crea tu primer producto en Inventario.")
