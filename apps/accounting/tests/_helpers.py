@@ -67,6 +67,27 @@ class AccountingTestCase(TestCase):
             tenant=self.tenant, code="6100", name="Gasto de nómina", account_type=Account.AccountType.EXPENSE,
             normal_balance=Account.NormalBalance.DEBIT,
         )
+        # Ampliación de cierre de FASE 14 (COGS/Compras-AP/Cierre de caja).
+        self.cuenta_inventario = Account.all_objects.create(
+            tenant=self.tenant, code="1300", name="Inventario", account_type=Account.AccountType.ASSET,
+            normal_balance=Account.NormalBalance.DEBIT, parent=self.cuenta_activos, level=2,
+        )
+        self.cuenta_impuesto_recuperar = Account.all_objects.create(
+            tenant=self.tenant, code="1400", name="Impuesto por recuperar", account_type=Account.AccountType.ASSET,
+            normal_balance=Account.NormalBalance.DEBIT, parent=self.cuenta_activos, level=2,
+        )
+        self.cuenta_cxp = Account.all_objects.create(
+            tenant=self.tenant, code="2200", name="Cuentas por pagar", account_type=Account.AccountType.LIABILITY,
+            normal_balance=Account.NormalBalance.CREDIT, parent=self.cuenta_pasivos, level=2,
+        )
+        self.cuenta_sobrante_caja = Account.all_objects.create(
+            tenant=self.tenant, code="4100", name="Sobrante de caja", account_type=Account.AccountType.REVENUE,
+            normal_balance=Account.NormalBalance.CREDIT,
+        )
+        self.cuenta_faltante_caja = Account.all_objects.create(
+            tenant=self.tenant, code="6200", name="Faltante de caja", account_type=Account.AccountType.EXPENSE,
+            normal_balance=Account.NormalBalance.DEBIT,
+        )
 
         self.periodo = services.open_period(
             self.tenant, name="2025-01", start_date=date(2025, 1, 1), end_date=date(2025, 1, 31), user=self.owner,
@@ -93,3 +114,10 @@ class AccountingTestCase(TestCase):
         services.set_account_mapping(self.tenant, key=AccountMapping.Key.CASH_AND_EQUIVALENTS, account=self.cuenta_caja)
         services.set_account_mapping(self.tenant, key=AccountMapping.Key.OPERATING_EXPENSE, account=self.cuenta_gastos)
         services.set_account_mapping(self.tenant, key=AccountMapping.Key.PAYROLL_EXPENSE, account=self.cuenta_nomina)
+        # Ampliación de cierre de FASE 14.
+        services.set_account_mapping(self.tenant, key=AccountMapping.Key.INVENTORY_ASSET, account=self.cuenta_inventario)
+        services.set_account_mapping(self.tenant, key=AccountMapping.Key.COST_OF_GOODS_SOLD, account=self.cuenta_costos)
+        services.set_account_mapping(self.tenant, key=AccountMapping.Key.ACCOUNTS_PAYABLE, account=self.cuenta_cxp)
+        services.set_account_mapping(self.tenant, key=AccountMapping.Key.PURCHASE_TAX_RECEIVABLE, account=self.cuenta_impuesto_recuperar)
+        services.set_account_mapping(self.tenant, key=AccountMapping.Key.CASH_OVER, account=self.cuenta_sobrante_caja)
+        services.set_account_mapping(self.tenant, key=AccountMapping.Key.CASH_SHORT, account=self.cuenta_faltante_caja)

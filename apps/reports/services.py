@@ -20,6 +20,7 @@ from decimal import Decimal
 from django.db.models import Count, Sum
 from django.utils import timezone
 
+from apps.accounting import services as acct_services
 from apps.customers.models import Customer, Supplier
 from apps.expenses.models import Expense
 from apps.hr.models import Employee, Leave
@@ -27,8 +28,9 @@ from apps.inventory import services as inv_services
 from apps.payroll.models import Payroll, PayrollPeriod
 from apps.pos.models import CashMovement, CashSession
 from apps.purchases import services as purchases_services
-from apps.purchases.models import PurchaseOrder
+from apps.purchases.models import PurchaseOrder, SupplierInvoice, SupplierPayment, SupplierReturn
 from apps.sales import services as sales_services
+from apps.sales.models import CreditNote, Payment, Refund, Return, SaleItem
 from apps.sales.models import Sale
 
 
@@ -57,11 +59,36 @@ def get_sales_report(tenant, *, date_from=None, date_to=None, customer=None, sta
         queryset.filter(status=Sale.Status.CONFIRMED)
         .values("payment_status").annotate(cantidad=Count("id"), total=Sum("total")).order_by("payment_status")
     )
+
+    # Margen bruto (ampliación de cierre de FASE 14): SUM(subtotal-descuento)
+    # menos SUM(SaleItem.cost_amount) — una sola consulta agregada, nunca
+    # un recálculo por venta (evita N+1).
+    costo_total = SaleItem.all_objects.filter(tenant=tenant, sale__in=queryset).aggregate(t=Sum("cost_amount"))["t"] or Decimal("0")
+    margen = (agregado["subtotal"] or Decimal("0")) - (agregado["descuentos"] or Decimal("0")) - costo_total
+
+    # Conteos de devoluciones/refunds/notas de crédito del mismo rango de
+    # fechas (resumen aproximado por período — no filtrado por
+    # cliente/estado como la venta, para no requerir un join costoso).
+    devoluciones_qs = Return.all_objects.filter(tenant=tenant)
+    refunds_qs = Refund.all_objects.filter(tenant=tenant)
+    notas_credito_qs = CreditNote.all_objects.filter(tenant=tenant)
+    if date_from:
+        devoluciones_qs = devoluciones_qs.filter(created_at__date__gte=date_from)
+        refunds_qs = refunds_qs.filter(created_at__date__gte=date_from)
+        notas_credito_qs = notas_credito_qs.filter(issue_date__gte=date_from)
+    if date_to:
+        devoluciones_qs = devoluciones_qs.filter(created_at__date__lte=date_to)
+        refunds_qs = refunds_qs.filter(created_at__date__lte=date_to)
+        notas_credito_qs = notas_credito_qs.filter(issue_date__lte=date_to)
+
     return {
         "summary": {
             "count": agregado["cantidad"] or 0, "total": agregado["total"] or Decimal("0"),
             "subtotal": agregado["subtotal"] or Decimal("0"), "discounts": agregado["descuentos"] or Decimal("0"),
             "taxes": agregado["impuestos"] or Decimal("0"), "by_status": por_estado, "by_payment_status": por_metodo_pago,
+            "cost_total": costo_total, "margin": margen,
+            "returns_count": devoluciones_qs.count(), "refunds_count": refunds_qs.count(),
+            "credit_notes_count": notas_credito_qs.count(),
         },
         "rows": queryset.order_by("-issue_date", "-id")[:500],
     }
@@ -76,12 +103,21 @@ def get_inventory_report(tenant):
     productos = inv_services.list_products_with_stock(tenant)
     bajo_stock = list(inv_services.get_low_stock_products(tenant))
     agotados = [p for p in productos if getattr(p, "current_stock", None) == 0]
+    # Valorización (ampliación de cierre de FASE 14): reutiliza
+    # literalmente apps.inventory.services.get_inventory_valuation,
+    # nunca un cálculo paralelo. La reconciliación contra el saldo real
+    # de la cuenta Inventario del Libro Mayor es `None` si el tenant
+    # todavía no configuró ese mapeo (nada que reconciliar todavía).
+    valorizacion = inv_services.get_inventory_valuation(tenant)
+    reconciliacion = acct_services.get_inventory_gl_reconciliation(tenant)
     return {
         "summary": {
             "total_products": len(productos), "low_stock_count": len(bajo_stock), "out_of_stock_count": len(agotados),
+            "inventory_value": valorizacion["total_value"], "gl_reconciliation": reconciliacion,
         },
         "rows": productos,
         "low_stock": bajo_stock,
+        "valuation_rows": valorizacion["rows"],
     }
 
 
@@ -187,8 +223,12 @@ def get_accounts_payable_report(tenant):
             filas.append({"supplier": proveedor, "invoice": factura, "balance_due": saldo, "days_overdue": max(dias_vencido, 0)})
 
     total_anticipos = sum((purchases_services.get_supplier_advance_balance(p) for p in proveedores), Decimal("0"))
+    devoluciones_count = SupplierReturn.all_objects.filter(tenant=tenant).count()
     return {
-        "summary": {"total_pending": total_pendiente, "aging": aging, "total_advances": total_anticipos},
+        "summary": {
+            "total_pending": total_pendiente, "aging": aging, "total_advances": total_anticipos,
+            "returns_count": devoluciones_count,
+        },
         "rows": sorted(filas, key=lambda f: f["days_overdue"], reverse=True),
     }
 
@@ -303,6 +343,9 @@ def get_customers_report(tenant, *, date_from=None, date_to=None):
     )
     ids = [fila["customer_id"] for fila in por_cliente]
     clientes_por_id = {c.pk: c for c in Customer.all_objects.filter(pk__in=ids)}
+    facturado_total = Decimal("0")
+    pendiente_total = Decimal("0")
+    saldo_a_favor_total = Decimal("0")
     for fila in por_cliente:
         cliente = clientes_por_id.get(fila["customer_id"])
         fila["display_name"] = cliente.display_name if cliente else "—"
@@ -310,7 +353,53 @@ def get_customers_report(tenant, *, date_from=None, date_to=None):
             sales_services.get_customer_pending_sales(cliente)
         ) if cliente else {}
         fila["pending_total"] = sum(fila["pending"].values(), Decimal("0"))
-    return {"summary": {"customer_count": len(por_cliente)}, "rows": por_cliente}
+        fila["average_ticket"] = (fila["facturado"] / fila["cantidad"]).quantize(Decimal("0.01")) if fila["cantidad"] else Decimal("0")
+        facturado_total += fila["facturado"] or Decimal("0")
+        pendiente_total += fila["pending_total"]
+        if cliente:
+            saldo_a_favor_total += sales_services.get_customer_credit_balance(cliente)
+    return {
+        "summary": {
+            "customer_count": len(por_cliente), "total_invoiced": facturado_total,
+            "total_pending": pendiente_total, "total_paid": facturado_total - pendiente_total,
+            "total_credit_balance": saldo_a_favor_total,
+        },
+        "rows": por_cliente,
+    }
+
+
+def get_customer_statement(tenant, customer):
+    """Estado de cuenta de UN cliente (ampliación de cierre de FASE 14 —
+    ver docs/reports.md y docs/accounts-receivable.md sección 6):
+    resumen (saldo pendiente actual, facturado histórico, saldo a
+    favor) + detalle cronológico de ventas/pagos/notas de crédito —
+    nunca una copia de esos datos, siempre agregando sobre
+    `apps.sales`/`apps.sales.services` ya existentes."""
+    ventas = list(Sale.all_objects.filter(tenant=tenant, customer=customer, status=Sale.Status.CONFIRMED).order_by("issue_date"))
+    saldos = sales_services.get_sale_balance_due_bulk(ventas)
+    pagos = list(Payment.all_objects.filter(tenant=tenant, customer=customer, status=Payment.Status.CONFIRMED).order_by("created_at"))
+    notas_credito = list(CreditNote.all_objects.filter(tenant=tenant, customer=customer).order_by("issue_date"))
+
+    movimientos = []
+    for venta in ventas:
+        movimientos.append({"date": venta.issue_date, "type": "Venta", "document": venta, "amount": venta.total})
+    for pago in pagos:
+        movimientos.append({"date": pago.created_at.date(), "type": "Pago", "document": pago, "amount": -pago.amount})
+    for nota in notas_credito:
+        movimientos.append({"date": nota.issue_date, "type": "Nota de crédito", "document": nota, "amount": -nota.amount})
+    movimientos.sort(key=lambda m: m["date"])
+
+    facturado_total = sum((v.total for v in ventas), Decimal("0"))
+    pendiente_total = sum(saldos.values(), Decimal("0"))
+    return {
+        "summary": {
+            "customer": customer, "total_invoiced": facturado_total, "total_pending": pendiente_total,
+            "total_credit_balance": sales_services.get_customer_credit_balance(customer),
+            "sale_count": len(ventas),
+        },
+        "rows": movimientos,
+        "pending_sales": [{"sale": v, "balance_due": saldos.get(v.pk, Decimal("0"))} for v in ventas if saldos.get(v.pk, Decimal("0")) > 0],
+    }
 
 
 def get_suppliers_report(tenant, *, date_from=None, date_to=None):
@@ -323,7 +412,46 @@ def get_suppliers_report(tenant, *, date_from=None, date_to=None):
         queryset.values("supplier_id", "supplier__legal_name", "supplier__trade_name")
         .annotate(comprado=Sum("total"), cantidad=Count("id")).order_by("-comprado")
     )
-    return {"summary": {"supplier_count": len(por_proveedor)}, "rows": por_proveedor}
+    comprado_total = Decimal("0")
+    anticipos_total = Decimal("0")
+    proveedores_por_id = {s.pk: s for s in Supplier.all_objects.filter(pk__in=[f["supplier_id"] for f in por_proveedor])}
+    for fila in por_proveedor:
+        fila["average_purchase"] = (fila["comprado"] / fila["cantidad"]).quantize(Decimal("0.01")) if fila["cantidad"] else Decimal("0")
+        comprado_total += fila["comprado"] or Decimal("0")
+        proveedor = proveedores_por_id.get(fila["supplier_id"])
+        if proveedor:
+            anticipos_total += purchases_services.get_supplier_advance_balance(proveedor)
+    return {
+        "summary": {"supplier_count": len(por_proveedor), "total_purchased": comprado_total, "total_advances": anticipos_total},
+        "rows": por_proveedor,
+    }
+
+
+def get_supplier_statement(tenant, supplier):
+    """Estado de cuenta de UN proveedor — mismo patrón espejo que
+    `get_customer_statement`: resumen (pendiente actual, comprado
+    histórico, anticipos) + detalle cronológico de facturas/pagos."""
+    facturas = list(SupplierInvoice.all_objects.filter(tenant=tenant, supplier=supplier, status=SupplierInvoice.Status.CONFIRMED).order_by("issue_date"))
+    saldos = purchases_services.get_invoice_balance_due_bulk(facturas)
+    pagos = list(SupplierPayment.all_objects.filter(tenant=tenant, supplier=supplier, status=SupplierPayment.Status.CONFIRMED).order_by("created_at"))
+
+    movimientos = []
+    for factura in facturas:
+        movimientos.append({"date": factura.issue_date, "type": "Factura", "document": factura, "amount": factura.total})
+    for pago in pagos:
+        movimientos.append({"date": pago.created_at.date(), "type": "Pago", "document": pago, "amount": -pago.amount})
+    movimientos.sort(key=lambda m: m["date"])
+
+    comprado_total = sum((f.total for f in facturas), Decimal("0"))
+    pendiente_total = sum(saldos.values(), Decimal("0"))
+    return {
+        "summary": {
+            "supplier": supplier, "total_purchased": comprado_total, "total_pending": pendiente_total,
+            "total_advances": purchases_services.get_supplier_advance_balance(supplier), "invoice_count": len(facturas),
+        },
+        "rows": movimientos,
+        "pending_invoices": [{"invoice": f, "balance_due": saldos.get(f.pk, Decimal("0"))} for f in facturas if saldos.get(f.pk, Decimal("0")) > 0],
+    }
 
 
 # ------------------------------------------------------------------

@@ -2,27 +2,32 @@
 Vistas de Reportes (FASE 14). Deliberadamente delgadas: toda la
 agregación vive en `apps.reports.services`, que a su vez reutiliza
 literalmente los servicios de cada dominio — esta capa solo arma el
-request/response y decide el formato de salida (HTML o CSV).
+request/response y decide el formato de salida (HTML, CSV, PDF o
+XLSX).
 
-Exportación: CSV está disponible para los reportes tabulares (barato,
-sin dependencias nuevas). PDF/XLSX/reportes programados NO se
-construyen en esta fase (ver `docs/reports.md` sección "Qué NO se
-construyó") — instalar una librería nueva no está aprobada sin
-decisión explícita del usuario, mismo criterio que
-`docs/invoice-documents.md` desde FASE 10.
+Exportación (ampliación de cierre de FASE 14, ver `docs/reports.md`):
+CSV/PDF/XLSX disponibles en los reportes tabulares principales
+(Ventas/Gastos/Cuentas por Cobrar/Cuentas por Pagar) y en los dos
+Estados de Cuenta — el resto mantiene solo pantalla, documentado como
+brecha conocida ("no todos los reportes necesitan todos los
+formatos"). `reportlab`/`openpyxl` (ver `apps.reports.exports`) son
+puro-Python, sin dependencias nativas, aprobadas explícitamente por el
+usuario para esta ampliación.
 """
 
 import csv
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from apps.customers.models import Customer, Supplier
 from apps.hr.services import can_view_sensitive_employee_data
 from apps.tenants.permissions import TenantRequiredMixin
 
 from . import services
+from .exports import pdf_response, xlsx_response
 from .forms import (
     CashReportFilterForm,
     DateRangeFilterForm,
@@ -57,9 +62,15 @@ class SalesReportView(LoginRequiredMixin, TenantRequiredMixin, View):
             request.tenant, date_from=filtros.get("date_from"), date_to=filtros.get("date_to"),
             customer=filtros.get("customer"), status=filtros.get("status"),
         )
-        if request.GET.get("export") == "csv":
+        exportar = request.GET.get("export")
+        if exportar in ("csv", "pdf", "xlsx"):
+            header = ["Número", "Fecha", "Cliente", "Estado", "Total"]
             filas = [(v.number, v.issue_date, v.customer.display_name if v.customer else "—", v.status, v.total) for v in reporte["rows"]]
-            return _csv_response("ventas.csv", ["Número", "Fecha", "Cliente", "Estado", "Total"], filas)
+            if exportar == "csv":
+                return _csv_response("ventas.csv", header, filas)
+            if exportar == "pdf":
+                return pdf_response(filename="ventas.pdf", title="Reporte de Ventas", tenant=request.tenant, generated_by=request.user.get_full_name() or request.user.email, header=header, rows=filas)
+            return xlsx_response(filename="ventas.xlsx", sheet_title="Ventas", header=header, rows=filas)
         return render(request, "reports/sales_report.html", {"form": form, "reporte": reporte})
 
 
@@ -85,18 +96,30 @@ class CashReportView(LoginRequiredMixin, TenantRequiredMixin, View):
 class AccountsReceivableReportView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request):
         reporte = services.get_accounts_receivable_report(request.tenant)
-        if request.GET.get("export") == "csv":
+        exportar = request.GET.get("export")
+        if exportar in ("csv", "pdf", "xlsx"):
+            header = ["Cliente", "Factura", "Saldo", "Días vencido"]
             filas = [(f["customer"].display_name, f["sale"].number, f["balance_due"], f["days_overdue"]) for f in reporte["rows"]]
-            return _csv_response("cuentas_por_cobrar.csv", ["Cliente", "Factura", "Saldo", "Días vencido"], filas)
+            if exportar == "csv":
+                return _csv_response("cuentas_por_cobrar.csv", header, filas)
+            if exportar == "pdf":
+                return pdf_response(filename="cuentas_por_cobrar.pdf", title="Cuentas por Cobrar", tenant=request.tenant, generated_by=request.user.get_full_name() or request.user.email, header=header, rows=filas)
+            return xlsx_response(filename="cuentas_por_cobrar.xlsx", sheet_title="CxC", header=header, rows=filas)
         return render(request, "reports/accounts_receivable_report.html", {"reporte": reporte})
 
 
 class AccountsPayableReportView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request):
         reporte = services.get_accounts_payable_report(request.tenant)
-        if request.GET.get("export") == "csv":
+        exportar = request.GET.get("export")
+        if exportar in ("csv", "pdf", "xlsx"):
+            header = ["Proveedor", "Factura", "Saldo", "Días vencido"]
             filas = [(f["supplier"].display_name, f["invoice"].number, f["balance_due"], f["days_overdue"]) for f in reporte["rows"]]
-            return _csv_response("cuentas_por_pagar.csv", ["Proveedor", "Factura", "Saldo", "Días vencido"], filas)
+            if exportar == "csv":
+                return _csv_response("cuentas_por_pagar.csv", header, filas)
+            if exportar == "pdf":
+                return pdf_response(filename="cuentas_por_pagar.pdf", title="Cuentas por Pagar", tenant=request.tenant, generated_by=request.user.get_full_name() or request.user.email, header=header, rows=filas)
+            return xlsx_response(filename="cuentas_por_pagar.xlsx", sheet_title="CxP", header=header, rows=filas)
         return render(request, "reports/accounts_payable_report.html", {"reporte": reporte})
 
 
@@ -117,9 +140,15 @@ class ExpensesReportView(LoginRequiredMixin, TenantRequiredMixin, View):
         reporte = services.get_expenses_report(
             request.tenant, date_from=filtros.get("date_from"), date_to=filtros.get("date_to"), category=filtros.get("category"),
         )
-        if request.GET.get("export") == "csv":
+        exportar = request.GET.get("export")
+        if exportar in ("csv", "pdf", "xlsx"):
+            header = ["Número", "Fecha", "Categoría", "Estado", "Total"]
             filas = [(g.number, g.expense_date, g.category.name, g.status, g.total) for g in reporte["rows"]]
-            return _csv_response("gastos.csv", ["Número", "Fecha", "Categoría", "Estado", "Total"], filas)
+            if exportar == "csv":
+                return _csv_response("gastos.csv", header, filas)
+            if exportar == "pdf":
+                return pdf_response(filename="gastos.pdf", title="Reporte de Gastos", tenant=request.tenant, generated_by=request.user.get_full_name() or request.user.email, header=header, rows=filas)
+            return xlsx_response(filename="gastos.xlsx", sheet_title="Gastos", header=header, rows=filas)
         return render(request, "reports/expenses_report.html", {"form": form, "reporte": reporte})
 
 
@@ -162,3 +191,43 @@ class SuppliersReportView(LoginRequiredMixin, TenantRequiredMixin, View):
         filtros = form.cleaned_data if form.is_valid() else {}
         reporte = services.get_suppliers_report(request.tenant, date_from=filtros.get("date_from"), date_to=filtros.get("date_to"))
         return render(request, "reports/suppliers_report.html", {"form": form, "reporte": reporte})
+
+
+class CustomerStatementView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """Estado de cuenta de un cliente (ampliación de cierre de FASE 14) —
+    resumen + detalle cronológico, nunca una copia de los datos ya
+    existentes en apps.sales."""
+
+    def get(self, request, pk):
+        cliente = get_object_or_404(Customer, pk=pk, tenant=request.tenant)
+        reporte = services.get_customer_statement(request.tenant, cliente)
+        exportar = request.GET.get("export")
+        if exportar in ("csv", "pdf", "xlsx"):
+            header = ["Fecha", "Tipo", "Documento", "Monto"]
+            filas = [(m["date"], m["type"], getattr(m["document"], "number", str(m["document"].pk)), m["amount"]) for m in reporte["rows"]]
+            nombre = f"estado_cuenta_{cliente.pk}"
+            if exportar == "csv":
+                return _csv_response(f"{nombre}.csv", header, filas)
+            if exportar == "pdf":
+                return pdf_response(filename=f"{nombre}.pdf", title=f"Estado de Cuenta — {cliente.display_name}", tenant=request.tenant, generated_by=request.user.get_full_name() or request.user.email, header=header, rows=filas)
+            return xlsx_response(filename=f"{nombre}.xlsx", sheet_title="Estado de Cuenta", header=header, rows=filas)
+        return render(request, "reports/customer_statement.html", {"cliente": cliente, "reporte": reporte})
+
+
+class SupplierStatementView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """Estado de cuenta de un proveedor — mismo patrón espejo."""
+
+    def get(self, request, pk):
+        proveedor = get_object_or_404(Supplier, pk=pk, tenant=request.tenant)
+        reporte = services.get_supplier_statement(request.tenant, proveedor)
+        exportar = request.GET.get("export")
+        if exportar in ("csv", "pdf", "xlsx"):
+            header = ["Fecha", "Tipo", "Documento", "Monto"]
+            filas = [(m["date"], m["type"], getattr(m["document"], "supplier_invoice_number", None) or getattr(m["document"], "pk"), m["amount"]) for m in reporte["rows"]]
+            nombre = f"estado_cuenta_proveedor_{proveedor.pk}"
+            if exportar == "csv":
+                return _csv_response(f"{nombre}.csv", header, filas)
+            if exportar == "pdf":
+                return pdf_response(filename=f"{nombre}.pdf", title=f"Estado de Cuenta — {proveedor.display_name}", tenant=request.tenant, generated_by=request.user.get_full_name() or request.user.email, header=header, rows=filas)
+            return xlsx_response(filename=f"{nombre}.xlsx", sheet_title="Estado de Cuenta", header=header, rows=filas)
+        return render(request, "reports/supplier_statement.html", {"proveedor": proveedor, "reporte": reporte})

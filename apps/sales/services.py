@@ -821,11 +821,20 @@ def confirm_sale(sale, user):
                 transition_unit_status(unit=unit, new_status=InventoryUnit.Status.VENDIDO, user=user)
             except InvalidInventoryOperation as error:
                 raise InvalidSalesOperation(str(error)) from error
+            # COGS (ampliación de cierre de FASE 14): costo específico de
+            # ESTA unidad física, congelado desde que se recibió.
+            costo_linea = unit.unit_cost
         else:
             try:
-                register_stock_out(product=item.product, quantity=item.quantity, user=user, notes=f"Venta {locked.number}")
+                movimiento = register_stock_out(product=item.product, quantity=item.quantity, user=user, notes=f"Venta {locked.number}")
             except InvalidInventoryOperation as error:
                 raise InvalidSalesOperation(str(error)) from error
+            # COGS (ampliación de cierre de FASE 14): costo promedio
+            # ponderado vigente en el instante de la salida (snapshot
+            # guardado en el propio movimiento, ver
+            # apps.inventory.services._register_movement).
+            costo_linea = (movimiento.unit_cost or Decimal("0")) * item.quantity
+        SaleItem.all_objects.filter(pk=item.pk, tenant=locked.tenant).update(cost_amount=costo_linea)
 
     if locked.source_proforma_id:
         _convert_reservations_for_source(Reservation.SourceType.PROFORMA, locked.source_proforma_id)
@@ -841,9 +850,10 @@ def confirm_sale(sale, user):
     # Import diferido (no al nivel de módulo) para evitar un ciclo de
     # importación: apps.accounting.services ya importa
     # apps.sales.services (generate_document_number).
-    from apps.accounting.services import try_record_sale_confirmed
+    from apps.accounting.services import try_record_sale_confirmed, try_record_sale_cogs
 
     try_record_sale_confirmed(locked, user)
+    try_record_sale_cogs(locked, user)
     return locked
 
 
@@ -1262,8 +1272,18 @@ def create_return(sale, *, items, user, reason=""):
             cantidad = entrada["quantity_returned"]
             if cantidad is None or cantidad <= 0:
                 raise InvalidSalesOperation("La cantidad devuelta debe ser mayor que cero.")
+            # COGS (ampliación de cierre de FASE 14): la mercancía devuelta
+            # reingresa al promedio ponderado a SU costo original (el que
+            # se consumió al vender), nunca al costo de mercado actual —
+            # ver docs/accounting.md.
+            costo_unitario_restaurado = (
+                (sale_item.cost_amount / sale_item.quantity) if sale_item.quantity else Decimal("0")
+            )
             try:
-                register_stock_in(product=sale_item.product, quantity=cantidad, user=user, notes=f"Devolución {numero}")
+                register_stock_in(
+                    product=sale_item.product, quantity=cantidad, user=user, notes=f"Devolución {numero}",
+                    unit_cost=costo_unitario_restaurado,
+                )
             except InvalidInventoryOperation as error:
                 raise InvalidSalesOperation(str(error)) from error
             ReturnItem.all_objects.create(tenant=locked_sale.tenant, return_document=devolucion, sale_item=sale_item, quantity_returned=cantidad)
@@ -1271,7 +1291,22 @@ def create_return(sale, *, items, user, reason=""):
     locked_sale.status = Sale.Status.RETURNED if _is_full_return(locked_sale) else Sale.Status.PARTIALLY_RETURNED
     locked_sale.save(update_fields=["status", "updated_at"])
     log_activity(locked_sale.tenant, entity_type="sale", entity_id=locked_sale.pk, entity_label=locked_sale.number, action=SalesActivityLog.Action.RETURNED, user=user, details=numero)
+
+    # FASE 14 (Contabilidad General, ampliación de cierre): reversa el
+    # COGS de lo REALMENTE devuelto — nunca toca un Refund monetario
+    # (modelo separado, jamás referenciado desde aquí).
+    from apps.accounting.services import try_record_return_cogs_reversal
+
+    try_record_return_cogs_reversal(devolucion, user)
     return devolucion
+
+
+def get_sale_gross_margin(sale):
+    """Margen bruto de una venta ya confirmada: subtotal menos descuentos
+    menos el costo (COGS) de todas sus líneas — agregación de solo
+    lectura sobre `SaleItem.cost_amount`, nunca un cálculo paralelo."""
+    costo_total = get_sale_items(sale).aggregate(total=Sum("cost_amount"))["total"] or Decimal("0")
+    return sale.subtotal - sale.discount_total - costo_total
 
 
 @transaction.atomic

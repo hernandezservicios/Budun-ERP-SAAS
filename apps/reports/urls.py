@@ -16,5 +16,7 @@ urlpatterns = [
     path("rrhh/", views.HRReportView.as_view(), name="hr"),
     path("nomina/", views.PayrollReportView.as_view(), name="payroll"),
     path("clientes/", views.CustomersReportView.as_view(), name="customers"),
+    path("clientes/<int:pk>/estado-de-cuenta/", views.CustomerStatementView.as_view(), name="customer_statement"),
     path("proveedores/", views.SuppliersReportView.as_view(), name="suppliers"),
+    path("proveedores/<int:pk>/estado-de-cuenta/", views.SupplierStatementView.as_view(), name="supplier_statement"),
 ]

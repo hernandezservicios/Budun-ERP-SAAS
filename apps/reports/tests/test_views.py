@@ -25,6 +25,35 @@ class ReportsHttpTests(ReportsTestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertIn(self.gasto.number, respuesta.content.decode("utf-8"))
 
+    def test_export_pdf_ventas(self):
+        respuesta = self.owner_client.get(reverse("reports:sales"), {"export": "pdf"})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/pdf")
+        self.assertTrue(respuesta.content.startswith(b"%PDF"))
+
+    def test_export_xlsx_ventas(self):
+        respuesta = self.owner_client.get(reverse("reports:sales"), {"export": "xlsx"})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    def test_estado_de_cuenta_de_cliente_responde_200(self):
+        respuesta = self.owner_client.get(reverse("reports:customer_statement", args=[self.customer.pk]))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, self.venta.number)
+
+    def test_estado_de_cuenta_de_proveedor_responde_200(self):
+        respuesta = self.owner_client.get(reverse("reports:supplier_statement", args=[self.supplier.pk]))
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_estado_de_cuenta_de_cliente_de_otro_tenant_404(self):
+        from apps.tenants.models import Tenant
+        from apps.customers.models import Customer
+
+        otro_tenant = Tenant.objects.create(name="Otra Empresa Statements", slug="otra-empresa-statements")
+        otro_cliente = Customer.objects.create(tenant=otro_tenant, first_name="Ajeno", last_name="Cliente")
+        respuesta = self.owner_client.get(reverse("reports:customer_statement", args=[otro_cliente.pk]))
+        self.assertEqual(respuesta.status_code, 404)
+
 
 class PayrollReportSensitiveDataHttpTests(ReportsTestCase):
     def test_propietario_ve_desglose_por_empleado(self):

@@ -27,7 +27,8 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from apps.sales.models import DocumentSequence
+from apps.purchases.models import SupplierInvoice, SupplierInvoiceItem, SupplierReturnItem
+from apps.sales.models import DocumentSequence, ReturnItem, SaleItem
 from apps.sales.services import generate_document_number
 
 from .models import (
@@ -37,6 +38,8 @@ from .models import (
     AccountMapping,
     JournalEntry,
     JournalEntryLine,
+    SaleItemTax,
+    TaxCode,
 )
 
 logger = logging.getLogger("apps.accounting.auto_posting")
@@ -376,6 +379,47 @@ def list_account_mappings(tenant):
 
 
 # ------------------------------------------------------------------
+# Impuestos multi-código (ampliación de cierre de FASE 14, tenant-
+# configurable — mismo patrón que create_account/create_expense_category)
+# ------------------------------------------------------------------
+
+
+def list_tax_codes(tenant, *, only_active=True):
+    queryset = TaxCode.all_objects.filter(tenant=tenant).select_related("account")
+    if only_active:
+        queryset = queryset.filter(is_active=True)
+    return queryset.order_by("code")
+
+
+@transaction.atomic
+def create_tax_code(tenant, *, code, name, rate, account, user=None):
+    codigo = (code or "").strip()
+    if not codigo:
+        raise InvalidAccountingOperation("El código de impuesto es obligatorio.")
+    if TaxCode.all_objects.filter(tenant=tenant, code=codigo).exists():
+        raise InvalidAccountingOperation(f"Ya existe un código de impuesto «{codigo}».")
+    if account.tenant_id != tenant.id:
+        raise InvalidAccountingOperation("La cuenta de control no pertenece a este tenant.")
+    return TaxCode.all_objects.create(tenant=tenant, code=codigo, name=name, rate=rate, account=account)
+
+
+def apply_tax_code_to_sale_item(sale_item, tax_code, *, base_amount=None):
+    """Aplica un `TaxCode` a una línea de venta ya guardada — congela
+    `rate_snapshot`/`base_amount`/`tax_amount` al momento de aplicarse
+    (cambiar `TaxCode.rate` después nunca altera una línea ya emitida,
+    mismo principio que el resto de los snapshots de línea). `base_amount`
+    por defecto es `sale_item.subtotal` (la base imponible usual)."""
+    if tax_code.tenant_id != sale_item.tenant_id:
+        raise InvalidAccountingOperation("El código de impuesto no pertenece a este tenant.")
+    base = base_amount if base_amount is not None else sale_item.subtotal
+    monto = (base * tax_code.rate / Decimal("100")).quantize(Decimal("0.01"))
+    return SaleItemTax.all_objects.create(
+        tenant=sale_item.tenant, sale_item=sale_item, tax_code=tax_code,
+        rate_snapshot=tax_code.rate, base_amount=base, tax_amount=monto,
+    )
+
+
+# ------------------------------------------------------------------
 # Contabilización automática (Business Event → Accounting Service →
 # Journal Entry) — ver docs/accounting.md sección 8.
 # ------------------------------------------------------------------
@@ -427,7 +471,37 @@ def record_sale_confirmed(sale, user):
         {"account": cuenta_ar, "debit": sale.total, "customer": sale.customer, "description": f"Venta {sale.number}"},
         {"account": cuenta_ingresos, "credit": ingreso_neto, "description": f"Venta {sale.number}"},
     ]
-    if sale.tax_total:
+    # Impuestos multi-código (ampliación de cierre de FASE 14): se
+    # comprueban las filas `SaleItemTax` PRIMERO, independientemente de
+    # `sale.tax_total` — un tenant que solo usa `TaxCode` en una línea
+    # (`SaleItem.tax_rate` en 0) igual debe contabilizarse. Si hay filas,
+    # una línea Cr por cada cuenta de `TaxCode` distinta usada; si no
+    # hay ninguna, se usa exactamente el camino simple existente
+    # (`SALES_TAX_PAYABLE`) cuando `sale.tax_total` es positivo — sin
+    # ningún cambio de comportamiento para tenants que nunca adoptan
+    # `TaxCode`. Nota de uso esperado: cuando se usan ambos a la vez,
+    # el `TaxCode` debe reflejar la MISMA tasa que ya está en
+    # `SaleItem.tax_rate` (`sale.total` — lo que paga el cliente — se
+    # calcula siempre desde el campo plano, `apps.sales`, nunca desde
+    # `SaleItemTax`); `TaxCode` solo decide a qué cuenta va cada
+    # porción, documentado en `docs/accounting.md` sección 15.
+    agregados_por_cuenta = list(
+        SaleItemTax.all_objects.filter(tenant=sale.tenant, sale_item__sale=sale)
+        .values("tax_code__account_id").annotate(total=Sum("tax_amount"))
+    )
+    if agregados_por_cuenta:
+        cuentas = {
+            c.pk: c for c in Account.all_objects.filter(
+                pk__in=[fila["tax_code__account_id"] for fila in agregados_por_cuenta]
+            )
+        }
+        for fila in agregados_por_cuenta:
+            cuenta = cuentas[fila["tax_code__account_id"]]
+            lines.append({
+                "account": cuenta, "credit": fila["total"],
+                "description": f"Impuesto ({cuenta.code}) venta {sale.number}",
+            })
+    elif sale.tax_total:
         cuenta_impuesto = get_mapped_account(sale.tenant, AccountMapping.Key.SALES_TAX_PAYABLE)
         if cuenta_impuesto is None:
             return None
@@ -439,6 +513,128 @@ def record_sale_confirmed(sale, user):
         sale.tenant, source_type="sale", source_id=sale.pk, source_event_key=f"sale-confirmed-{sale.pk}",
         entry_date=sale.issue_date, description=f"Venta confirmada {sale.number}", lines=lines, user=user,
         reference=sale.number,
+    )
+
+
+def record_sale_cogs(sale, user):
+    """Costo de ventas (COGS) de una venta confirmada → Dr Costo de
+    Ventas / Cr Inventario, por `SUM(SaleItem.cost_amount)`. Asiento
+    SEPARADO del de ingresos (`record_sale_confirmed`) — si falta el
+    mapeo de COGS/Inventario, esta entrada específica no se postea (la
+    de ingresos sigue intacta, misma resiliencia). Ampliación de cierre
+    de FASE 14 — ver docs/accounting.md."""
+    cuenta_cogs = get_mapped_account(sale.tenant, AccountMapping.Key.COST_OF_GOODS_SOLD)
+    cuenta_inventario = get_mapped_account(sale.tenant, AccountMapping.Key.INVENTORY_ASSET)
+    if cuenta_cogs is None or cuenta_inventario is None:
+        return None
+
+    # `sale.items` (related_name) usa el manager tenant-scoped por
+    # defecto de SaleItem, que depende del ContextVar de TenantMiddleware
+    # -- solo fijado durante una request HTTP real. `record_sale_cogs` se
+    # invoca desde `confirm_sale`, que también corre en tests/scripts sin
+    # ese contexto, así que se usa `all_objects` con tenant explícito,
+    # mismo patrón que el resto de este archivo.
+    costo_total = sum(
+        (item.cost_amount for item in SaleItem.all_objects.filter(tenant=sale.tenant, sale=sale)), Decimal("0"),
+    )
+    if costo_total <= 0:
+        return None  # Sin costo conocido (p. ej. venta confirmada antes de esta ampliación) — nada que contabilizar.
+
+    lines = [
+        {"account": cuenta_cogs, "debit": costo_total, "customer": sale.customer, "currency": sale.currency,
+         "description": f"Costo de ventas {sale.number}"},
+        {"account": cuenta_inventario, "credit": costo_total, "currency": sale.currency,
+         "description": f"Costo de ventas {sale.number}"},
+    ]
+    return record_business_event(
+        sale.tenant, source_type="sale", source_id=sale.pk, source_event_key=f"sale-cogs-{sale.pk}",
+        entry_date=sale.issue_date, description=f"Costo de ventas — {sale.number}", lines=lines, user=user,
+        reference=sale.number,
+    )
+
+
+def record_return_cogs_reversal(return_document, user):
+    """Reverso de COGS por una devolución de mercancía → Dr Inventario /
+    Cr Costo de Ventas, por el costo de LO REALMENTE devuelto
+    (proporcional en devoluciones parciales por cantidad; el costo
+    específico de la unidad en devoluciones serializadas). Solo si la
+    venta original ya tiene un asiento de COGS contabilizado — si no,
+    no hay nada que reversar (no-op). Un `Refund` monetario (modelo
+    separado) nunca dispara esta función."""
+    sale = return_document.sale
+    existe_cogs_original = JournalEntry.all_objects.filter(
+        tenant=return_document.tenant, source_type="sale", source_event_key=f"sale-cogs-{sale.pk}",
+        status=JournalEntry.Status.POSTED,
+    ).exists()
+    if not existe_cogs_original:
+        return None
+
+    costo_total = Decimal("0")
+    for item in ReturnItem.all_objects.filter(tenant=return_document.tenant, return_document=return_document).select_related("sale_item"):
+        sale_item = item.sale_item
+        if item.inventory_unit_id:
+            costo_total += sale_item.cost_amount
+        elif item.quantity_returned and sale_item.quantity:
+            costo_total += (sale_item.cost_amount / sale_item.quantity) * item.quantity_returned
+    if costo_total <= 0:
+        return None
+
+    cuenta_cogs = get_mapped_account(return_document.tenant, AccountMapping.Key.COST_OF_GOODS_SOLD)
+    cuenta_inventario = get_mapped_account(return_document.tenant, AccountMapping.Key.INVENTORY_ASSET)
+    if cuenta_cogs is None or cuenta_inventario is None:
+        return None
+
+    lines = [
+        {"account": cuenta_inventario, "debit": costo_total, "currency": sale.currency,
+         "description": f"Reverso de costo de ventas — {return_document.number}"},
+        {"account": cuenta_cogs, "credit": costo_total, "customer": sale.customer, "currency": sale.currency,
+         "description": f"Reverso de costo de ventas — {return_document.number}"},
+    ]
+    return record_business_event(
+        return_document.tenant, source_type="return", source_id=return_document.pk,
+        source_event_key=f"return-cogs-{return_document.pk}", entry_date=timezone.localdate(),
+        description=f"Reverso de costo de ventas — {return_document.number}", lines=lines, user=user,
+        reference=return_document.number,
+    )
+
+
+def record_cash_session_closing(session, user):
+    """Cierre de sesión de caja con sobrante/faltante → reconoce la
+    DIFERENCIA descubierta al contar (nunca el efectivo esperado, que
+    ya se contabilizó vía los eventos de venta/pago/gasto/nómina). Sin
+    diferencia, no hay nada que reconocer (no-op). Ampliación de cierre
+    de FASE 14 — convención contable "Cash Over and Short". Ver
+    docs/accounting.md."""
+    if not session.difference:
+        return None
+
+    cuenta_caja = get_mapped_account(session.tenant, AccountMapping.Key.CASH_AND_EQUIVALENTS)
+    if cuenta_caja is None:
+        return None
+
+    monto = abs(session.difference)
+    if session.difference > 0:
+        cuenta_contraparte = get_mapped_account(session.tenant, AccountMapping.Key.CASH_OVER)
+        if cuenta_contraparte is None:
+            return None
+        lines = [
+            {"account": cuenta_caja, "debit": monto, "description": f"Sobrante de caja — sesión #{session.pk}"},
+            {"account": cuenta_contraparte, "credit": monto, "description": f"Sobrante de caja — sesión #{session.pk}"},
+        ]
+    else:
+        cuenta_contraparte = get_mapped_account(session.tenant, AccountMapping.Key.CASH_SHORT)
+        if cuenta_contraparte is None:
+            return None
+        lines = [
+            {"account": cuenta_contraparte, "debit": monto, "description": f"Faltante de caja — sesión #{session.pk}"},
+            {"account": cuenta_caja, "credit": monto, "description": f"Faltante de caja — sesión #{session.pk}"},
+        ]
+
+    return record_business_event(
+        session.tenant, source_type="cash_session", source_id=session.pk,
+        source_event_key=f"cash-session-closed-{session.pk}", entry_date=timezone.localdate(),
+        description=f"Cierre de sesión de caja #{session.pk} ({'sobrante' if session.difference > 0 else 'faltante'})",
+        lines=lines, user=user,
     )
 
 
@@ -509,6 +705,126 @@ def record_payroll_payment_event(payroll_payment, user):
     )
 
 
+def record_supplier_invoice_confirmed(invoice, user):
+    """Factura de proveedor confirmada → Dr Inventario (líneas ligadas a
+    una orden de compra real) y/o Dr Gasto Operativo (líneas sin orden
+    — servicio o costo no ligado a inventario) y/o Dr Impuesto por
+    Recuperar (si hay impuesto), Cr Cuentas por Pagar por el total.
+    Ampliación de cierre de FASE 14 — ver docs/accounting.md."""
+    cuenta_ap = get_mapped_account(invoice.tenant, AccountMapping.Key.ACCOUNTS_PAYABLE)
+    if cuenta_ap is None:
+        return None
+
+    items = list(SupplierInvoiceItem.all_objects.filter(tenant=invoice.tenant, invoice=invoice))
+    inventario_subtotal = sum((i.subtotal for i in items if i.purchase_order_item_id), Decimal("0"))
+    gasto_subtotal = sum((i.subtotal for i in items if not i.purchase_order_item_id), Decimal("0"))
+
+    lines = []
+    if inventario_subtotal > 0:
+        cuenta_inventario = get_mapped_account(invoice.tenant, AccountMapping.Key.INVENTORY_ASSET)
+        if cuenta_inventario is None:
+            return None
+        lines.append({
+            "account": cuenta_inventario, "debit": inventario_subtotal, "supplier": invoice.supplier,
+            "description": f"Compra de inventario — factura {invoice.supplier_invoice_number}",
+        })
+    if gasto_subtotal > 0:
+        cuenta_gasto = get_mapped_account(invoice.tenant, AccountMapping.Key.OPERATING_EXPENSE)
+        if cuenta_gasto is None:
+            return None
+        lines.append({
+            "account": cuenta_gasto, "debit": gasto_subtotal, "supplier": invoice.supplier,
+            "description": f"Gasto operativo — factura {invoice.supplier_invoice_number}",
+        })
+    if invoice.tax_total:
+        cuenta_impuesto = get_mapped_account(invoice.tenant, AccountMapping.Key.PURCHASE_TAX_RECEIVABLE)
+        if cuenta_impuesto is None:
+            return None
+        lines.append({
+            "account": cuenta_impuesto, "debit": invoice.tax_total, "supplier": invoice.supplier,
+            "description": f"Impuesto por recuperar — factura {invoice.supplier_invoice_number}",
+        })
+    if not lines:
+        return None  # Factura sin importe reconocible (caso degenerado) — nada que contabilizar.
+
+    lines.append({
+        "account": cuenta_ap, "credit": invoice.total, "supplier": invoice.supplier,
+        "description": f"Factura de proveedor {invoice.supplier_invoice_number}",
+    })
+    for linea in lines:
+        linea["currency"] = invoice.currency
+    return record_business_event(
+        invoice.tenant, source_type="supplier_invoice", source_id=invoice.pk,
+        source_event_key=f"supplier-invoice-confirmed-{invoice.pk}", entry_date=invoice.issue_date,
+        description=f"Factura de proveedor confirmada {invoice.supplier_invoice_number}", lines=lines, user=user,
+        reference=invoice.supplier_invoice_number,
+    )
+
+
+def record_supplier_payment(payment, user):
+    """Pago a proveedor registrado → Dr Cuentas por Pagar, Cr Efectivo y
+    equivalentes — espejo exacto de `record_customer_payment`."""
+    cuenta_ap = get_mapped_account(payment.tenant, AccountMapping.Key.ACCOUNTS_PAYABLE)
+    cuenta_caja = get_mapped_account(payment.tenant, AccountMapping.Key.CASH_AND_EQUIVALENTS)
+    if cuenta_ap is None or cuenta_caja is None:
+        return None
+
+    lines = [
+        {"account": cuenta_ap, "debit": payment.amount, "supplier": payment.supplier, "currency": payment.currency,
+         "description": f"Pago a proveedor ({payment.get_method_display()})"},
+        {"account": cuenta_caja, "credit": payment.amount, "supplier": payment.supplier, "currency": payment.currency,
+         "description": f"Pago a proveedor ({payment.get_method_display()})"},
+    ]
+    return record_business_event(
+        payment.tenant, source_type="supplier_payment", source_id=payment.pk,
+        source_event_key=f"supplier-payment-recorded-{payment.pk}", entry_date=timezone.localdate(),
+        description=f"Pago registrado a proveedor #{payment.pk}", lines=lines, user=user,
+    )
+
+
+def record_supplier_return(return_document, user):
+    """Devolución a proveedor → Dr Cuentas por Pagar / Cr Inventario, por
+    el costo de lo devuelto — SOLO si ya existe alguna factura de este
+    proveedor/orden contabilizada (si la devolución ocurre antes de
+    facturar, no hay nada contabilizado todavía que revertir)."""
+    existe_factura_contabilizada = JournalEntry.all_objects.filter(
+        tenant=return_document.tenant, source_type="supplier_invoice", status=JournalEntry.Status.POSTED,
+        source_id__in=SupplierInvoice.all_objects.filter(
+            tenant=return_document.tenant, purchase_order=return_document.purchase_order,
+        ).values_list("pk", flat=True),
+    ).exists()
+    if not existe_factura_contabilizada:
+        return None
+
+    costo_total = Decimal("0")
+    for item in SupplierReturnItem.all_objects.filter(tenant=return_document.tenant, return_document=return_document).select_related("receipt_item"):
+        if item.inventory_unit_id:
+            costo_total += item.receipt_item.unit_cost
+        elif item.quantity_returned:
+            costo_total += item.receipt_item.unit_cost * item.quantity_returned
+    if costo_total <= 0:
+        return None
+
+    cuenta_ap = get_mapped_account(return_document.tenant, AccountMapping.Key.ACCOUNTS_PAYABLE)
+    cuenta_inventario = get_mapped_account(return_document.tenant, AccountMapping.Key.INVENTORY_ASSET)
+    if cuenta_ap is None or cuenta_inventario is None:
+        return None
+
+    supplier = return_document.purchase_order.supplier
+    lines = [
+        {"account": cuenta_ap, "debit": costo_total, "supplier": supplier,
+         "description": f"Devolución a proveedor {return_document.number}"},
+        {"account": cuenta_inventario, "credit": costo_total,
+         "description": f"Devolución a proveedor {return_document.number}"},
+    ]
+    return record_business_event(
+        return_document.tenant, source_type="supplier_return", source_id=return_document.pk,
+        source_event_key=f"supplier-return-{return_document.pk}", entry_date=timezone.localdate(),
+        description=f"Devolución a proveedor {return_document.number}", lines=lines, user=user,
+        reference=return_document.number,
+    )
+
+
 def try_record_sale_confirmed(sale, user):
     try:
         record_sale_confirmed(sale, user)
@@ -535,6 +851,48 @@ def try_record_payroll_payment(payroll_payment, user):
         record_payroll_payment_event(payroll_payment, user)
     except Exception as error:  # noqa: BLE001
         _registrar_fallo_contabilizacion(payroll_payment.tenant, source_type="payroll_payment", source_id=payroll_payment.pk, error=error)
+
+
+def try_record_sale_cogs(sale, user):
+    try:
+        record_sale_cogs(sale, user)
+    except Exception as error:  # noqa: BLE001 — la contabilización automática nunca debe romper la venta.
+        _registrar_fallo_contabilizacion(sale.tenant, source_type="sale", source_id=sale.pk, error=error)
+
+
+def try_record_return_cogs_reversal(return_document, user):
+    try:
+        record_return_cogs_reversal(return_document, user)
+    except Exception as error:  # noqa: BLE001 — nunca debe romper la devolución.
+        _registrar_fallo_contabilizacion(return_document.tenant, source_type="return", source_id=return_document.pk, error=error)
+
+
+def try_record_supplier_invoice_confirmed(invoice, user):
+    try:
+        record_supplier_invoice_confirmed(invoice, user)
+    except Exception as error:  # noqa: BLE001 — nunca debe romper la confirmación de la factura.
+        _registrar_fallo_contabilizacion(invoice.tenant, source_type="supplier_invoice", source_id=invoice.pk, error=error)
+
+
+def try_record_supplier_payment(payment, user):
+    try:
+        record_supplier_payment(payment, user)
+    except Exception as error:  # noqa: BLE001 — nunca debe romper el pago al proveedor.
+        _registrar_fallo_contabilizacion(payment.tenant, source_type="supplier_payment", source_id=payment.pk, error=error)
+
+
+def try_record_supplier_return(return_document, user):
+    try:
+        record_supplier_return(return_document, user)
+    except Exception as error:  # noqa: BLE001 — nunca debe romper la devolución al proveedor.
+        _registrar_fallo_contabilizacion(return_document.tenant, source_type="supplier_return", source_id=return_document.pk, error=error)
+
+
+def try_record_cash_session_closing(session, user):
+    try:
+        record_cash_session_closing(session, user)
+    except Exception as error:  # noqa: BLE001 — nunca debe romper el cierre de la sesión de caja.
+        _registrar_fallo_contabilizacion(session.tenant, source_type="cash_session", source_id=session.pk, error=error)
 
 
 # ------------------------------------------------------------------
@@ -658,4 +1016,27 @@ def get_income_statement(tenant, period):
         "revenue": grupos[Account.AccountType.REVENUE], "cost": grupos[Account.AccountType.COST],
         "expense": grupos[Account.AccountType.EXPENSE], "total_revenue": ingresos, "total_cost": costos,
         "total_expense": gastos, "gross_profit": utilidad_bruta, "net_income": utilidad_neta,
+    }
+
+
+def get_inventory_gl_reconciliation(tenant):
+    """Reporte de integridad (ampliación de cierre de FASE 14): compara
+    el valor de inventario calculado por `apps.inventory` (fuente real
+    de cantidades/costos) contra el saldo de la cuenta mapeada
+    `INVENTORY_ASSET` en el Libro Mayor — nunca una tercera cifra, solo
+    una comparación de las dos que ya existen. Si no hay cuenta mapeada,
+    devuelve `None` (nada que reconciliar todavía)."""
+    from apps.inventory.services import get_inventory_valuation
+
+    cuenta_inventario = get_mapped_account(tenant, AccountMapping.Key.INVENTORY_ASSET)
+    if cuenta_inventario is None:
+        return None
+
+    valorizacion = get_inventory_valuation(tenant)
+    lineas_mayor = get_general_ledger(tenant, cuenta_inventario)
+    saldo_contable = lineas_mayor[-1]["running_balance"] if lineas_mayor else Decimal("0")
+    valor_inventario = valorizacion["total_value"]
+    return {
+        "inventory_value": valor_inventario, "gl_balance": saldo_contable,
+        "difference": valor_inventario - saldo_contable, "rows": valorizacion["rows"],
     }

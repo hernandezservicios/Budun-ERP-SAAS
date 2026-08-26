@@ -43,7 +43,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, DecimalField, F, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, Count, DecimalField, F, OuterRef, Q, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce
 
 from .models import Category, InventoryUnit, Product, StockMovement
@@ -174,7 +174,7 @@ def _require_quantity_tracking(product):
 
 
 @transaction.atomic
-def register_stock_in(*, product, quantity, user, notes=""):
+def register_stock_in(*, product, quantity, user, notes="", unit_cost=None):
     _require_quantity_tracking(product)
     return _register_movement(
         product=product,
@@ -183,6 +183,7 @@ def register_stock_in(*, product, quantity, user, notes=""):
         user=user,
         notes=notes,
         sign=1,
+        unit_cost=unit_cost,
     )
 
 
@@ -202,7 +203,9 @@ def register_stock_out(*, product, quantity, user, notes=""):
 @transaction.atomic
 def register_stock_adjustment(*, product, new_stock, user, notes=""):
     """Ajuste: fija el stock a un valor exacto (p. ej. tras un conteo
-    físico), en vez de sumar/restar una cantidad."""
+    físico), en vez de sumar/restar una cantidad. El costo promedio
+    ponderado se arrastra sin cambio — un conteo físico no trae consigo
+    un costo confiable, nunca se fabrica uno (ver docs/accounting.md)."""
     _require_quantity_tracking(product)
     if new_stock < 0:
         raise InvalidInventoryOperation("El stock ajustado no puede ser negativo.")
@@ -215,6 +218,7 @@ def register_stock_adjustment(*, product, new_stock, user, notes=""):
             "El stock ajustado es igual al actual; no hay ningún cambio que registrar."
         )
 
+    promedio_actual = get_current_average_cost(locked_product)
     return StockMovement.all_objects.create(
         tenant=locked_product.tenant,
         product=locked_product,
@@ -222,12 +226,14 @@ def register_stock_adjustment(*, product, new_stock, user, notes=""):
         quantity=abs(new_stock - stock_before),
         stock_before=stock_before,
         stock_after=new_stock,
+        unit_cost=None,
+        average_cost_after=promedio_actual,
         user=user,
         notes=notes,
     )
 
 
-def _register_movement(*, product, quantity, movement_type, user, notes, sign):
+def _register_movement(*, product, quantity, movement_type, user, notes, sign, unit_cost=None):
     if quantity is None or quantity <= 0:
         raise InvalidInventoryOperation("La cantidad debe ser mayor que cero.")
 
@@ -243,6 +249,30 @@ def _register_movement(*, product, quantity, movement_type, user, notes, sign):
             f"La salida dejaría el stock en negativo (actual: {stock_before}, solicitado: {quantity})."
         )
 
+    # Costeo por promedio ponderado (ampliación de cierre de FASE 14).
+    # Ver docs/accounting.md para la política completa.
+    promedio_anterior = get_current_average_cost(locked_product)
+    if movement_type == StockMovement.MovementType.IN:
+        if unit_cost is not None:
+            # Se recalcula sumando el costo total de lo que ya había más
+            # el costo del lote entrante, dividido entre el stock
+            # resultante -- la definición estándar de promedio ponderado.
+            costo_movimiento = unit_cost
+            promedio_nuevo = (stock_before * promedio_anterior + quantity * unit_cost) / stock_after
+        else:
+            # Entrada sin costo conocido (p. ej. un alta manual sin
+            # información de compra): el promedio no cambia, nunca se
+            # fabrica un costo que nadie proporcionó.
+            costo_movimiento = None
+            promedio_nuevo = promedio_anterior
+    else:
+        # Salida: el costo consumido es el promedio vigente en este
+        # instante (base real del COGS, ver apps.sales.services.confirm_sale)
+        # -- retirar unidades a su propio costo promedio nunca cambia el
+        # promedio de las unidades que quedan.
+        costo_movimiento = promedio_anterior
+        promedio_nuevo = promedio_anterior
+
     return StockMovement.all_objects.create(
         tenant=locked_product.tenant,
         product=locked_product,
@@ -250,9 +280,59 @@ def _register_movement(*, product, quantity, movement_type, user, notes, sign):
         quantity=quantity,
         stock_before=stock_before,
         stock_after=stock_after,
+        unit_cost=costo_movimiento,
+        average_cost_after=promedio_nuevo,
         user=user,
         notes=notes,
     )
+
+
+def get_current_average_cost(product):
+    """Costo promedio ponderado ACTUAL de un producto por CANTIDAD —
+    mismo patrón que `get_current_stock`: se lee del `average_cost_after`
+    del `StockMovement` más reciente, nunca un campo desnormalizado en
+    `Product`. Para SERIALIZED, o un producto sin ningún movimiento
+    (o solo movimientos históricos sin costo), devuelve 0 — SERIALIZED
+    tiene su propio costo específico por unidad
+    (`InventoryUnit.unit_cost`)."""
+    if product.inventory_tracking_type == Product.TrackingType.SERIALIZED:
+        return Decimal("0")
+    ultimo = (
+        StockMovement.all_objects.filter(product=product)
+        .order_by("-created_at", "-id")
+        .values_list("average_cost_after", flat=True)
+        .first()
+    )
+    return ultimo if ultimo is not None else Decimal("0")
+
+
+def get_inventory_valuation(tenant):
+    """Valor total de inventario del tenant — nunca una tercera fuente de
+    verdad: se apoya exactamente en `get_current_stock`/
+    `get_current_average_cost` (QUANTITY) e `InventoryUnit.unit_cost`
+    (SERIALIZED), ya establecidos. Usado por el reporte de Inventario
+    (FASE 14) y por la reconciliación contable
+    (`apps.accounting.services.get_inventory_gl_reconciliation`)."""
+    productos = list_products_with_stock(tenant, only_active=False)
+    filas = []
+    total = Decimal("0")
+    for producto in productos:
+        if not producto.current_stock:
+            continue
+        if producto.inventory_tracking_type == Product.TrackingType.SERIALIZED:
+            costo_promedio = None
+            valor = InventoryUnit.all_objects.filter(
+                tenant=tenant, product=producto, status=InventoryUnit.Status.EN_STOCK,
+            ).aggregate(total=Sum("unit_cost"))["total"] or Decimal("0")
+        else:
+            costo_promedio = get_current_average_cost(producto)
+            valor = producto.current_stock * costo_promedio
+        filas.append({
+            "product": producto, "stock": producto.current_stock,
+            "average_cost": costo_promedio, "value": valor,
+        })
+        total += valor
+    return {"rows": filas, "total_value": total}
 
 
 # ------------------------------------------------------------------

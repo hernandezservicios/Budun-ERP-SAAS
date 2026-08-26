@@ -144,6 +144,24 @@ class StockMovement(TenantScopedModel):
     quantity = models.DecimalField("cantidad", max_digits=12, decimal_places=3)
     stock_before = models.DecimalField("stock anterior", max_digits=12, decimal_places=3)
     stock_after = models.DecimalField("stock posterior", max_digits=12, decimal_places=3)
+    # Costeo por promedio ponderado (ampliación de cierre de FASE 14, ver
+    # docs/accounting.md sección de costeo). Mismo patrón que
+    # stock_before/stock_after: calculados y guardados UNA VEZ al crear el
+    # movimiento, nunca recalculados después. `unit_cost` es el costo de
+    # ESTE movimiento (costo del lote en una entrada; costo promedio
+    # consumido en una salida; nulo en un ajuste — un conteo físico no trae
+    # un costo confiable). `average_cost_after` es el promedio ponderado
+    # por unidad vigente DESPUÉS de este movimiento — "costo promedio
+    # actual de un producto" = `average_cost_after` del movimiento más
+    # reciente, exactamente como el stock actual = `stock_after` del más
+    # reciente (ver `services.get_current_average_cost`). Ambos nulos en
+    # movimientos históricos anteriores a esta ampliación (sin costo
+    # conocido retroactivamente — nunca se fabrica un dato que nadie
+    # proporcionó).
+    unit_cost = models.DecimalField("costo de este movimiento", max_digits=12, decimal_places=2, null=True, blank=True)
+    average_cost_after = models.DecimalField(
+        "costo promedio posterior", max_digits=12, decimal_places=2, null=True, blank=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         verbose_name="usuario",
@@ -163,6 +181,13 @@ class StockMovement(TenantScopedModel):
             models.CheckConstraint(check=Q(quantity__gt=0), name="stock_movement_cantidad_positiva"),
             models.CheckConstraint(
                 check=Q(stock_after__gte=0), name="stock_movement_stock_posterior_no_negativo"
+            ),
+            models.CheckConstraint(
+                check=Q(unit_cost__isnull=True) | Q(unit_cost__gte=0), name="stockmov_costo_no_negativo"
+            ),
+            models.CheckConstraint(
+                check=Q(average_cost_after__isnull=True) | Q(average_cost_after__gte=0),
+                name="stockmov_promedio_no_neg",
             ),
         ]
         indexes = [

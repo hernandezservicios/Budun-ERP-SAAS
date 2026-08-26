@@ -238,6 +238,16 @@ def close_cash_session(session, user, *, counted_cash, closing_notes=""):
     locked.closed_at = timezone.now()
     locked.closing_notes = closing_notes
     locked.save(update_fields=["expected_cash", "counted_cash", "difference", "status", "closed_at", "closing_notes"])
+
+    # FASE 14 (Contabilidad General, ampliación de cierre): reconoce el
+    # sobrante/faltante descubierto al contar como un asiento contable
+    # nuevo — nunca duplica el efectivo esperado (ya contabilizado por
+    # los eventos de venta/pago/gasto/nómina). Deliberadamente
+    # resiliente, import diferido (mismo patrón que apps.sales/apps.expenses/
+    # apps.payroll/apps.purchases).
+    from apps.accounting.services import try_record_cash_session_closing
+
+    try_record_cash_session_closing(locked, user)
     return locked
 
 

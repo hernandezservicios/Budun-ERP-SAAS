@@ -475,6 +475,14 @@ class Sale(TenantScopedModel, CommercialDocumentMixin):
 
 class SaleItem(TenantScopedModel, CommercialDocumentItemMixin):
     sale = models.ForeignKey(Sale, verbose_name="venta", on_delete=models.CASCADE, related_name="items")
+    # Costo (COGS) de esta línea — ampliación de cierre de FASE 14. Solo
+    # `SaleItem` lo tiene (no el mixin compartido con Cotización/Proforma:
+    # esas nunca mueven inventario real, no hay costo que snapshotear).
+    # Se llena en `services.confirm_sale`, en el momento en que el
+    # inventario REALMENTE se mueve — nunca al agregar la línea a un
+    # borrador, porque el costo promedio ponderado puede cambiar entre
+    # ambos momentos. Ver docs/accounting.md.
+    cost_amount = models.DecimalField("costo (COGS)", max_digits=12, decimal_places=2, default=Decimal("0"))
 
     class Meta:
         verbose_name = "línea de venta"

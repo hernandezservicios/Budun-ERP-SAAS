@@ -25,16 +25,28 @@
 </form>
 
 {% if reporte.rows %}
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Total facturado</th><td>{{ reporte.summary.total_invoiced }}</td></tr>
+            <tr><th>Total pagado</th><td>{{ reporte.summary.total_paid }}</td></tr>
+            <tr><th>Total pendiente</th><td>{{ reporte.summary.total_pending }}</td></tr>
+            <tr><th>Saldo a favor total</th><td>{{ reporte.summary.total_credit_balance }}</td></tr>
+        </tbody>
+    </table>
+</div>
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Cliente</th><th># Ventas</th><th>Facturado</th><th>Pendiente</th></tr></thead>
+        <thead><tr><th>Cliente</th><th># Ventas</th><th>Facturado</th><th>Ticket promedio</th><th>Pendiente</th><th>Estado de cuenta</th></tr></thead>
         <tbody>
             {% for fila in reporte.rows %}
             <tr>
                 <td><a href="{% url 'customers:customer_detail' fila.customer_id %}">{{ fila.display_name }}</a></td>
                 <td>{{ fila.cantidad }}</td>
                 <td>{{ fila.facturado }}</td>
+                <td>{{ fila.average_ticket }}</td>
                 <td>{{ fila.pending_total }}</td>
+                <td><a href="{% url 'reports:customer_statement' fila.customer_id %}">Ver</a></td>
             </tr>
             {% endfor %}
         </tbody>

@@ -36,7 +36,10 @@ class AccountServiceTests(AccountingTestCase):
         arbol = services.get_account_tree(self.tenant)
         raiz_activos = next(n for n in arbol if n["cuenta"].code == "1000")
         codigos_hijos = {n["cuenta"].code for n in raiz_activos["hijos"]}
-        self.assertEqual(codigos_hijos, {"1100", "1200"})
+        # "1300" (Inventario) y "1400" (Impuesto por Recuperar) se agregaron
+        # al fixture compartido en la ampliación de cierre de FASE 14 (ver
+        # AccountingTestCase._helpers.py) — hijas legítimas de "1000 Activos".
+        self.assertEqual(codigos_hijos, {"1100", "1200", "1300", "1400"})
 
 
 class AccountingPeriodServiceTests(AccountingTestCase):

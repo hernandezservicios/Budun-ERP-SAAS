@@ -25,15 +25,25 @@
 </form>
 
 {% if reporte.rows %}
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Total comprado</th><td>{{ reporte.summary.total_purchased }}</td></tr>
+            <tr><th>Anticipos totales</th><td>{{ reporte.summary.total_advances }}</td></tr>
+        </tbody>
+    </table>
+</div>
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Proveedor</th><th># Órdenes</th><th>Comprado</th></tr></thead>
+        <thead><tr><th>Proveedor</th><th># Órdenes</th><th>Comprado</th><th>Promedio por orden</th><th>Estado de cuenta</th></tr></thead>
         <tbody>
             {% for fila in reporte.rows %}
             <tr>
                 <td>{{ fila.supplier__legal_name|default:fila.supplier__trade_name }}</td>
                 <td>{{ fila.cantidad }}</td>
                 <td>{{ fila.comprado }}</td>
+                <td>{{ fila.average_purchase }}</td>
+                <td><a href="{% url 'reports:supplier_statement' fila.supplier_id %}">Ver</a></td>
             </tr>
             {% endfor %}
         </tbody>

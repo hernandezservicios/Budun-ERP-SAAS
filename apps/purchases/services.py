@@ -585,16 +585,20 @@ def receive_purchase_order(purchase_order, *, lines, user, tenant, receipt_date=
                     inventory_unit=inventory_unit, unit_cost=costo_unidad,
                 )
         else:
-            try:
-                register_stock_in(
-                    product=item.product, quantity=solicitado, user=user,
-                    notes=f"Recepción {recepcion.number} (OC {locked_po.number})",
-                )
-            except InvalidInventoryOperation as error:
-                raise InvalidPurchaseOperation(str(error)) from error
             costo_linea = linea.get("unit_cost")
             if costo_linea is None:
                 costo_linea = item.unit_cost
+            try:
+                # Costeo por promedio ponderado (ampliación de cierre de
+                # FASE 14): el costo real de esta recepción alimenta el
+                # promedio del producto — nunca una entrada "ciega" sin
+                # costo, ver apps.inventory.services._register_movement.
+                register_stock_in(
+                    product=item.product, quantity=solicitado, user=user,
+                    notes=f"Recepción {recepcion.number} (OC {locked_po.number})", unit_cost=costo_linea,
+                )
+            except InvalidInventoryOperation as error:
+                raise InvalidPurchaseOperation(str(error)) from error
             PurchaseReceiptItem.all_objects.create(
                 tenant=locked_po.tenant, receipt=recepcion, purchase_order_item=item,
                 quantity_received=solicitado, unit_cost=costo_linea,
@@ -689,6 +693,14 @@ def confirm_supplier_invoice(invoice, user):
         locked.tenant, entity_type="supplier_invoice", entity_id=locked.pk, entity_label=locked.supplier_invoice_number,
         action=PurchasesActivityLog.Action.INVOICE_CONFIRMED, user=user, details=str(locked.total),
     )
+
+    # FASE 14 (Contabilidad General, ampliación de cierre): contabilización
+    # automática, deliberadamente resiliente — nunca debe romper la
+    # confirmación de la factura. Import diferido, mismo patrón que
+    # apps.sales.services.confirm_sale.
+    from apps.accounting.services import try_record_supplier_invoice_confirmed
+
+    try_record_supplier_invoice_confirmed(locked, user)
     return locked
 
 
@@ -839,6 +851,10 @@ def create_supplier_payment(
         entity_label=f"{pago.get_method_display()} {pago.amount}",
         action=PurchasesActivityLog.Action.PAYMENT_RECORDED, user=user, details=supplier.display_name,
     )
+
+    from apps.accounting.services import try_record_supplier_payment
+
+    try_record_supplier_payment(pago, user)
     return pago
 
 
@@ -1082,6 +1098,10 @@ def create_supplier_return(purchase_order, *, items, user, reason=""):
         locked_po.tenant, entity_type="supplier_return", entity_id=devolucion.pk, entity_label=devolucion.number,
         action=PurchasesActivityLog.Action.SUPPLIER_RETURN_CREATED, user=user, details=f"OC {locked_po.number}",
     )
+
+    from apps.accounting.services import try_record_supplier_return
+
+    try_record_supplier_return(devolucion, user)
     return devolucion
 
 

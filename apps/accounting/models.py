@@ -268,6 +268,15 @@ class AccountMapping(TenantScopedModel):
         CASH_AND_EQUIVALENTS = "cash_and_equivalents", "Efectivo y equivalentes"
         OPERATING_EXPENSE = "operating_expense", "Gastos operativos"
         PAYROLL_EXPENSE = "payroll_expense", "Gasto de nómina"
+        # Ampliación de cierre de FASE 14 (COGS/Compras-AP/Cierre de caja) —
+        # ver docs/accounting.md. Introducidas juntas (una sola migración
+        # de este campo), conectadas progresivamente por cada integrador.
+        INVENTORY_ASSET = "inventory_asset", "Inventario"
+        COST_OF_GOODS_SOLD = "cost_of_goods_sold", "Costo de ventas (COGS)"
+        ACCOUNTS_PAYABLE = "accounts_payable", "Cuentas por pagar"
+        PURCHASE_TAX_RECEIVABLE = "purchase_tax_receivable", "Impuesto por recuperar (compras)"
+        CASH_OVER = "cash_over", "Sobrante de caja"
+        CASH_SHORT = "cash_short", "Faltante de caja"
 
     key = models.CharField("clave", max_length=30, choices=Key.choices)
     account = models.ForeignKey(Account, verbose_name="cuenta", on_delete=models.PROTECT, related_name="mappings")
@@ -282,6 +291,73 @@ class AccountMapping(TenantScopedModel):
 
     def __str__(self):
         return f"{self.get_key_display()} → {self.account.code}"
+
+
+# ---------------------------------------------------------------------
+# Impuestos multi-código (ampliación de cierre de FASE 14, ver
+# docs/accounting.md). Vive aquí (no en apps.sales) porque
+# apps.accounting.models ya puede importar apps.sales.models a nivel de
+# módulo con seguridad (apps.accounting.services lo hace desde FASE 14);
+# la dirección inversa crearía un ciclo — mismo principio ya documentado
+# para los imports diferidos de la contabilización automática.
+# ---------------------------------------------------------------------
+
+
+class TaxCode(TenantScopedModel):
+    """Código de impuesto tenant-configurable — mismo patrón que
+    `ExpenseCategory`/`LeaveType`: el tenant define los que necesite,
+    nunca una lista cerrada en código ni normativa fiscal de un país
+    específico hardcodeada. `account` es la cuenta de control PROPIA de
+    este código (nunca a través del enum fijo `AccountMapping.Key`,
+    porque los códigos son ilimitados y definidos por el tenant)."""
+
+    code = models.CharField("código", max_length=20)
+    name = models.CharField("nombre", max_length=100)
+    rate = models.DecimalField("tasa (%)", max_digits=5, decimal_places=2)
+    account = models.ForeignKey(
+        Account, verbose_name="cuenta de control", on_delete=models.PROTECT, related_name="tax_codes",
+    )
+    is_active = models.BooleanField("activo", default=True)
+
+    class Meta:
+        verbose_name = "código de impuesto"
+        verbose_name_plural = "códigos de impuesto"
+        ordering = ["code"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "code"], name="unique_taxcode_tenant_codigo"),
+            models.CheckConstraint(check=models.Q(rate__gte=0), name="taxcode_tasa_no_negativa"),
+        ]
+
+    def __str__(self):
+        return f"{self.code} — {self.name} ({self.rate}%)"
+
+
+class SaleItemTax(TenantScopedModel):
+    """Impuesto aplicado a una línea de venta — cero, una o varias filas
+    por línea (`SaleItem`). Aditivo: los campos planos existentes
+    `SaleItem.tax_rate`/`tax_amount` (un único impuesto simple) siguen
+    funcionando exactamente igual para cualquier tenant que nunca
+    asigne un `TaxCode` — esta tabla es la vía para MÁS de un impuesto
+    por línea, nunca un reemplazo obligatorio. `rate_snapshot`/
+    `base_amount`/`tax_amount` quedan congelados al crearse — cambiar
+    `TaxCode.rate` después nunca altera una venta ya emitida (mismo
+    principio que el resto de los snapshots de línea desde FASE 10)."""
+
+    sale_item = models.ForeignKey(
+        "sales.SaleItem", verbose_name="línea de venta", on_delete=models.CASCADE, related_name="taxes",
+    )
+    tax_code = models.ForeignKey(TaxCode, verbose_name="código de impuesto", on_delete=models.PROTECT, related_name="+")
+    rate_snapshot = models.DecimalField("tasa (al momento)", max_digits=5, decimal_places=2)
+    base_amount = models.DecimalField("base imponible", max_digits=12, decimal_places=2)
+    tax_amount = models.DecimalField("monto de impuesto", max_digits=12, decimal_places=2)
+
+    class Meta:
+        verbose_name = "impuesto de línea de venta"
+        verbose_name_plural = "impuestos de línea de venta"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.tax_code.code} {self.tax_amount}"
 
 
 # ---------------------------------------------------------------------

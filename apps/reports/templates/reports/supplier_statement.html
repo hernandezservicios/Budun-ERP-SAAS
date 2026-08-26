@@ -1,0 +1,78 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Estado de Cuenta — {{ proveedor.display_name }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'reports:index' %}">Reportes</a></li>
+        <li><a href="{% url 'reports:suppliers' %}">Proveedores</a></li>
+        <li aria-current="page">Estado de Cuenta</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Estado de Cuenta — {{ proveedor.display_name }}</h1>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="?export=csv">Exportar CSV</a>
+        <a class="btn btn--contorno" href="?export=pdf">Exportar PDF</a>
+        <a class="btn btn--contorno" href="?export=xlsx">Exportar XLSX</a>
+    </div>
+</div>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Comprado histórico</th><td>{{ reporte.summary.total_purchased }}</td></tr>
+            <tr><th>Pendiente actual</th><td>{{ reporte.summary.total_pending }}</td></tr>
+            <tr><th>Anticipos</th><td>{{ reporte.summary.total_advances }}</td></tr>
+            <tr><th># Facturas</th><td>{{ reporte.summary.invoice_count }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{% if reporte.pending_invoices %}
+<h2>Facturas pendientes</h2>
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Factura</th><th>Saldo</th></tr></thead>
+        <tbody>
+            {% for fila in reporte.pending_invoices %}
+            <tr>
+                <td>{{ fila.invoice.supplier_invoice_number }}</td>
+                <td>{{ fila.invoice.currency }} {{ fila.balance_due }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<h2>Historial de movimientos</h2>
+{% if reporte.rows %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Documento</th><th>Monto</th></tr></thead>
+        <tbody>
+            {% for movimiento in reporte.rows %}
+            <tr>
+                <td>{{ movimiento.date|date:"d M Y" }}</td>
+                <td>{{ movimiento.type }}</td>
+                <td>
+                    {% if movimiento.type == "Factura" %}
+                    {{ movimiento.document.supplier_invoice_number }}
+                    {% else %}
+                    {{ movimiento.document.pk }}
+                    {% endif %}
+                </td>
+                <td>{{ movimiento.amount }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin movimientos todavía</h3></div>
+{% endif %}
+{% endblock %}
