@@ -78,6 +78,24 @@ ortogonales, ni siquiera como métrica de uso salvo una agregación de
 solo lectura explícita, nunca una relación estructural directa entre
 `Subscription` y `Expense`/`Payroll`.
 
+## Nota de sincronización — Contabilidad General del ERP vs. Billing del SaaS (separación obligatoria, FASE 14, ya construida)
+
+`apps.accounting` (FASE 14) contabiliza la operación INTERNA de cada
+tenant (sus propias ventas, pagos, gastos, nómina) — un eje
+completamente ortogonal a "lo que el TENANT le debe a Budun ERP por
+usar la plataforma" (`Plan`/`Subscription`, esta fase). Mismo
+principio que las notas anteriores: **nunca** debe existir un
+`JournalEntry`/`Account` que registre la suscripción de un tenant a
+Budun ERP dentro de SU PROPIA contabilidad tenant-scoped — son libros
+contables de dos entidades distintas (el tenant lleva su propia
+contabilidad; lo que el tenant paga a Budun ERP es un gasto operativo
+más para el tenant si acaso, nunca un asiento generado automáticamente
+por `apps.accounting` de este ERP). Si Billing necesitara su propia
+trazabilidad financiera (ingresos de Budun ERP por suscripciones), esa
+sería una contabilidad interna de Budun ERP como operador del SaaS —
+fuera del alcance de `apps.accounting`, que es exclusivamente
+tenant-scoped para la contabilidad de cada empresa cliente.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

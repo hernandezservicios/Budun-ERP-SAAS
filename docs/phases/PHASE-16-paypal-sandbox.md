@@ -78,6 +78,23 @@ adicionales, sin agregarlos todavía: `provider_currency`/
 `provider_amount` (junto a `external_id`/`provider`/`provider_status`
 ya previstos arriba).
 
+## Nota de sincronización — Contabilización automática ya conectada (FASE 14, ya construida)
+
+FASE 14 conectó `apps.sales.services.create_payment` a la
+contabilización automática (`try_record_customer_payment`, ver
+`docs/accounting.md` sección 7: Dr Efectivo y equivalentes / Cr
+Cuentas por cobrar). Como esta fase debe registrar todo pago de PayPal
+exclusivamente a través de `create_payment`/`record_payment_for_sale`/
+`apply_payment_to_sales` (nunca escribiendo `Payment` directamente,
+ver la nota de FASE 10 arriba), un pago de PayPal confirmado por
+webhook **ya queda contabilizado automáticamente sin cambio adicional**
+en `apps.accounting` — siempre que el tenant tenga configurado
+`AccountMapping` para `cash_and_equivalents`/`accounts_receivable`. Si
+esta fase necesita distinguir "efectivo físico" de "efectivo en
+PayPal" en la cuenta de control, esa es una decisión de plan de
+cuentas del tenant (un `AccountMapping` diferente o una subcuenta),
+nunca un cambio en la arquitectura de `record_business_event`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

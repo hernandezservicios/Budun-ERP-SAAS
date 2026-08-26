@@ -215,3 +215,19 @@ tenant=request.tenant)`.
 - Exportaciones PDF/XLSX (ninguna librería nueva instalada sin
   aprobación explícita, mismo criterio que `docs/invoice-documents.md`
   desde FASE 10) y reportes programados — ver `docs/reports.md`.
+
+## 11. Nota de consolidación de documentación
+
+La especificación de FASE 14 pide tres documentos separados —
+`docs/accounting-periods.md`, `docs/journal.md`, `docs/general-ledger.md`
+— además de este archivo. Se consolidó su contenido aquí en vez de
+triplicar documentos muy cortos y con referencias cruzadas constantes
+entre sí (período↔asiento↔libro mayor son tres caras del mismo motor,
+nunca se explican de forma aislada sin repetirse): "Período contable"
+es la sección 2, "Asiento contable" la sección 3, "Libro Mayor" vive
+dentro de la sección 8 (Reportes contables, `get_general_ledger`). Los
+tres archivos nombrados existen igualmente en `docs/` como archivos
+delgados que redirigen a estas secciones, para que un enlace o
+búsqueda por ese nombre exacto siga encontrando el contenido real —
+nunca contenido duplicado que pueda desincronizarse de esta fuente
+única.

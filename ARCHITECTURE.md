@@ -73,5 +73,19 @@ Reglas permanentes: autorización por MONTO (gasto sobre el límite, `ApprovalPo
 ## Moneda, denominaciones y cierre de caja (especificación, ver `docs/currency.md`)
 Doctrina oficial: el ERP es internacional, nunca hardcodea una moneda ni sus denominaciones. `Currency`/`CurrencyDenomination` es el catálogo real (una moneda puede tener cualquier cantidad de denominaciones — billete o moneda, con orden de presentación); `CurrencyConfiguration` por tenant define moneda funcional/monedas habilitadas y prepara tipos de cambio (sin motor de FX). `CashRegister` tendrá una moneda operativa principal (campo nuevo); su `CashSession` cuenta físicamente en esa única moneda, sin mezclar denominaciones de monedas distintas. `CashDenominationCount` (siempre referenciando `CurrencyDenomination`, nunca un segundo catálogo) es el modo profesional de cierre; `CashClosing` es inmutable, con "sobrante"/"faltante" como lecturas de `difference`, nunca campos redundantes. El vocabulario `amount_due`/`amount_received`/`change_amount` y el efecto neto de `CashMovement` en una venta con cambio ya están correctamente implementados desde FASE 11 — esta doctrina los formaliza sin cambiar código.
 
+## Contabilidad General y Reportes: la contabilidad como fuente financiera central
+Incorporado oficialmente a partir de FASE 14 (`apps/accounting`, `apps/reports`, ver `docs/accounting.md`/`docs/reports.md`). La contabilidad se convierte en la fuente financiera central del ERP — los reportes nunca recalculan una cifra financiera de forma independiente cuando esa información debe provenir de contabilidad.
+
+| Concepto | Fuente de verdad | Estado |
+|---|---|---|
+| Plan de cuentas | `Account` (jerárquico, `level` calculado una sola vez al crear, `allows_posting`) | Construido (FASE 14) |
+| Período contable | `AccountingPeriod` (OPEN/CLOSING/CLOSED/REOPENED, sin `DocumentSequence` — no es un documento emitido) | Construido (FASE 14) |
+| Asiento contable | `JournalEntry`/`JournalEntryLine` (partida doble: débito XOR crédito por línea, `SUM(débitos)==SUM(créditos)` obligatorio) | Construido (FASE 14) — numeración `AST-` vía `DocumentSequence` de FASE 10 |
+| Contabilización automática | `record_business_event` (idempotente por `tenant`+`source_type`+`source_event_key`) vía `AccountMapping` | Construido (FASE 14) — 4 de 8 eventos conectados (Venta confirmada, Pago de cliente, Pago de gasto, Pago de nómina); el resto requiere decisiones de política contable (costeo COGS, códigos de impuesto) no provistas — ver `docs/accounting.md` sección 7 |
+| Reportes contables | Balance de Comprobación, Libro Mayor, Libro Diario, Balance General (acumulado), Estado de Resultados (acotado al período) | Construido (FASE 14) — leen siempre `JournalEntry`/`JournalEntryLine` directamente |
+| Plataforma de reportes | `apps/reports` (sin modelos propios), un reporte por dominio de negocio con `{"summary", "rows"}` y drill-down a los documentos ya existentes | Construido (FASE 14) — `docs/reports.md` |
+
+Reglas permanentes: un `JournalEntry` `POSTED` nunca se edita ni se borra físicamente — toda corrección es un reverso (`reverse_journal_entry`, idempotente). Toda integración automática que envuelve `record_business_event` (patrón `try_record_*`) debe atrapar cualquier excepción y auditar, nunca relanzarla — la contabilización es siempre aditiva/opcional, nunca puede bloquear la venta/pago/gasto/nómina subyacente. Balance General = acumulado desde el origen; Estado de Resultados = acotado al período — nunca la misma lógica de fechas para ambos. `apps/reports` nunca introduce una segunda fuente de verdad ni copia datos de detalle; información sensible (salario/datos bancarios) se filtra siempre en el servidor.
+
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

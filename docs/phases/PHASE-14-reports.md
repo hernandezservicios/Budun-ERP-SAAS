@@ -1,29 +1,49 @@
-# FASE 14 — Reports
+# FASE 14 — Contabilidad General + Reportes Profesionales
 
-## Objetivo
-Reportes de ventas, inventario, productos, clientes, compras, gastos y
-utilidad; filtros y exportaciones según alcance. Incluye explícitamente
-**Reportes de Inventario** completos (existencias, movimientos,
-serializados, trazabilidad, valorización preparada — ver sección
-dedicada más abajo), reportes de caja, y cuentas por cobrar/pagar. Ver
-`docs/reports.md` para el resumen arquitectónico.
+## Objetivo (ampliado por el usuario al autorizar esta fase)
+
+La especificación original de esta fase (`FASES_OFICIALES_0_24_ACTUALIZADAS.md`)
+cubría solo un módulo de reportes. El usuario amplió el alcance
+explícitamente al autorizarla — "una de las fases arquitectónicamente
+más importantes del ERP" — a dos dominios: **1. Motor de Contabilidad
+General** (`apps.accounting`) y **2. Plataforma Integral de Reportes**
+(`apps.reports`), con la contabilidad como fuente financiera central:
+"Los reportes no deben recalcular cifras financieras de forma
+independiente cuando la información deba provenir de contabilidad."
+Ver `docs/accounting.md`/`docs/reports.md` para el diseño completo de
+cada dominio.
 
 ## Regla incremental
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
 
 ## Criterios de aceptación
-- [ ] filtros
-- [ ] tenant scoped
-- [ ] queries optimizadas
+
+### Motor de Contabilidad General (`apps.accounting`) — CONSTRUIDO
+- [x] `Account`: plan de cuentas jerárquico (`parent`, `level` calculado una vez al crear), tipo/naturaleza deudora-acreedora derivada automáticamente, `allows_posting` para cuentas de agrupación
+- [x] `AccountingPeriod`: `OPEN/CLOSING/CLOSED/REOPENED`, sin `DocumentSequence` (no es un documento emitido), nunca se solapa con otro período no cerrado del mismo tenant
+- [x] `JournalEntry`/`JournalEntryLine`: partida doble (débito XOR crédito por línea, `SUM(débitos)==SUM(créditos)` obligatorio para `POSTED`), numerado vía `DocumentSequence` (`AST-`)
+- [x] Inmutabilidad: un asiento `POSTED` nunca se edita ni se borra — `reverse_journal_entry` (idempotente) es la única corrección
+- [x] Contabilización automática (`record_business_event`, idempotente por `tenant`+`source_type`+`source_event_key`) vía `AccountMapping`: 4 integraciones reales conectadas (venta confirmada, pago de cliente, pago de gasto, pago de nómina) — resiliente por diseño (`try_record_*` nunca relanza, mapeo faltante nunca bloquea la operación)
+- [x] Reportes contables: Balance de Comprobación, Libro Mayor, Libro Diario, Balance General (acumulado), Estado de Resultados (acotado al período)
+- [x] Multi-Tenant verificado (cuenta padre/mapeo de otro tenant rechazados, 404 cruzando tenant)
+
+### Plataforma de Reportes (`apps.reports`) — CONSTRUIDO
+- [x] Ventas, Inventario, Caja, Cuentas por Cobrar (con aging), Cuentas por Pagar (con aging), Compras, Gastos, RRHH, Nómina, Clientes, Proveedores, panel gerencial (resumen ejecutivo) — cada uno `{"summary": ..., "rows": ...}`, agregando sobre servicios/modelos ya existentes, nunca una segunda fuente de verdad
+- [x] Drill-down: cada fila enlaza al documento origen ya existente, nunca una copia de esos datos
+- [x] Exportación CSV en Ventas/Gastos/Cuentas por Cobrar/Cuentas por Pagar
+- [x] Información sensible de RRHH/Nómina (salario, datos bancarios): filtrada en el SERVIDOR (`PayrollReportView`, reutilizando `can_view_sensitive_employee_data` de FASE 13), nunca solo oculta en la plantilla
+- [x] Multi-Tenant verificado (reportes aislados por tenant)
 
 ## Verificación
-- [ ] `python manage.py check` o la validación equivalente está en verde.
-- [ ] Tests relevantes ejecutados.
-- [ ] Smoke test realizado cuando aplique.
-- [ ] Seguridad revisada para el alcance de la fase.
-- [ ] Documentación actualizada.
-- [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
-- [ ] Git commit creado.
+- [x] `python manage.py check` en verde en cada commit
+- [x] Tests: 45 (`apps.accounting`) + 16 (`apps.reports`) — servicios, HTTP, Multi-Tenant, idempotencia de contabilización automática, resiliencia (mapeo faltante no rompe la venta/pago/gasto/nómina), Balance-Sheet-acumulado-vs-Estado-de-Resultados-por-período
+- [x] Bug real encontrado y corregido (test-driven): `get_accounts_receivable_report`/`get_accounts_payable_report` usaban el manager tenant-scoped (`Customer.objects`/`Supplier.objects`, requiere contexto de request HTTP) en vez de `all_objects` — corregido, ver `docs/project-status/KNOWN_ISSUES.md`
+- [x] Smoke test HTTP dedicado a Contabilidad + Reportes contra PostgreSQL de desarrollo
+- [x] Regresión completa de FASE 3–14 sin cambios de lógica en fases anteriores
+- [x] Seguridad revisada: datos sensibles de RRHH/Nómina nunca expuestos solo por ocultarlos en la plantilla
+- [x] Documentación: `docs/accounting.md` (nuevo), `docs/accounting-periods.md`/`docs/journal.md`/`docs/general-ledger.md` (punteros a `docs/accounting.md`, consolidación documentada), `docs/reports.md` (reescrito de especificación a construido)
+- [x] `docs/project-status/CURRENT_PHASE.md`/`PHASE_HISTORY.md`/`KNOWN_ISSUES.md`/`DECISIONS.md` actualizados
+- [x] Git commit: dos commits de dominio (`apps.accounting`, `apps.reports`) + un commit de cierre de documentación
 
 ## Reportes de Inventario (requisito explícito, sección dedicada)
 
@@ -196,6 +216,20 @@ agregación de lectura:
   período, agregando `PayrollLine` por `category`/`concept` (`Payroll`
   nunca duplica este desglose en campos propios) — ver
   `docs/payroll.md` sección 1.
+
+## Estado de las notas de sincronización anteriores (todas cumplidas)
+
+Todas las notas de sincronización de esta fase (Inventario/FASE 8,
+Clientes-Proveedores/FASE 9, Ventas-Pagos/FASE 10, Cuentas por Cobrar-
+Caja-Autorizaciones/FASE 11, Gastos-RRHH-Nómina/FASE 13) quedaron
+cumplidas por `apps.reports` — cada reporte agrega exactamente sobre
+los servicios/modelos que esas notas señalaban, nunca sobre una
+consulta propia. La única excepción documentada es la nota de Moneda/
+denominaciones: los reportes de Caja no filtran todavía por moneda
+(`CashRegister.currency`/`CashDenominationCount`/`CashClosing` siguen
+siendo especificación, no construidos — ver `docs/currency.md`), y el
+reporte de denominaciones queda pendiente para cuando esos modelos
+existan.
 
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.

@@ -159,6 +159,32 @@ documento: entidades auditables/expuestas bajo su propio scope, nunca
 por defecto ni heredando el scope de otro dominio. No exponer
 configuraciones sensibles de moneda/caja sin scopes explícitos.
 
+## Nota de sincronización — Contabilidad General y Reportes (FASE 14, ya construidos)
+
+`apps.accounting`/`apps.reports` (FASE 14) ya están construidos y en
+producción — esta fase (Roles granulares + Audit + API de Inventario)
+debe respetarlos, nunca duplicarlos:
+
+- **Roles granulares y contabilidad**: `Account`/`AccountingPeriod`/
+  `JournalEntry` no tienen hoy un permiso dedicado más allá de
+  OWNER/MEMBER (misma limitación que RRHH sensible, ver la nota
+  anterior) — el permiso "puede contabilizar"/"puede cerrar un
+  período"/"puede reabrir un período" es candidato natural para el
+  sistema de permisos granulares de esta fase, generalizando las
+  vistas de `apps.accounting` sin reemplazar la lógica de servicio ya
+  construida (`open_period`/`close_period`/`reopen_period`/
+  `post_journal_entry`).
+- **Audit transversal**: `AccountingActivityLog` (FASE 14) ya sigue el
+  mismo patrón que `HRActivityLog`/`SalesActivityLog`/etc. — esta fase
+  debe integrarlo al audit log transversal sin crear un segundo
+  registro de auditoría paralelo.
+- **API de Inventario**: `apps.accounting`/`apps.reports` no exponen
+  ni deben exponer endpoints en `/api/v1/` — esa API sigue siendo
+  exclusivamente de Inventario (scopes `inventory:read`/
+  `products:read`/`categories:read`), nunca ampliada a cifras
+  financieras/contables sin una decisión explícita y un scope nuevo
+  dedicado.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
