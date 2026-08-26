@@ -34,5 +34,6 @@ urlpatterns = [
     path("rrhh/", include("apps.hr.urls")),
     path("nomina/", include("apps.payroll.urls")),
     path("contabilidad/", include("apps.accounting.urls")),
+    path("reportes/", include("apps.reports.urls")),
     path("", include("apps.core.urls")),
 ]

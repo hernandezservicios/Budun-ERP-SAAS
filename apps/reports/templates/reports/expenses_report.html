@@ -1,0 +1,72 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Reporte de Gastos — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'reports:index' %}">Reportes</a></li>
+        <li aria-current="page">Gastos</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Reporte de Gastos</h1>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="?{{ request.GET.urlencode }}&export=csv">Exportar CSV</a>
+    </div>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        {% for field in form %}
+        {% include "customers/_campo.html" with field=field %}
+        {% endfor %}
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Cantidad</th><td>{{ reporte.summary.count }}</td></tr>
+            <tr><th>Total</th><td>{{ reporte.summary.total }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{% if reporte.summary.by_category %}
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Categoría</th><th>Cantidad</th><th>Total</th></tr></thead>
+        <tbody>
+            {% for fila in reporte.summary.by_category %}
+            <tr><td>{{ fila.category__name }}</td><td>{{ fila.cantidad }}</td><td>{{ fila.total }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if reporte.rows %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Número</th><th>Fecha</th><th>Categoría</th><th>Estado</th><th>Total</th></tr></thead>
+        <tbody>
+            {% for gasto in reporte.rows %}
+            <tr>
+                <td><a href="{% url 'expenses:expense_detail' gasto.pk %}">{{ gasto.number }}</a></td>
+                <td>{{ gasto.expense_date|date:"d M Y" }}</td>
+                <td>{{ gasto.category.name }}</td>
+                <td>{{ gasto.get_status_display }}</td>
+                <td>{{ gasto.currency }} {{ gasto.total }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin gastos en este filtro</h3></div>
+{% endif %}
+{% endblock %}

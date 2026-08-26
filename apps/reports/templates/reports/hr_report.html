@@ -1,0 +1,68 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Reporte de RRHH — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'reports:index' %}">Reportes</a></li>
+        <li aria-current="page">RRHH</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Reporte de RRHH</h1>
+</div>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Total de empleados</th><td>{{ reporte.summary.total_employees }}</td></tr>
+            <tr><th>Ausencias pendientes de aprobación</th><td>{{ reporte.summary.pending_leaves }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Estado</th><th>Cantidad</th></tr></thead>
+        <tbody>
+            {% for fila in reporte.summary.by_status %}
+            <tr><td>{{ fila.status }}</td><td>{{ fila.cantidad }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Departamento</th><th>Cantidad</th></tr></thead>
+        <tbody>
+            {% for fila in reporte.summary.by_department %}
+            <tr><td>{{ fila.department__name|default:"Sin departamento" }}</td><td>{{ fila.cantidad }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if reporte.rows %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Empleado</th><th>Departamento</th><th>Cargo</th><th>Estado</th></tr></thead>
+        <tbody>
+            {% for empleado in reporte.rows %}
+            <tr>
+                <td><a href="{% url 'hr:employee_detail' empleado.pk %}">{{ empleado.display_name }}</a></td>
+                <td>{{ empleado.department.name|default:"—" }}</td>
+                <td>{{ empleado.position.name|default:"—" }}</td>
+                <td>{{ empleado.get_status_display }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">👥</div><h3>Sin empleados todavía</h3></div>
+{% endif %}
+{% endblock %}

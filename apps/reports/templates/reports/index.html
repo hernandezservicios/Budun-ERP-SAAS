@@ -1,0 +1,51 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Reportes — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Reportes</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Reportes</h1>
+        <p class="encabezado-pagina__descripcion">Resumen ejecutivo y acceso a todos los reportes por dominio.</p>
+    </div>
+</div>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Ventas confirmadas</th><td>{{ resumen.sales_total }}</td></tr>
+            <tr><th>Gastos</th><td>{{ resumen.expenses_total }}</td></tr>
+            <tr><th>Cuentas por cobrar pendientes</th><td>{{ resumen.ar_pending }}</td></tr>
+            <tr><th>Cuentas por pagar pendientes</th><td>{{ resumen.ap_pending }}</td></tr>
+            <tr><th>Productos con stock bajo</th><td>{{ resumen.low_stock_count }}</td></tr>
+            <tr><th>Margen estimado (ventas − gastos)</th><td>{{ resumen.gross_margin_estimate }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--espacio-4);">
+    <a class="tarjeta" href="{% url 'reports:sales' %}"><div class="tarjeta__cuerpo"><h3>Ventas</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:inventory' %}"><div class="tarjeta__cuerpo"><h3>Inventario</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:cash' %}"><div class="tarjeta__cuerpo"><h3>Caja</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:accounts_receivable' %}"><div class="tarjeta__cuerpo"><h3>Cuentas por Cobrar</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:accounts_payable' %}"><div class="tarjeta__cuerpo"><h3>Cuentas por Pagar</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:purchases' %}"><div class="tarjeta__cuerpo"><h3>Compras</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:expenses' %}"><div class="tarjeta__cuerpo"><h3>Gastos</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:hr' %}"><div class="tarjeta__cuerpo"><h3>RRHH</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:payroll' %}"><div class="tarjeta__cuerpo"><h3>Nómina</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:customers' %}"><div class="tarjeta__cuerpo"><h3>Clientes</h3></div></a>
+    <a class="tarjeta" href="{% url 'reports:suppliers' %}"><div class="tarjeta__cuerpo"><h3>Proveedores</h3></div></a>
+    <a class="tarjeta" href="{% url 'accounting:trial_balance' %}"><div class="tarjeta__cuerpo"><h3>Balance de comprobación</h3></div></a>
+    <a class="tarjeta" href="{% url 'accounting:general_ledger' %}"><div class="tarjeta__cuerpo"><h3>Libro Mayor</h3></div></a>
+    <a class="tarjeta" href="{% url 'accounting:general_journal' %}"><div class="tarjeta__cuerpo"><h3>Libro Diario</h3></div></a>
+    <a class="tarjeta" href="{% url 'accounting:balance_sheet' %}"><div class="tarjeta__cuerpo"><h3>Balance General</h3></div></a>
+    <a class="tarjeta" href="{% url 'accounting:income_statement' %}"><div class="tarjeta__cuerpo"><h3>Estado de Resultados</h3></div></a>
+</div>
+{% endblock %}

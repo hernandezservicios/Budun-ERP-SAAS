@@ -1,0 +1,56 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Cuentas por Pagar — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'reports:index' %}">Reportes</a></li>
+        <li aria-current="page">Cuentas por Pagar</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Cuentas por Pagar</h1>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="?export=csv">Exportar CSV</a>
+    </div>
+</div>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Pendiente total</th><th>0-30</th><th>31-60</th><th>61-90</th><th>90+</th><th>Anticipos totales</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>{{ reporte.summary.total_pending }}</td>
+                <td>{{ reporte.summary.aging.d0_30 }}</td>
+                <td>{{ reporte.summary.aging.d31_60 }}</td>
+                <td>{{ reporte.summary.aging.d61_90 }}</td>
+                <td>{{ reporte.summary.aging.d90_plus }}</td>
+                <td>{{ reporte.summary.total_advances }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% if reporte.rows %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Proveedor</th><th>Factura</th><th>Saldo</th><th>Días vencido</th></tr></thead>
+        <tbody>
+            {% for fila in reporte.rows %}
+            <tr>
+                <td><a href="{% url 'customers:supplier_detail' fila.supplier.pk %}">{{ fila.supplier.display_name }}</a></td>
+                <td>{{ fila.invoice.number }}</td>
+                <td>{{ fila.invoice.currency }} {{ fila.balance_due }}</td>
+                <td>{{ fila.days_overdue }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💳</div><h3>Sin facturas de proveedor pendientes</h3></div>
+{% endif %}
+{% endblock %}

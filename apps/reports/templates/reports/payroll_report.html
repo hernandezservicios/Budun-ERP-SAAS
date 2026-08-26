@@ -1,0 +1,62 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Reporte de Nómina — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'reports:index' %}">Reportes</a></li>
+        <li aria-current="page">Nómina</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Reporte de Nómina</h1>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        {% for field in form %}
+        {% include "customers/_campo.html" with field=field %}
+        {% endfor %}
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Nóminas</th><td>{{ reporte.summary.count }}</td></tr>
+            <tr><th>Bruto</th><td>{{ reporte.summary.gross_total }}</td></tr>
+            <tr><th>Deducciones</th><td>{{ reporte.summary.deductions_total }}</td></tr>
+            <tr><th>Neto (costo total)</th><td>{{ reporte.summary.net_total }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{% if puede_ver_sensible %}
+    {% if reporte.rows %}
+    <div class="tabla-envoltorio">
+        <table class="tabla">
+            <thead><tr><th>Empleado</th><th>Período</th><th>Bruto</th><th>Deducciones</th><th>Neto</th></tr></thead>
+            <tbody>
+                {% for nomina in reporte.rows %}
+                <tr>
+                    <td><a href="{% url 'payroll:payroll_detail' nomina.pk %}">{{ nomina.employee_name_snapshot }}</a></td>
+                    <td>{{ nomina.period.number }}</td>
+                    <td>{{ nomina.currency }} {{ nomina.gross_total }}</td>
+                    <td>{{ nomina.currency }} {{ nomina.deductions_total }}</td>
+                    <td>{{ nomina.currency }} {{ nomina.net_total }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💰</div><h3>Sin nóminas calculadas todavía</h3></div>
+    {% endif %}
+{% else %}
+<div class="alerta alerta--info">El desglose por empleado es información sensible — visible solo para el propietario del tenant. Los totales de arriba sí están disponibles.</div>
+{% endif %}
+{% endblock %}

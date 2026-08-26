@@ -1,0 +1,50 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Reporte de Inventario — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'reports:index' %}">Reportes</a></li>
+        <li aria-current="page">Inventario</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Reporte de Inventario</h1>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="?export=csv">Exportar CSV</a>
+    </div>
+</div>
+
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <tbody>
+            <tr><th>Total de productos</th><td>{{ reporte.summary.total_products }}</td></tr>
+            <tr><th>Con stock bajo</th><td>{{ reporte.summary.low_stock_count }}</td></tr>
+            <tr><th>Agotados</th><td>{{ reporte.summary.out_of_stock_count }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{% if reporte.rows %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>SKU</th><th>Producto</th><th>Stock actual</th><th>Precio</th></tr></thead>
+        <tbody>
+            {% for producto in reporte.rows %}
+            <tr>
+                <td>{{ producto.sku }}</td>
+                <td><a href="{% url 'inventory:product_detail' producto.pk %}">{{ producto.name }}</a></td>
+                <td>{{ producto.current_stock }}</td>
+                <td>{{ producto.sale_price }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📦</div><h3>Sin productos todavía</h3></div>
+{% endif %}
+{% endblock %}
