@@ -134,6 +134,31 @@ documento: entidades auditables/expuestas bajo su propio scope, nunca
 por defecto ni heredando el scope de otro dominio. No exponer
 configuraciones sensibles de moneda/caja sin scopes explícitos.
 
+## Nota de sincronización — Roles granulares para información sensible de RRHH (FASE 13, ya construido)
+
+`apps.hr` (FASE 13) introdujo una distinción de acceso a información
+sensible (salario, datos bancarios de `Employee`) mediante
+`services.can_view_sensitive_employee_data` — hoy, con solo dos roles
+en el sistema (`Membership.Role.OWNER`/`MEMBER`), la única regla
+posible es "solo el propietario". Esta fase (Roles granulares) es el
+lugar diseñado explícitamente para introducir un permiso dedicado
+(ej. "puede ver información salarial") sin romper esa función — nunca
+reemplazar `can_view_sensitive_employee_data` por una lógica paralela,
+generalizarla para consultar el nuevo sistema de permisos. La regla
+de auditoría ya construida (`HRActivityLog.SENSITIVE_DATA_VIEWED`, que
+registra cada lectura sensible) debe seguir aplicándose sin cambios.
+
+## Nota de sincronización — Moneda, caja y denominaciones (Audit/API)
+
+Doctrina oficial agregada en `docs/currency.md`: cuando esta fase
+extienda el audit log transversal y la API, `Currency`/
+`CurrencyDenomination`/`CurrencyConfiguration`/`CashClosing`/
+`CashDenominationCount` (especificación, no construidos) deben seguir
+el mismo principio ya aplicado a `Payment`/`CashRegister` en este
+documento: entidades auditables/expuestas bajo su propio scope, nunca
+por defecto ni heredando el scope de otro dominio. No exponer
+configuraciones sensibles de moneda/caja sin scopes explícitos.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

@@ -54,6 +54,22 @@ Incorporado oficialmente a partir de FASE 12 (`apps/purchases`, ver `docs/purcha
 
 `SupplierPayment`/`SupplierPaymentAllocation` son estructuralmente idénticos a `Payment`/`PaymentAllocation` (mismas reglas de sobre-aplicación, mismo ledger append-only) pero **nunca mezclados**: `SupplierPayment` no referencia `Customer`, `Payment` no referencia `Supplier` — dos ledgers paralelos e independientes.
 
+## Gastos, Recursos Humanos y Nómina: tres dominios separados, ledgers append-only
+Incorporado oficialmente a partir de FASE 13 (`apps/expenses`, `apps/hr`, `apps/payroll`, ver `docs/expenses.md`/`docs/hr.md`/`docs/payroll.md`). Tres dominios relacionados pero separados — nunca fusionados. Reutilizan literalmente `apps.customers`/`apps.approvals`/`apps.pos`/`apps.sales` ya construidos.
+
+| Concepto | Fuente de verdad | Estado |
+|---|---|---|
+| Gasto | `Expense` (máquina de estados) + `ExpenseCategory` tenant-configurable | Construido (FASE 13) — `docs/expenses.md` |
+| Pago de gasto | `ExpensePayment` (ledger append-only, nunca campo `paid_amount`) | Construido (FASE 13) |
+| Gasto recurrente | `ExpenseRecurrence`, idempotente por diseño (`select_for_update` sobre la propia fila) | Construido (FASE 13) |
+| Empleado / contrato | `Employee` (máquina de estados) / `EmploymentContract` (único `ACTIVE` por empleado) | Construido (FASE 13) — `docs/hr.md` |
+| Ausencia | `LeaveType` tenant-configurable + `Leave`, autorización por AUTORIDAD (`can_user_approve`) | Construido (FASE 13) |
+| Nómina | `PayrollPeriod`/`Payroll` (snapshot histórico del empleado, nunca recalculado) | Construido (FASE 13) — `docs/payroll.md` |
+| Línea de nómina | `PayrollLine` única con `category`/`concept` (nunca 4 tablas separadas) | Construido (FASE 13) |
+| Pago de nómina | `PayrollPayment` (ledger append-only) | Construido (FASE 13) |
+
+Reglas permanentes: autorización por MONTO (gasto sobre el límite, `ApprovalPolicy.max_expense_amount`) vs. por AUTORIDAD pura (ausencias, período de nómina) son dos criterios deliberadamente distintos, documentados caso por caso. Pago en efectivo (gasto o nómina) exige `CashSession` abierta y genera `CashMovement` propio (`EXPENSE_PAYMENT_CASH`/`PAYROLL_PAYMENT_CASH`). Información sensible de RRHH (salario, datos bancarios) nunca se restringe solo en la UI — verificada también en el servidor, auditada en cada lectura. Ninguno de los tres dominios se mezcla con Billing del SaaS (eje ortogonal, mismo criterio que Cuentas por Cobrar vs. Billing).
+
 ## Moneda, denominaciones y cierre de caja (especificación, ver `docs/currency.md`)
 Doctrina oficial: el ERP es internacional, nunca hardcodea una moneda ni sus denominaciones. `Currency`/`CurrencyDenomination` es el catálogo real (una moneda puede tener cualquier cantidad de denominaciones — billete o moneda, con orden de presentación); `CurrencyConfiguration` por tenant define moneda funcional/monedas habilitadas y prepara tipos de cambio (sin motor de FX). `CashRegister` tendrá una moneda operativa principal (campo nuevo); su `CashSession` cuenta físicamente en esa única moneda, sin mezclar denominaciones de monedas distintas. `CashDenominationCount` (siempre referenciando `CurrencyDenomination`, nunca un segundo catálogo) es el modo profesional de cierre; `CashClosing` es inmutable, con "sobrante"/"faltante" como lecturas de `difference`, nunca campos redundantes. El vocabulario `amount_due`/`amount_received`/`change_amount` y el efecto neto de `CashMovement` en una venta con cambio ya están correctamente implementados desde FASE 11 — esta doctrina los formaliza sin cambiar código.
 

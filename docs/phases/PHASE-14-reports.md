@@ -176,6 +176,27 @@ un reporte de denominaciones (denominación, cantidad, subtotal, moneda,
 cierre) como agregación sobre `CashDenominationCount`/`CashClosing`
 (especificación, no construidos). Ver `docs/reports.md`/`docs/currency.md`.
 
+## Nota de sincronización — Gastos, RRHH y Nómina a reportar (FASE 13, ya construidos)
+
+`apps.expenses`/`apps.hr`/`apps.payroll` (FASE 13) ya están construidos
+y en producción — esta fase debe reportar sobre ellos, siempre como
+agregación de lectura:
+
+- **Gastos**: por gasto/categoría/proveedor/período/método/moneda/
+  estado (`Expense`); recurrentes generados vs. pendientes
+  (`ExpenseRecurrence`) — ver `docs/expenses.md`.
+- **RRHH**: empleados por departamento/cargo/estado; asistencia
+  (retrasos, horas trabajadas); ausencias por tipo/estado — ver
+  `docs/hr.md`. **Nunca** incluir salario/datos bancarios en un
+  reporte visible para quien no pase
+  `apps.hr.services.can_view_sensitive_employee_data` — mismo
+  principio de esta fase aplicado a reportes (nunca solo ocultar en la
+  plantilla).
+- **Nómina**: bruto/deducciones/bonos/retenciones/neto/costo total por
+  período, agregando `PayrollLine` por `category`/`concept` (`Payroll`
+  nunca duplica este desglose en campos propios) — ver
+  `docs/payroll.md` sección 1.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

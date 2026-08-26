@@ -65,6 +65,19 @@ de las ventas/cuentas por cobrar de cada tenant (`Sale.currency`/
 `Payment.currency`) — la separación ERP Accounts Receivable / SaaS
 Billing de la tabla de arriba aplica también a la moneda.
 
+## Nota de sincronización — Gastos/RRHH/Nómina vs. Billing del SaaS (separación obligatoria, FASE 13, ya construido)
+
+`apps.expenses`/`apps.hr`/`apps.payroll` (FASE 13) son operación
+INTERNA de un tenant (lo que un tenant gasta, a quién emplea, cuánto
+paga en nómina) — un eje completamente ortogonal a "lo que el TENANT le
+debe a Budun ERP por usar la plataforma" (`Plan`/`Subscription`, esta
+fase). Mismo principio que la tabla de la nota anterior: **nunca**
+debe existir un campo, modelo o consulta que combine el costo operativo
+de un tenant (gastos, nómina) con su suscripción de Billing — son ejes
+ortogonales, ni siquiera como métrica de uso salvo una agregación de
+solo lectura explícita, nunca una relación estructural directa entre
+`Subscription` y `Expense`/`Payroll`.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
