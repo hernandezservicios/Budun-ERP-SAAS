@@ -1,0 +1,88 @@
+{% extends "layout_app.html" %}
+
+{% block title %}API de Inventario — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'core:settings' %}">Configuración</a></li>
+        <li aria-current="page">API de Inventario</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>API de Inventario</h1>
+        <p class="encabezado-pagina__descripcion">API de solo lectura para integraciones externas y agentes CRM/IA — nunca permite vender, cobrar ni modificar inventario/clientes.</p>
+    </div>
+</div>
+
+{% if secreto_nuevo %}
+<div class="alerta alerta--advertencia" role="alert" style="margin-bottom: var(--espacio-6);">
+    <strong>Copia esta clave ahora — no volverá a mostrarse:</strong>
+    <pre style="user-select: all; overflow-x: auto;">{{ secreto_nuevo }}</pre>
+</div>
+{% endif %}
+
+<div class="tarjeta" style="margin-bottom: var(--espacio-6); max-width: 40rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Conexión</h3>
+        <dl>
+            <dt>Base URL</dt><dd><code>{{ base_url }}</code></dd>
+            {% if api_key %}
+            <dt>Clave</dt><dd><code>{{ api_key.key_prefix }}···</code></dd>
+            <dt>Estado</dt><dd><span class="badge {% if api_key.is_active %}badge--verde{% else %}badge--peligro{% endif %}">{{ api_key.get_status_display }}</span></dd>
+            <dt>Creada</dt><dd>{{ api_key.created_at|date:"d M Y H:i" }}</dd>
+            <dt>Última rotación</dt><dd>{{ api_key.rotated_at|default:"—" }}</dd>
+            <dt>Última prueba</dt><dd>
+                {% if api_key.last_tested_at %}
+                    {{ api_key.last_tested_at|date:"d M Y H:i" }} —
+                    {% if api_key.last_test_ok %}<span class="badge badge--verde">Conectado</span>{% else %}<span class="badge badge--peligro">Error: {{ api_key.last_test_error }}</span>{% endif %}
+                {% else %}Nunca probada{% endif %}
+            </dd>
+            <dt>Último uso</dt><dd>{{ api_key.last_used_at|default:"—" }}</dd>
+            {% else %}
+            <dt>Clave</dt><dd>Sin clave generada todavía</dd>
+            {% endif %}
+        </dl>
+
+        {% if not api_key %}
+        <form method="post" action="{% url 'api_config:generate' %}" novalidate>
+            {% csrf_token %}
+            <p><strong>Scopes</strong></p>
+            {% for campo in form %}
+            {% include "customers/_campo.html" with field=campo %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Generar clave</button>
+        </form>
+        {% else %}
+        <div class="acciones-rapidas">
+            <form method="post" action="{% url 'api_config:rotate' %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--contorno">Regenerar</button>
+            </form>
+            <form method="post" action="{% url 'api_config:test_connection' %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--contorno">Probar conexión</button>
+            </form>
+            {% if api_key.is_active %}
+            <form method="post" action="{% url 'api_config:revoke' %}" style="display:inline;" onsubmit="return confirm('¿Revocar la clave? Cualquier integración que la use dejará de funcionar de inmediato.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--peligro">Revocar</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <form method="post" action="{% url 'api_config:update_scopes' %}" novalidate style="margin-top: var(--espacio-4);">
+            {% csrf_token %}
+            <p><strong>Scopes</strong></p>
+            {% for campo in form %}
+            {% include "customers/_campo.html" with field=campo %}
+            {% endfor %}
+            <button type="submit" class="btn btn--contorno">Guardar scopes</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

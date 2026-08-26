@@ -25,11 +25,19 @@
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-4);">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">📋 Auditoría</h3>
         <p>Busca cualquier evento del tenant: inicios de sesión, cambios de permisos, actividad de cada módulo y acceso a la API.</p>
         <a class="btn btn--contorno" href="{% url 'audit:search' %}">Ver auditoría</a>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">🔌 API de Inventario</h3>
+        <p>Genera y administra la clave de API de solo lectura para integraciones externas y agentes CRM/IA.</p>
+        <a class="btn btn--contorno" href="{% url 'api_config:config' %}">Administrar</a>
     </div>
 </div>
 {% endblock %}
