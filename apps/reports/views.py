@@ -38,6 +38,24 @@ from .forms import (
 )
 
 
+def _audit_export(request, *, reporte, formato):
+    """Audita una exportación de reporte en la auditoría transversal
+    (`apps.audit`) — import diferido + resiliente, mismo criterio que
+    el resto de integraciones automáticas del proyecto (nunca bloquea
+    ni rompe la exportación que está auditando)."""
+    try:
+        from apps.audit.services import get_client_ip, log_event
+        from apps.audit.models import AuditLog
+
+        log_event(
+            request.tenant, user=request.user, action=AuditLog.Action.EXPORT_PERFORMED, domain="reports",
+            object_type="report", object_id=reporte, metadata={"formato": formato},
+            ip_address=get_client_ip(request), user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _csv_response(filename, header, rows):
     respuesta = HttpResponse(content_type="text/csv")
     respuesta["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -64,6 +82,7 @@ class SalesReportView(LoginRequiredMixin, TenantRequiredMixin, View):
         )
         exportar = request.GET.get("export")
         if exportar in ("csv", "pdf", "xlsx"):
+            _audit_export(request, reporte="ventas", formato=exportar)
             header = ["Número", "Fecha", "Cliente", "Estado", "Total"]
             filas = [(v.number, v.issue_date, v.customer.display_name if v.customer else "—", v.status, v.total) for v in reporte["rows"]]
             if exportar == "csv":
@@ -98,6 +117,7 @@ class AccountsReceivableReportView(LoginRequiredMixin, TenantRequiredMixin, View
         reporte = services.get_accounts_receivable_report(request.tenant)
         exportar = request.GET.get("export")
         if exportar in ("csv", "pdf", "xlsx"):
+            _audit_export(request, reporte="cuentas_por_cobrar", formato=exportar)
             header = ["Cliente", "Factura", "Saldo", "Días vencido"]
             filas = [(f["customer"].display_name, f["sale"].number, f["balance_due"], f["days_overdue"]) for f in reporte["rows"]]
             if exportar == "csv":
@@ -113,6 +133,7 @@ class AccountsPayableReportView(LoginRequiredMixin, TenantRequiredMixin, View):
         reporte = services.get_accounts_payable_report(request.tenant)
         exportar = request.GET.get("export")
         if exportar in ("csv", "pdf", "xlsx"):
+            _audit_export(request, reporte="cuentas_por_pagar", formato=exportar)
             header = ["Proveedor", "Factura", "Saldo", "Días vencido"]
             filas = [(f["supplier"].display_name, f["invoice"].number, f["balance_due"], f["days_overdue"]) for f in reporte["rows"]]
             if exportar == "csv":
@@ -142,6 +163,7 @@ class ExpensesReportView(LoginRequiredMixin, TenantRequiredMixin, View):
         )
         exportar = request.GET.get("export")
         if exportar in ("csv", "pdf", "xlsx"):
+            _audit_export(request, reporte="gastos", formato=exportar)
             header = ["Número", "Fecha", "Categoría", "Estado", "Total"]
             filas = [(g.number, g.expense_date, g.category.name, g.status, g.total) for g in reporte["rows"]]
             if exportar == "csv":
@@ -203,6 +225,7 @@ class CustomerStatementView(LoginRequiredMixin, TenantRequiredMixin, View):
         reporte = services.get_customer_statement(request.tenant, cliente)
         exportar = request.GET.get("export")
         if exportar in ("csv", "pdf", "xlsx"):
+            _audit_export(request, reporte=f"estado_cuenta_cliente_{cliente.pk}", formato=exportar)
             header = ["Fecha", "Tipo", "Documento", "Monto"]
             filas = [(m["date"], m["type"], getattr(m["document"], "number", str(m["document"].pk)), m["amount"]) for m in reporte["rows"]]
             nombre = f"estado_cuenta_{cliente.pk}"
@@ -222,6 +245,7 @@ class SupplierStatementView(LoginRequiredMixin, TenantRequiredMixin, View):
         reporte = services.get_supplier_statement(request.tenant, proveedor)
         exportar = request.GET.get("export")
         if exportar in ("csv", "pdf", "xlsx"):
+            _audit_export(request, reporte=f"estado_cuenta_proveedor_{proveedor.pk}", formato=exportar)
             header = ["Fecha", "Tipo", "Documento", "Monto"]
             filas = [(m["date"], m["type"], getattr(m["document"], "supplier_invoice_number", None) or getattr(m["document"], "pk"), m["amount"]) for m in reporte["rows"]]
             nombre = f"estado_cuenta_proveedor_{proveedor.pk}"

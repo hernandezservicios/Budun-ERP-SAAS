@@ -1,0 +1,67 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Auditoría — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'core:settings' %}">Configuración</a></li>
+        <li aria-current="page">Auditoría</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Auditoría</h1>
+        <p class="encabezado-pagina__descripcion">Búsqueda federada sobre todos los eventos del tenant: inicios de sesión, cambios de permisos, actividad de cada módulo y acceso a la API. Nunca se puede editar ni borrar un evento.</p>
+    </div>
+    {% if puede_exportar %}
+    <a class="btn btn--contorno" href="{% url 'audit:export' %}?{{ request.GET.urlencode }}">Exportar CSV</a>
+    {% endif %}
+</div>
+
+<div class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <form method="get" novalidate>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--espacio-3);">
+                {% for field in form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn--primario" style="margin-top: var(--espacio-3);">Buscar</button>
+        </form>
+    </div>
+</div>
+
+{% if eventos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead>
+            <tr><th>Fecha</th><th>Origen</th><th>Dominio</th><th>Acción</th><th>Objeto</th><th>Usuario</th><th>Resumen</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for evento in eventos %}
+            <tr>
+                <td>{{ evento.created_at|date:"d M Y H:i" }}</td>
+                <td>{{ evento.source }}</td>
+                <td>{{ evento.domain }}</td>
+                <td>{{ evento.action }}</td>
+                <td>{{ evento.object_type }}{% if evento.object_id %} #{{ evento.object_id }}{% endif %}{% if evento.label %} — {{ evento.label }}{% endif %}</td>
+                <td>{{ evento.user_id|default:"—" }}</td>
+                <td>{{ evento.summary|default:"—" }}</td>
+                <td><a class="btn btn--contorno" href="{% url 'audit:detail' evento.source evento.row_id %}">Ver</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p>Página {{ pagina }} de {{ total_paginas }} — {{ total }} evento{{ total|pluralize }} en total.</p>
+<div class="acciones-rapidas">
+    {% if pagina > 1 %}<a class="btn btn--contorno" href="?{{ request.GET.urlencode }}&page={{ pagina|add:"-1" }}">Anterior</a>{% endif %}
+    {% if pagina < total_paginas %}<a class="btn btn--contorno" href="?{{ request.GET.urlencode }}&page={{ pagina|add:"1" }}">Siguiente</a>{% endif %}
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🔍</div><h3>Sin eventos para estos filtros</h3></div>
+{% endif %}
+{% endblock %}

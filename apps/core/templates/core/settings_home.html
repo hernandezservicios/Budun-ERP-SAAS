@@ -17,11 +17,19 @@
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-4);">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">🔑 Roles y Permisos</h3>
         <p>Personaliza qué puede hacer cada rol y define excepciones para usuarios específicos.</p>
         <a class="btn btn--contorno" href="{% url 'permissions:index' %}">Administrar</a>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">📋 Auditoría</h3>
+        <p>Busca cualquier evento del tenant: inicios de sesión, cambios de permisos, actividad de cada módulo y acceso a la API.</p>
+        <a class="btn btn--contorno" href="{% url 'audit:search' %}">Ver auditoría</a>
     </div>
 </div>
 {% endblock %}

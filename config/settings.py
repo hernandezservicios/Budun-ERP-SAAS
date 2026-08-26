@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     "apps.accounting",
     "apps.reports",
     "apps.permissions",
+    "apps.audit",
 ]
 
 # Custom User Model (FASE 3). Debe fijarse antes de la primera migración

@@ -83,6 +83,22 @@ def log_sensitive_payroll_access(nomina, user):
         nomina.tenant, entity_type="payroll", entity_id=nomina.pk, entity_label=nomina.employee_name_snapshot,
         action=PayrollActivityLog.Action.SENSITIVE_DATA_VIEWED, user=user,
     )
+    # Además del registro operativo de este módulo (arriba, ya leído por
+    # `period_detail`/`payroll_detail`), se replica en la auditoría
+    # transversal (`apps.audit`) — es exactamente el tipo de lectura
+    # sensible de alto valor que esa auditoría existe para capturar
+    # (ver `docs/audit.md`). Import diferido + resiliente: la auditoría
+    # nunca debe bloquear ni romper la lectura que está auditando.
+    try:
+        from apps.audit.services import log_event
+        from apps.audit.models import AuditLog
+
+        log_event(
+            nomina.tenant, user=user, action=AuditLog.Action.SENSITIVE_DATA_VIEWED, domain="payroll",
+            object_type="payroll", object_id=nomina.pk,
+        )
+    except Exception:  # noqa: BLE001 — la auditoría nunca debe romper la operación de negocio.
+        pass
 
 
 # ------------------------------------------------------------------

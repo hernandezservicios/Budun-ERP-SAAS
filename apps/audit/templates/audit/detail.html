@@ -1,0 +1,50 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Detalle de evento — Auditoría — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'audit:search' %}">Auditoría</a></li>
+        <li aria-current="page">Detalle</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Detalle del evento</h1>
+</div>
+
+<div class="tarjeta">
+    <div class="tarjeta__cuerpo">
+        <dl>
+            <dt>Origen</dt><dd>{{ source }}</dd>
+            <dt>Fecha</dt><dd>{{ evento.created_at }}</dd>
+            <dt>Usuario</dt><dd>{{ evento.user|default:"—" }}</dd>
+            <dt>Acción</dt><dd>{{ evento.get_action_display|default:evento.action }}</dd>
+
+            {% if source == "audit" %}
+            <dt>Dominio</dt><dd>{{ evento.domain }}</dd>
+            <dt>Tipo de objeto</dt><dd>{{ evento.object_type|default:"—" }}</dd>
+            <dt>Id de objeto</dt><dd>{{ evento.object_id|default:"—" }}</dd>
+            <dt>Dirección IP</dt><dd>{{ evento.ip_address|default:"—" }}</dd>
+            <dt>User agent</dt><dd>{{ evento.user_agent|default:"—" }}</dd>
+            <dt>Motivo</dt><dd>{{ evento.reason|default:"—" }}</dd>
+            <dt>Antes</dt><dd><code>{{ evento.before|default:"—" }}</code></dd>
+            <dt>Después</dt><dd><code>{{ evento.after|default:"—" }}</code></dd>
+            <dt>Metadatos</dt><dd><code>{{ evento.metadata|default:"—" }}</code></dd>
+            {% elif source == "inventory" %}
+            <dt>Producto</dt><dd>{{ evento.product.name }}</dd>
+            <dt>Tipo de movimiento</dt><dd>{{ evento.get_movement_type_display }}</dd>
+            <dt>Cantidad</dt><dd>{{ evento.quantity }}</dd>
+            <dt>Notas</dt><dd>{{ evento.notes|default:"—" }}</dd>
+            {% else %}
+            <dt>Tipo de entidad</dt><dd>{{ evento.entity_type }}</dd>
+            <dt>Id de entidad</dt><dd>{{ evento.entity_id }}</dd>
+            <dt>Identificador</dt><dd>{{ evento.entity_label|default:"—" }}</dd>
+            <dt>Detalles</dt><dd>{{ evento.details|default:"—" }}</dd>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+{% endblock %}

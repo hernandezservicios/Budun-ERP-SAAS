@@ -151,8 +151,8 @@ def _audit_permission_change(tenant, user, *, domain_object, code, is_granted):
 
         log_event(
             tenant, user=user, action=AuditLog.Action.PERMISSION_CHANGED, domain="permissions",
-            object_type="permission", object_id=None,
-            details=f"{domain_object} → {code} = {'concedido' if is_granted else 'denegado'}",
+            object_type="permission", object_id=domain_object,
+            after={"code": code, "is_granted": is_granted},
         )
     except Exception:  # noqa: BLE001 — la auditoría nunca debe romper el cambio de permiso.
         pass

@@ -36,5 +36,6 @@ urlpatterns = [
     path("contabilidad/", include("apps.accounting.urls")),
     path("reportes/", include("apps.reports.urls")),
     path("configuracion/permisos/", include("apps.permissions.urls")),
+    path("configuracion/auditoria/", include("apps.audit.urls")),
     path("", include("apps.core.urls")),
 ]
