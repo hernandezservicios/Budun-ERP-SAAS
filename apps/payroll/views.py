@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
+from apps.permissions.services import require_permission
 from apps.tenants.permissions import TenantRequiredMixin
 
 from . import services
@@ -25,10 +26,12 @@ def _mensaje_error(error):
 
 class PayrollPeriodListView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request):
+        require_permission(request, "payroll.view")
         context = {"periodos": services.list_payroll_periods(request.tenant), "form": PayrollPeriodForm()}
         return render(request, "payroll/period_list.html", context)
 
     def post(self, request):
+        require_permission(request, "payroll.process")
         form = PayrollPeriodForm(request.POST)
         if form.is_valid():
             try:
@@ -44,12 +47,20 @@ class PayrollPeriodListView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollPeriodDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request, pk):
+        require_permission(request, "payroll.view")
         periodo = get_object_or_404(PayrollPeriod, pk=pk, tenant=request.tenant)
         nominas = services.list_period_payrolls(periodo)
         ya_calculados = [nomina.employee_id for nomina in nominas]
+        # Los montos (bruto/deducciones/neto) de cada nómina son
+        # información sensible — la plantilla decide qué columna
+        # mostrar según este booleano calculado en el servidor, nunca
+        # ocultando solo con CSS/JS (mismo criterio que
+        # `apps.hr.services.can_view_sensitive_employee_data`).
+        puede_ver_sensible = services.can_view_sensitive_payroll_data(request.tenant, request.user)
         context = {
             "periodo": periodo,
             "nominas": nominas,
+            "puede_ver_sensible": puede_ver_sensible,
             "calculate_form": PayrollCalculateForm(tenant=request.tenant, exclude_employee_ids=ya_calculados),
             "activity_log": services.get_activity_log(request.tenant, entity_type="payroll_period", entity_id=periodo.pk),
         }
@@ -58,6 +69,7 @@ class PayrollPeriodDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollPeriodApproveView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "payroll.approve")
         periodo = get_object_or_404(PayrollPeriod, pk=pk, tenant=request.tenant)
         try:
             services.approve_period(periodo, request.user)
@@ -69,6 +81,7 @@ class PayrollPeriodApproveView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollPeriodCancelView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "payroll.process")
         periodo = get_object_or_404(PayrollPeriod, pk=pk, tenant=request.tenant)
         try:
             services.cancel_period(periodo, request.user)
@@ -80,6 +93,11 @@ class PayrollPeriodCancelView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollPeriodCloseView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        # Cerrar un período exige la misma autoridad que aprobarlo
+        # (no hay un código `payroll.close` dedicado en el catálogo:
+        # cerrar es, en términos de autorización, tan sensible como
+        # aprobar — ambos son puntos sin retorno fácil del período).
+        require_permission(request, "payroll.approve")
         periodo = get_object_or_404(PayrollPeriod, pk=pk, tenant=request.tenant)
         try:
             services.close_period(periodo, request.user)
@@ -91,6 +109,7 @@ class PayrollPeriodCloseView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollCalculateView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "payroll.process")
         periodo = get_object_or_404(PayrollPeriod, pk=pk, tenant=request.tenant)
         form = PayrollCalculateForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -107,8 +126,18 @@ class PayrollCalculateView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 
 class PayrollDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """El desglose completo (líneas con monto, bruto/deducciones/neto)
+    es exactamente la información que `payroll.sensitive.view`
+    protege — a diferencia de RRHH (donde la ficha básica es visible
+    y solo el desglose sensible se condiciona), aquí TODA la página
+    es el desglose sensible, así que se exige el permiso para
+    entrar (mismo criterio que la sección 5 de la especificación de
+    FASE 15: separar lo sensible de lo operativo)."""
+
     def get(self, request, pk):
+        require_permission(request, "payroll.sensitive.view")
         nomina = get_object_or_404(Payroll, pk=pk, tenant=request.tenant)
+        services.log_sensitive_payroll_access(nomina, request.user)
         context = {
             "nomina": nomina,
             "lineas": services.get_payroll_lines(nomina),
@@ -122,6 +151,7 @@ class PayrollDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollLineAddView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "payroll.process")
         nomina = get_object_or_404(Payroll, pk=pk, tenant=request.tenant)
         form = PayrollLineForm(request.POST)
         if form.is_valid():
@@ -137,6 +167,7 @@ class PayrollLineAddView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollPaymentAddView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "payroll.pay")
         nomina = get_object_or_404(Payroll, pk=pk, tenant=request.tenant)
         form = PayrollPaymentForm(request.POST)
         if form.is_valid():
@@ -152,6 +183,7 @@ class PayrollPaymentAddView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class PayrollPaymentVoidView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk, payment_pk):
+        require_permission(request, "payroll.pay")
         nomina = get_object_or_404(Payroll, pk=pk, tenant=request.tenant)
         pago = get_object_or_404(PayrollPayment, pk=payment_pk, tenant=request.tenant, payroll=nomina)
         services.void_payroll_payment(pago, request.user)

@@ -1,0 +1,27 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Configuración — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Configuración</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Configuración</h1>
+        <p class="encabezado-pagina__descripcion">Administración del tenant: roles, permisos y (próximamente) la API de Inventario para integraciones externas.</p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">🔑 Roles y Permisos</h3>
+        <p>Personaliza qué puede hacer cada rol y define excepciones para usuarios específicos.</p>
+        <a class="btn btn--contorno" href="{% url 'permissions:index' %}">Administrar</a>
+    </div>
+</div>
+{% endblock %}

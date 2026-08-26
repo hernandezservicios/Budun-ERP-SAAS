@@ -1,0 +1,34 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Permisos de {{ role_label }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'permissions:index' %}">Roles y Permisos</a></li>
+        <li aria-current="page">{{ role_label }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Permisos de {{ role_label }}</h1>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% for dominio, campos in sections %}
+    <div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+        <div class="tarjeta__cuerpo">
+            <h3 class="panel-seccion__titulo">{{ dominio }}</h3>
+            {% for campo in campos %}
+            <label style="display:flex; align-items:center; gap: var(--espacio-2); margin-bottom: var(--espacio-2);">
+                {{ campo }} {{ campo.label }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn--primario">Guardar permisos</button>
+</form>
+{% endblock %}

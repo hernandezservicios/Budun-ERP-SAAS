@@ -26,7 +26,12 @@ class PosTestCase(TestCase):
         self.owner = User.objects.create_user(email="owner.pos@example.com", password="clave-de-prueba-987")
         self.cajero = User.objects.create_user(email="cajero.pos@example.com", password="clave-de-prueba-987")
         Membership.objects.create(user=self.owner, tenant=self.tenant, role=Membership.Role.OWNER)
-        Membership.objects.create(user=self.cajero, tenant=self.tenant, role=Membership.Role.MEMBER)
+        # CASHIER (FASE 15): antes de los roles granulares, "cajero" solo
+        # podía expresarse como MEMBER — CASHIER es el rol que realmente
+        # describe a este usuario (trae `cash.open`/`cash.close`/
+        # `cash.move`/`pos.use`/`sales.create` por defecto, ver
+        # `apps.permissions.catalog`), así que se usa aquí.
+        Membership.objects.create(user=self.cajero, tenant=self.tenant, role=Membership.Role.CASHIER)
 
         self.customer = Customer.objects.create(
             tenant=self.tenant, first_name="Cliente", last_name="POS",

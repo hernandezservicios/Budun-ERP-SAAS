@@ -22,6 +22,7 @@ from apps.approvals.models import ApprovalRequest
 from apps.customers.models import Customer
 from apps.customers.services import list_customers
 from apps.inventory.models import Product
+from apps.permissions.services import require_permission
 from apps.sales.models import Payment, Sale
 from apps.sales import services as sales_services
 from apps.tenants.models import Membership
@@ -85,6 +86,7 @@ class CashSessionOpenView(LoginRequiredMixin, TenantRequiredMixin, View):
         return render(request, "pos/session_open.html", {"form": form})
 
     def post(self, request):
+        require_permission(request, "cash.open")
         form = OpenSessionForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             try:
@@ -113,6 +115,7 @@ class CashSessionCloseView(LoginRequiredMixin, TenantRequiredMixin, View):
         return render(request, "pos/session_close.html", context)
 
     def post(self, request):
+        require_permission(request, "cash.close")
         sesion = services.get_active_session_for_user(request.tenant, request.user)
         if sesion is None:
             messages.error(request, "No tienes una sesión de caja abierta.")
@@ -145,6 +148,7 @@ class CashSessionSummaryView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class CashMovementCreateView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request):
+        require_permission(request, "cash.move")
         sesion = services.get_active_session_for_user(request.tenant, request.user)
         if sesion is None:
             messages.error(request, "No tienes una sesión de caja abierta.")

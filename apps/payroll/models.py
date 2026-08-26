@@ -224,6 +224,7 @@ class PayrollActivityLog(TenantScopedModel):
         PAYROLL_CALCULATED = "payroll_calculated", "Nómina calculada"
         PAYMENT_RECORDED = "payment_recorded", "Pago registrado"
         PAYMENT_VOIDED = "payment_voided", "Pago anulado"
+        SENSITIVE_DATA_VIEWED = "sensitive_data_viewed", "Datos sensibles vistos"
 
     entity_type = models.CharField("tipo de entidad", max_length=25)
     entity_id = models.PositiveBigIntegerField("id de la entidad")

@@ -12,8 +12,12 @@ class DiscountAuthorizationTests(PosTestCase):
         super().setUp()
         self.sesion = services.open_cash_session(self.tenant, cash_register=self.caja, user=self.cajero, opening_amount=Decimal("0"))
         self.sale = services.start_cart(self.tenant, user=self.cajero)
+        # `self.cajero` (`PosTestCase`) es rol CASHIER desde FASE 15 (antes
+        # de los roles granulares, "cajero" solo podía expresarse como
+        # MEMBER) — la política debe quedar keyed al rol real del usuario
+        # que hace el descuento, o `ApprovalPolicy` no la encuentra.
         ApprovalPolicy.all_objects.create(
-            tenant=self.tenant, scope=ApprovalPolicy.Scope.ROLE, role="member",
+            tenant=self.tenant, scope=ApprovalPolicy.Scope.ROLE, role="cashier",
             max_discount_percent=Decimal("10"), max_discount_amount=Decimal("50"), max_credit_overage=Decimal("0"),
         )
 

@@ -52,9 +52,15 @@
                 <td><a href="{% url 'payroll:payroll_detail' nomina.pk %}">{{ nomina.employee_name_snapshot }}</a></td>
                 <td>{{ nomina.department_snapshot|default:"—" }}</td>
                 <td>{{ nomina.position_snapshot|default:"—" }}</td>
+                {% if puede_ver_sensible %}
                 <td>{{ nomina.currency }} {{ nomina.gross_total }}</td>
                 <td>{{ nomina.currency }} {{ nomina.deductions_total }}</td>
                 <td>{{ nomina.currency }} {{ nomina.net_total }}</td>
+                {% else %}
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+                {% endif %}
                 <td>
                     {% if nomina.status == "paid" %}<span class="badge badge--verde">Pagada</span>
                     {% elif nomina.status == "canceled" %}<span class="badge badge--peligro">Cancelada</span>

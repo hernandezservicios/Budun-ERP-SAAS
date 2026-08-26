@@ -10,9 +10,11 @@ Mismos principios que `apps.expenses.services`/`apps.purchases.services`:
 - Errores de negocio como `InvalidHROperation` (nunca una excepción
   genérica ni un `IntegrityError` de PostgreSQL sin traducir).
 - Información sensible (salario, datos bancarios): `can_view_sensitive_employee_data`
-  es la única fuente de verdad sobre quién puede verla — hoy, con solo
-  dos roles (OWNER/MEMBER), solo el propietario del tenant; cada
-  lectura por el propietario se audita explícitamente.
+  es la única fuente de verdad sobre quién puede verla — desde FASE 15
+  delega en `apps.permissions.services.has_permission` (permiso
+  `hr.sensitive.view`), que preserva "el propietario siempre puede"
+  como regla incondicional y además permite que un tenant conceda el
+  permiso a otro rol/usuario explícitamente; cada lectura se audita.
 """
 
 from datetime import timedelta
@@ -71,12 +73,18 @@ def get_activity_log(tenant, *, entity_type, entity_id, limit=20):
 
 
 def can_view_sensitive_employee_data(tenant, user):
-    """Hoy, con solo dos roles (OWNER/MEMBER, ver `apps.tenants.models.Membership`),
-    la única forma real de distinguir acceso a salario/datos bancarios
-    es "es el propietario del tenant" — un cajero (MEMBER) nunca ve esto
-    solo por pertenecer al tenant. FASE 15 (Roles granulares) podrá
-    introducir un permiso dedicado sin romper este diseño."""
-    return approvals_services.is_owner(tenant, user)
+    """Único punto de decisión sobre acceso a salario/datos bancarios.
+    Delega en el permiso granular `hr.sensitive.view`
+    (`apps.permissions`, FASE 15) — import diferido porque `apps.hr`
+    (FASE 13) es una app anterior a `apps.permissions` (FASE 15) en la
+    cadena de dependencias del proyecto (una app posterior puede
+    importar una anterior, nunca al revés a nivel de módulo). El
+    propietario del tenant sigue autorizado incondicionalmente
+    (regla ya incorporada en `has_permission`); ningún otro rol lo ve
+    a menos que el tenant conceda el permiso explícitamente."""
+    from apps.permissions.services import has_permission
+
+    return has_permission(tenant, user, "hr.sensitive.view")
 
 
 def log_sensitive_access(employee, user):

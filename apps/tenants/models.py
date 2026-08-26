@@ -36,6 +36,20 @@ class Membership(models.Model):
 
     class Role(models.TextChoices):
         OWNER = "owner", "Propietario"
+        # Roles granulares (FASE 15, ver docs/roles-permissions.md).
+        # "MEMBER" se conserva sin cambios (todas las membresías
+        # existentes creadas antes de FASE 15 siguen siendo válidas
+        # exactamente como estaban) — los cuatro roles nuevos son
+        # opciones ADICIONALES, nunca un reemplazo. "SUPER_ADMIN" de la
+        # especificación de FASE 15 no se modela aquí: no tiene sentido
+        # como rol POR TENANT (un "super admin" es un concepto de
+        # PLATAFORMA, no de una empresa cliente) — se adapta a
+        # `User.is_superuser` (ya existe en `AbstractUser`, sin campo
+        # nuevo), documentado en `docs/roles-permissions.md`.
+        ADMIN = "admin", "Administrador"
+        MANAGER = "manager", "Gerente"
+        CASHIER = "cashier", "Cajero"
+        EMPLOYEE = "employee", "Empleado"
         MEMBER = "member", "Miembro"
 
     user = models.ForeignKey(

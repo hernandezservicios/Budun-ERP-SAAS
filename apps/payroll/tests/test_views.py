@@ -46,13 +46,19 @@ class PayrollHttpFlowTests(PayrollTestCase):
         self.assertEqual(periodo.status, PayrollPeriod.Status.CLOSED)
 
     def test_staff_sin_permiso_no_puede_aprobar_via_http(self):
+        # Antes de FASE 15, la única barrera era la autoridad de
+        # `apps.approvals` dentro del servicio (mensaje + redirect). Desde
+        # FASE 15, `require_permission(request, "payroll.approve")` corta
+        # en la propia vista, antes de llegar al servicio — MEMBER (el rol
+        # heredado de `self.staff`, ver `PayrollTestCase`) no lo trae por
+        # defecto, así que ahora la respuesta es 403, no un redirect.
         periodo = services.create_payroll_period(
             self.tenant, start_date=date(2025, 1, 1), end_date=date(2025, 1, 15),
             pay_date=date(2025, 1, 16), user=self.owner,
         )
         services.calculate_payroll_for_employee(self.tenant, periodo, self.empleado, user=self.owner)
         respuesta = self.client.post(reverse("payroll:period_approve", args=[periodo.pk]))
-        self.assertRedirects(respuesta, reverse("payroll:period_detail", args=[periodo.pk]))
+        self.assertEqual(respuesta.status_code, 403)
         periodo.refresh_from_db()
         self.assertEqual(periodo.status, PayrollPeriod.Status.PROCESSING)  # sigue sin aprobar
 

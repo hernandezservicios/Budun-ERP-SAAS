@@ -59,6 +59,33 @@ def get_activity_log(tenant, *, entity_type, entity_id, limit=20):
 
 
 # ------------------------------------------------------------------
+# Datos sensibles (FASE 15) — mismo criterio que
+# `apps.hr.services.can_view_sensitive_employee_data`: único punto de
+# decisión, delegado en el permiso granular, verificado en el
+# servidor (nunca solo ocultando columnas en la plantilla), auditado
+# en cada lectura.
+# ------------------------------------------------------------------
+
+
+def can_view_sensitive_payroll_data(tenant, user):
+    """Desglose de nómina (montos por línea, bruto/deducciones/neto):
+    delega en el permiso granular `payroll.sensitive.view`
+    (`apps.permissions`, FASE 15) — import diferido, mismo motivo que
+    en `apps.hr.services` (`apps.payroll` es anterior a
+    `apps.permissions` en la cadena de dependencias)."""
+    from apps.permissions.services import has_permission
+
+    return has_permission(tenant, user, "payroll.sensitive.view")
+
+
+def log_sensitive_payroll_access(nomina, user):
+    log_activity(
+        nomina.tenant, entity_type="payroll", entity_id=nomina.pk, entity_label=nomina.employee_name_snapshot,
+        action=PayrollActivityLog.Action.SENSITIVE_DATA_VIEWED, user=user,
+    )
+
+
+# ------------------------------------------------------------------
 # Período de nómina
 # ------------------------------------------------------------------
 

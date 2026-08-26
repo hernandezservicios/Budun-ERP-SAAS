@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
+from apps.permissions.services import require_permission
 from apps.tenants.permissions import TenantRequiredMixin
 
 from . import services
@@ -98,6 +99,7 @@ class AccountingPeriodDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class AccountingPeriodCloseView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "accounting.close_period")
         periodo = get_object_or_404(AccountingPeriod, pk=pk, tenant=request.tenant)
         try:
             services.close_period(periodo, request.user)
@@ -109,6 +111,7 @@ class AccountingPeriodCloseView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class AccountingPeriodReopenView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "accounting.reopen_period")
         periodo = get_object_or_404(AccountingPeriod, pk=pk, tenant=request.tenant)
         form = ReopenPeriodForm(request.POST)
         if form.is_valid():
@@ -142,6 +145,7 @@ class JournalEntryCreateView(LoginRequiredMixin, TenantRequiredMixin, View):
         return render(request, "accounting/journal_entry_form.html", context)
 
     def post(self, request):
+        require_permission(request, "accounting.post")
         header_form = JournalEntryHeaderForm(request.POST)
         line_formset = JournalEntryLineFormSet(request.POST, form_kwargs={"tenant": request.tenant})
         if header_form.is_valid() and line_formset.is_valid():
@@ -180,6 +184,7 @@ class JournalEntryDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class JournalEntryReverseView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "accounting.reverse")
         asiento = get_object_or_404(JournalEntry, pk=pk, tenant=request.tenant)
         form = ReverseJournalEntryForm(request.POST)
         reason = form.cleaned_data["reason"] if form.is_valid() else ""

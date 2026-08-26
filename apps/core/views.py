@@ -1,4 +1,9 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render
+from django.views import View
+
+from apps.permissions.services import require_permission
+from apps.tenants.permissions import TenantRequiredMixin
 
 from .pricing import PLANS
 
@@ -28,12 +33,20 @@ def design_system(request):
     return render(request, "core/design_system.html")
 
 
-def design_system(request):
-    """Página de referencia interna del Design System (FASE 5).
+class SettingsHomeView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """Hub «Configuración» (FASE 15).
 
-    Muestra todos los componentes reutilizables con datos de ejemplo, para
-    poder verificar consistencia visual, accesibilidad y responsive con
-    evidencia real (HTML servido de verdad, no una maqueta aparte). No es
-    una página de negocio ni se enlaza desde la navegación principal.
+    Punto de entrada único para las secciones administrativas del
+    tenant. Hoy enlaza Roles y Permisos (`apps.permissions`); la
+    sección «API de Inventario» (`docs/api-inventory.md`) se agrega
+    aquí mismo cuando se construya `apps.api` — nunca una segunda
+    página de configuración paralela.
+
+    El acceso de LECTURA a esta página exige `settings.view`; cada
+    sección enlazada aplica su propio permiso más estricto
+    (`settings.manage` para Roles y Permisos) al entrar.
     """
-    return render(request, "core/design_system.html")
+
+    def get(self, request):
+        require_permission(request, "settings.view")
+        return render(request, "core/settings_home.html")

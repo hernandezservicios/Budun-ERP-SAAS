@@ -1,0 +1,55 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Roles y Permisos — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'core:settings' %}">Configuración</a></li>
+        <li aria-current="page">Roles y Permisos</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Roles y Permisos</h1>
+        <p class="encabezado-pagina__descripcion">El propietario siempre está autorizado para todo. Cada rol trae permisos de fábrica que puedes personalizar; un usuario específico puede tener una excepción (override) sobre lo que le da su rol.</p>
+    </div>
+</div>
+
+<h2>Roles</h2>
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Rol</th><th></th></tr></thead>
+        <tbody>
+            {% for valor, etiqueta in roles %}
+            <tr>
+                <td>{{ etiqueta }}</td>
+                <td><a class="btn btn--contorno" href="{% url 'permissions:role_permissions' valor %}">Configurar permisos</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h2>Usuarios (overrides individuales)</h2>
+{% if miembros %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Usuario</th><th>Rol</th><th></th></tr></thead>
+        <tbody>
+            {% for membresia in miembros %}
+            <tr>
+                <td>{{ membresia.user.email }}</td>
+                <td>{{ membresia.get_role_display }}</td>
+                <td><a class="btn btn--contorno" href="{% url 'permissions:user_overrides' membresia.user_id %}">Ver overrides</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">👤</div><h3>Sin miembros todavía</h3></div>
+{% endif %}
+{% endblock %}

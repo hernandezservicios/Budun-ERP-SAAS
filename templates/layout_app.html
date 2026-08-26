@@ -114,6 +114,12 @@
                 </a>
             </li>
             <li>
+                <a class="sidebar__enlace" href="{% url 'core:settings' %}"
+                   {% if request.resolver_match.url_name == 'settings' or request.resolver_match.app_name == 'permissions' %}aria-current="page"{% endif %}>
+                    Configuración
+                </a>
+            </li>
+            <li>
                 <a class="sidebar__enlace" href="{% url 'accounts:perfil' %}"
                    {% if request.resolver_match.url_name == 'perfil' %}aria-current="page"{% endif %}>
                     Mi perfil

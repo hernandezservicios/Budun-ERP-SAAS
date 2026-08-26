@@ -1,0 +1,52 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Overrides de {{ membresia.user.email }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'permissions:index' %}">Roles y Permisos</a></li>
+        <li aria-current="page">{{ membresia.user.email }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Overrides de {{ membresia.user.email }}</h1>
+        <p class="encabezado-pagina__descripcion">Rol actual: {{ membresia.get_role_display }}. Un override concede o deniega UN permiso específico para este usuario, sin importar lo que diga su rol.</p>
+    </div>
+</div>
+
+{% if overrides %}
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Permiso</th><th>Decisión</th><th>Motivo</th></tr></thead>
+        <tbody>
+            {% for fila in overrides %}
+            <tr>
+                <td>{{ fila.permission_code }}</td>
+                <td>{% if fila.is_granted %}Concedido{% else %}Denegado{% endif %}</td>
+                <td>{{ fila.reason }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta" style="margin-bottom: var(--espacio-6);"><div class="estado-vacio__icono" aria-hidden="true">🔑</div><h3>Sin overrides — usa exactamente los permisos de su rol</h3></div>
+{% endif %}
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Agregar / cambiar override</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Guardar</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
