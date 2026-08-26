@@ -1,0 +1,92 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Empleados — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">RRHH</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Empleados</h1>
+        <p class="encabezado-pagina__descripcion">Gestiona empleados, contratos, asistencia, ausencias e incidentes.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--contorno" href="{% url 'hr:department_list' %}">Departamentos</a>
+        <a class="btn btn--contorno" href="{% url 'hr:position_list' %}">Cargos</a>
+        <a class="btn btn--contorno" href="{% url 'hr:work_schedule_list' %}">Horarios</a>
+        <a class="btn btn--contorno" href="{% url 'hr:leave_type_list' %}">Tipos de ausencia</a>
+        <a class="btn btn--primario" href="{% url 'hr:employee_create' %}">Nuevo empleado</a>
+    </div>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);" role="search" aria-label="Buscar y filtrar empleados">
+    <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-4); align-items:flex-end;">
+        <div class="campo" style="flex:2; min-width:200px; margin-bottom:0;">
+            <label for="id_q">Buscar por nombre o identificación</label>
+            <input type="text" id="id_q" name="q" class="input" value="{{ q }}">
+        </div>
+        <div class="campo" style="min-width:200px; margin-bottom:0;">
+            <label for="id_estado">Estado</label>
+            <select id="id_estado" name="estado" class="select">
+                <option value="">Todos</option>
+                {% for valor, etiqueta in estados %}
+                <option value="{{ valor }}" {% if estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn--primario">Filtrar</button>
+    </div>
+</form>
+
+{% if empleados %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Nombre</th><th>Departamento</th><th>Cargo</th><th>Ingreso</th><th>Estado</th></tr></thead>
+        <tbody>
+            {% for empleado in empleados %}
+            <tr>
+                <td><a href="{% url 'hr:employee_detail' empleado.pk %}">{{ empleado.display_name }}</a></td>
+                <td>{{ empleado.department.name|default:"—" }}</td>
+                <td>{{ empleado.position.name|default:"—" }}</td>
+                <td>{{ empleado.hire_date|date:"d M Y" }}</td>
+                <td>
+                    {% if empleado.status == "active" %}<span class="badge badge--verde">{{ empleado.get_status_display }}</span>
+                    {% elif empleado.status == "terminated" %}<span class="badge badge--peligro">{{ empleado.get_status_display }}</span>
+                    {% else %}<span class="badge badge--advertencia">{{ empleado.get_status_display }}</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if is_paginated %}
+<nav class="paginacion" aria-label="Paginación de empleados">
+    {% if page_obj.has_previous %}
+    <a href="?{% if q %}q={{ q }}&{% endif %}estado={{ estado }}&page={{ page_obj.previous_page_number }}">&laquo; Anterior</a>
+    {% else %}
+    <span class="deshabilitado">&laquo; Anterior</span>
+    {% endif %}
+    <span class="actual">{{ page_obj.number }}</span>
+    <span>de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?{% if q %}q={{ q }}&{% endif %}estado={{ estado }}&page={{ page_obj.next_page_number }}">Siguiente &raquo;</a>
+    {% else %}
+    <span class="deshabilitado">Siguiente &raquo;</span>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">👥</div>
+    <h3>Todavía no tienes empleados registrados</h3>
+    <a class="btn btn--primario" href="{% url 'hr:employee_create' %}">Nuevo empleado</a>
+</div>
+{% endif %}
+{% endblock %}

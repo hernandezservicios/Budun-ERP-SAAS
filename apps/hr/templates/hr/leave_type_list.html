@@ -1,0 +1,59 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Tipos de ausencia — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'hr:employee_list' %}">RRHH</a></li>
+        <li aria-current="page">Tipos de ausencia</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Tipos de ausencia</h1>
+        <p class="encabezado-pagina__descripcion">Configurables por tenant — vacaciones, permisos, enfermedad y los que necesites.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <form action="{% url 'hr:leave_type_seed_defaults' %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Crear tipos sugeridos</button>
+        </form>
+    </div>
+</div>
+
+{% if tipos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Nombre</th><th>Remunerada</th><th>Requiere autorización</th><th>Estado</th></tr></thead>
+        <tbody>
+            {% for tipo in tipos %}
+            <tr>
+                <td>{{ tipo.name }}</td>
+                <td>{% if tipo.is_paid %}Sí{% else %}No{% endif %}</td>
+                <td>{% if tipo.requires_approval %}Sí{% else %}No{% endif %}</td>
+                <td>{% if tipo.is_active %}<span class="badge badge--verde">Activo</span>{% else %}<span class="badge badge--neutro">Inactivo</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🌴</div><h3>Sin tipos de ausencia todavía</h3></div>
+{% endif %}
+
+<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Nuevo tipo de ausencia</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Crear tipo</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

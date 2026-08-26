@@ -1,0 +1,324 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ empleado.display_name }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'hr:employee_list' %}">RRHH</a></li>
+        <li aria-current="page">{{ empleado.display_name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ empleado.display_name }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ empleado.department.name|default:"Sin departamento" }} · {{ empleado.position.name|default:"Sin cargo" }}
+            · <span class="badge badge--azul">{{ empleado.get_status_display }}</span>
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <form action="{% url 'hr:employee_status_change' empleado.pk %}" method="post" style="display:inline-flex; gap: var(--espacio-2); align-items:center;">
+            {% csrf_token %}
+            <select name="new_status" class="select">
+                {% for valor, etiqueta in status_form.new_status.field.choices %}
+                <option value="{{ valor }}">{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn--contorno">Cambiar estado</button>
+        </form>
+    </div>
+</div>
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones del empleado">
+        <button class="tabs__boton" role="tab" id="tab-datos" aria-controls="panel-datos" aria-selected="true" tabindex="0">Datos</button>
+        <button class="tabs__boton" role="tab" id="tab-contratos" aria-controls="panel-contratos" aria-selected="false" tabindex="-1">Contratos ({{ contracts|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ documentos|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-asistencia" aria-controls="panel-asistencia" aria-selected="false" tabindex="-1">Asistencia</button>
+        <button class="tabs__boton" role="tab" id="tab-ausencias" aria-controls="panel-ausencias" aria-selected="false" tabindex="-1">Ausencias ({{ ausencias|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-incidentes" aria-controls="panel-incidentes" aria-selected="false" tabindex="-1">Incidentes ({{ incidentes|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-datos" role="tabpanel" aria-labelledby="tab-datos" class="tabs__panel">
+        <div class="tarjeta">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Contacto</h3>
+                <p><strong>Identificación:</strong> {{ empleado.get_identification_type_display|default:"—" }} {{ empleado.identification_number|default:"" }}</p>
+                <p><strong>Teléfono:</strong> {{ empleado.phone|default:"—" }} · <strong>Correo:</strong> {{ empleado.email|default:"—" }}</p>
+                <p><strong>Dirección:</strong> {{ empleado.address|default:"—" }} — {{ empleado.city|default:"" }} {{ empleado.state_province|default:"" }} {{ empleado.country|default:"" }}</p>
+                <p><strong>Fecha de ingreso:</strong> {{ empleado.hire_date|date:"d M Y" }}{% if empleado.termination_date %} · <strong>Salida:</strong> {{ empleado.termination_date|date:"d M Y" }}{% endif %}</p>
+                <p><strong>Supervisor:</strong> {{ empleado.supervisor.display_name|default:"—" }}</p>
+
+                {% if puede_ver_sensible %}
+                <h3 class="panel-seccion__titulo">Información sensible <span class="badge badge--advertencia">solo propietario</span></h3>
+                <p><strong>Salario base:</strong> {{ empleado.currency }} {{ empleado.base_salary }}</p>
+                <p><strong>Banco:</strong> {{ empleado.bank_name|default:"—" }} · <strong>Cuenta:</strong> {{ empleado.bank_account_number|default:"—" }}</p>
+                {% else %}
+                <div class="alerta alerta--info" style="margin-top: var(--espacio-4);">Salario y datos bancarios visibles solo para el propietario del tenant.</div>
+                {% endif %}
+
+                {% if empleado.notes %}<p><strong>Notas:</strong> {{ empleado.notes }}</p>{% endif %}
+            </div>
+        </div>
+
+        {% if puede_ver_sensible %}
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 44rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Editar empleado</h3>
+                <form method="post" action="{% url 'hr:employee_edit' empleado.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in edit_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Guardar cambios</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-contratos" role="tabpanel" aria-labelledby="tab-contratos" class="tabs__panel" hidden>
+        {% if contracts %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Salario</th><th>Estado</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for contrato in contracts %}
+                    <tr>
+                        <td>{{ contrato.get_contract_type_display }}</td>
+                        <td>{{ contrato.start_date|date:"d M Y" }}</td>
+                        <td>{{ contrato.end_date|date:"d M Y"|default:"—" }}</td>
+                        <td>{{ contrato.currency }} {{ contrato.salary }}</td>
+                        <td>
+                            {% if contrato.status == "active" %}<span class="badge badge--verde">Activo</span>
+                            {% elif contrato.status == "draft" %}<span class="badge badge--neutro">Borrador</span>
+                            {% else %}<span class="badge badge--peligro">{{ contrato.get_status_display }}</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if contrato.status == "active" %}
+                            <form action="{% url 'hr:contract_terminate' empleado.pk contrato.pk %}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('¿Terminar este contrato?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Terminar</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📄</div><h3>Sin contratos todavía</h3></div>
+        {% endif %}
+
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 36rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Nuevo contrato</h3>
+                <form method="post" action="{% url 'hr:contract_create' empleado.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in contract_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Crear contrato</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        {% if documentos %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Archivo</th><th>Categoría</th><th>Subido</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for documento in documentos %}
+                    <tr>
+                        <td>{{ documento.original_filename }}</td>
+                        <td>{{ documento.get_category_display }}</td>
+                        <td>{{ documento.uploaded_at|date:"d M Y" }}</td>
+                        <td style="white-space:nowrap;">
+                            <a class="btn btn--contorno btn--sm" href="{% url 'hr:employee_document_download' empleado.pk documento.pk %}">Descargar</a>
+                            <form action="{% url 'hr:employee_document_delete' empleado.pk documento.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos adjuntos</h3></div>
+        {% endif %}
+
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'hr:employee_document_upload' empleado.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% for field in document_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-asistencia" role="tabpanel" aria-labelledby="tab-asistencia" class="tabs__panel" hidden>
+        {% if asistencias %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Retraso (min)</th><th>Horas</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for asistencia in asistencias %}
+                    <tr>
+                        <td>{{ asistencia.date|date:"d M Y" }}</td>
+                        <td>{{ asistencia.check_in|time:"H:i"|default:"—" }}</td>
+                        <td>{{ asistencia.check_out|time:"H:i"|default:"—" }}</td>
+                        <td>{{ asistencia.late_minutes }}</td>
+                        <td>{{ asistencia.worked_hours|default:"—" }}</td>
+                        <td>
+                            {% if asistencia.check_in and not asistencia.check_out %}
+                            <form action="{% url 'hr:attendance_check_out' empleado.pk asistencia.pk %}" method="post" style="display:inline-flex; gap: var(--espacio-2);">
+                                {% csrf_token %}
+                                <input type="time" name="check_out_time" class="input" required>
+                                <button type="submit" class="btn btn--contorno btn--sm">Registrar salida</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕒</div><h3>Sin registros de asistencia</h3></div>
+        {% endif %}
+
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Registrar entrada</h3>
+                <form method="post" action="{% url 'hr:attendance_check_in' empleado.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in checkin_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Registrar entrada</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-ausencias" role="tabpanel" aria-labelledby="tab-ausencias" class="tabs__panel" hidden>
+        {% if ausencias %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Días</th><th>Estado</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for ausencia in ausencias %}
+                    <tr>
+                        <td>{{ ausencia.leave_type.name }}</td>
+                        <td>{{ ausencia.start_date|date:"d M Y" }}</td>
+                        <td>{{ ausencia.end_date|date:"d M Y" }}</td>
+                        <td>{{ ausencia.duration_days }}</td>
+                        <td>
+                            {% if ausencia.status == "approved" %}<span class="badge badge--verde">Aprobada</span>
+                            {% elif ausencia.status == "rejected" or ausencia.status == "canceled" %}<span class="badge badge--peligro">{{ ausencia.get_status_display }}</span>
+                            {% else %}<span class="badge badge--advertencia">{{ ausencia.get_status_display }}</span>{% endif %}
+                        </td>
+                        <td style="white-space:nowrap;">
+                            {% if ausencia.status == "requested" %}
+                            <form action="{% url 'hr:leave_approve' empleado.pk ausencia.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Aprobar</button>
+                            </form>
+                            <form action="{% url 'hr:leave_reject' empleado.pk ausencia.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Rechazar</button>
+                            </form>
+                            {% endif %}
+                            {% if ausencia.status == "requested" or ausencia.status == "approved" %}
+                            <form action="{% url 'hr:leave_cancel' empleado.pk ausencia.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Cancelar</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🌴</div><h3>Sin ausencias registradas</h3></div>
+        {% endif %}
+
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Solicitar ausencia</h3>
+                <form method="post" action="{% url 'hr:leave_request' empleado.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in leave_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Solicitar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-incidentes" role="tabpanel" aria-labelledby="tab-incidentes" class="tabs__panel" hidden>
+        {% if incidentes %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Tipo</th><th>Fecha</th><th>Severidad</th><th>Estado</th></tr></thead>
+                <tbody>
+                    {% for incidente in incidentes %}
+                    <tr>
+                        <td>{{ incidente.get_incident_type_display }}</td>
+                        <td>{{ incidente.date|date:"d M Y" }}</td>
+                        <td>{{ incidente.get_severity_display }}</td>
+                        <td>{{ incidente.get_status_display }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">⚠️</div><h3>Sin incidentes registrados</h3></div>
+        {% endif %}
+
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Reportar incidente</h3>
+                <form method="post" action="{% url 'hr:incident_report' empleado.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in incident_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Reportar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <ul class="lista-actividad">
+            {% for evento in activity_log %}
+            <li><strong>{{ evento.get_action_display }}</strong> — {{ evento.details }} · {{ evento.user }} · {{ evento.created_at|date:"d M Y H:i" }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕒</div><h3>Sin actividad registrada</h3></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

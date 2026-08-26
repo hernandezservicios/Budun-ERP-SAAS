@@ -85,6 +85,12 @@
                 </a>
             </li>
             <li>
+                <a class="sidebar__enlace" href="{% url 'hr:employee_list' %}"
+                   {% if request.resolver_match.app_name == 'hr' %}aria-current="page"{% endif %}>
+                    RRHH
+                </a>
+            </li>
+            <li>
                 <a class="sidebar__enlace" href="{% url 'approvals:pending_list' %}"
                    {% if request.resolver_match.app_name == 'approvals' %}aria-current="page"{% endif %}>
                     Autorizaciones
