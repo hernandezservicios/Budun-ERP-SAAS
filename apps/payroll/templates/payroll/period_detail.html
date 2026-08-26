@@ -1,0 +1,101 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ periodo.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'payroll:period_list' %}">Nómina</a></li>
+        <li aria-current="page">{{ periodo.number }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ periodo.number }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ periodo.start_date|date:"d M Y" }} — {{ periodo.end_date|date:"d M Y" }} · Pago: {{ periodo.pay_date|date:"d M Y" }}
+            · <span class="badge badge--azul">{{ periodo.get_status_display }}</span>
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        {% if periodo.status == "draft" or periodo.status == "processing" %}
+        <form action="{% url 'payroll:period_approve' periodo.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Aprobar este período de nómina?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primario">Aprobar período</button>
+        </form>
+        <form action="{% url 'payroll:period_cancel' periodo.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cancelar este período?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Cancelar</button>
+        </form>
+        {% endif %}
+        {% if periodo.status == "approved" or periodo.status == "paid" %}
+        <form action="{% url 'payroll:period_close' periodo.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cerrar este período? No admitirá más cambios.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Cerrar período</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if nominas %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Empleado</th><th>Departamento</th><th>Cargo</th><th>Bruto</th><th>Deducciones</th><th>Neto</th><th>Estado</th></tr></thead>
+        <tbody>
+            {% for nomina in nominas %}
+            <tr>
+                <td><a href="{% url 'payroll:payroll_detail' nomina.pk %}">{{ nomina.employee_name_snapshot }}</a></td>
+                <td>{{ nomina.department_snapshot|default:"—" }}</td>
+                <td>{{ nomina.position_snapshot|default:"—" }}</td>
+                <td>{{ nomina.currency }} {{ nomina.gross_total }}</td>
+                <td>{{ nomina.currency }} {{ nomina.deductions_total }}</td>
+                <td>{{ nomina.currency }} {{ nomina.net_total }}</td>
+                <td>
+                    {% if nomina.status == "paid" %}<span class="badge badge--verde">Pagada</span>
+                    {% elif nomina.status == "canceled" %}<span class="badge badge--peligro">Cancelada</span>
+                    {% else %}<span class="badge badge--advertencia">{{ nomina.get_status_display }}</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">👥</div><h3>Sin nóminas calculadas todavía</h3></div>
+{% endif %}
+
+{% if periodo.status == "draft" or periodo.status == "processing" %}
+<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Calcular nómina de un empleado</h3>
+        <form method="post" action="{% url 'payroll:payroll_calculate' periodo.pk %}" novalidate>
+            {% csrf_token %}
+            {% for field in calculate_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Calcular</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="tarjeta" style="margin-top: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Actividad</h3>
+        {% if activity_log %}
+        <ul class="lista-actividad">
+            {% for evento in activity_log %}
+            <li><strong>{{ evento.get_action_display }}</strong> — {{ evento.details }} · {{ evento.user }} · {{ evento.created_at|date:"d M Y H:i" }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>Sin actividad registrada.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

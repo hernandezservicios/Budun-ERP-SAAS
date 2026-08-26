@@ -1,0 +1,110 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ nomina.employee_name_snapshot }} — {{ nomina.period.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'payroll:period_list' %}">Nómina</a></li>
+        <li><a href="{% url 'payroll:period_detail' nomina.period_id %}">{{ nomina.period.number }}</a></li>
+        <li aria-current="page">{{ nomina.employee_name_snapshot }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ nomina.employee_name_snapshot }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ nomina.department_snapshot|default:"—" }} · {{ nomina.position_snapshot|default:"—" }}
+            · <span class="badge badge--azul">{{ nomina.get_status_display }}</span>
+            · Neto: {{ nomina.currency }} {{ nomina.net_total }}
+        </p>
+    </div>
+</div>
+
+<div class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Detalle</h3>
+        {% if lineas %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Categoría</th><th>Concepto</th><th>Descripción</th><th>Monto</th></tr></thead>
+                <tbody>
+                    {% for linea in lineas %}
+                    <tr>
+                        <td>{% if linea.category == "earning" %}<span class="badge badge--verde">Ingreso</span>{% else %}<span class="badge badge--peligro">Deducción</span>{% endif %}</td>
+                        <td>{{ linea.get_concept_display }}</td>
+                        <td>{{ linea.description|default:"—" }}</td>
+                        <td>{{ nomina.currency }} {{ linea.amount }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        <p><strong>Bruto:</strong> {{ nomina.currency }} {{ nomina.gross_total }} · <strong>Deducciones:</strong> {{ nomina.currency }} {{ nomina.deductions_total }} · <strong>Neto:</strong> {{ nomina.currency }} {{ nomina.net_total }}</p>
+        <p><strong>Saldo pendiente de pago:</strong> {{ nomina.currency }} {{ saldo_pendiente }}</p>
+    </div>
+</div>
+
+{% if nomina.period.status == "draft" or nomina.period.status == "processing" %}
+<div class="tarjeta" style="margin-bottom: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Agregar línea</h3>
+        <form method="post" action="{% url 'payroll:payroll_line_add' nomina.pk %}" novalidate>
+            {% csrf_token %}
+            {% for field in line_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Agregar</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="tarjeta">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Pagos</h3>
+        {% if pagos %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Método</th><th>Monto</th><th>Estado</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for pago in pagos %}
+                    <tr>
+                        <td>{{ pago.get_method_display }}</td>
+                        <td>{{ pago.currency }} {{ pago.amount }}</td>
+                        <td>{% if pago.status == "voided" %}<span class="badge badge--peligro">Anulado</span>{% else %}<span class="badge badge--verde">Confirmado</span>{% endif %}</td>
+                        <td>{{ pago.created_at|date:"d M Y H:i" }}</td>
+                        <td>
+                            {% if pago.status != "voided" %}
+                            <form action="{% url 'payroll:payroll_payment_void' nomina.pk pago.pk %}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('¿Anular este pago?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Anular</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p>Sin pagos registrados.</p>
+        {% endif %}
+
+        {% if nomina.period.status == "approved" or nomina.period.status == "paid" %}
+        <h3 class="panel-seccion__titulo" style="margin-top: var(--espacio-6);">Registrar pago</h3>
+        <form method="post" action="{% url 'payroll:payroll_payment_add' nomina.pk %}" novalidate style="max-width: 28rem;">
+            {% csrf_token %}
+            {% for field in payment_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Registrar pago</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

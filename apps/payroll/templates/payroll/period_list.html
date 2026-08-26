@@ -1,0 +1,58 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Nómina — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Nómina</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Períodos de nómina</h1>
+        <p class="encabezado-pagina__descripcion">Calcula, aprueba y paga la nómina de tus empleados por período.</p>
+    </div>
+</div>
+
+{% if periodos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Número</th><th>Inicio</th><th>Fin</th><th>Pago</th><th>Estado</th></tr></thead>
+        <tbody>
+            {% for periodo in periodos %}
+            <tr>
+                <td><a href="{% url 'payroll:period_detail' periodo.pk %}">{{ periodo.number }}</a></td>
+                <td>{{ periodo.start_date|date:"d M Y" }}</td>
+                <td>{{ periodo.end_date|date:"d M Y" }}</td>
+                <td>{{ periodo.pay_date|date:"d M Y" }}</td>
+                <td>
+                    {% if periodo.status == "paid" or periodo.status == "closed" %}<span class="badge badge--verde">{{ periodo.get_status_display }}</span>
+                    {% elif periodo.status == "canceled" %}<span class="badge badge--peligro">{{ periodo.get_status_display }}</span>
+                    {% elif periodo.status == "draft" %}<span class="badge badge--neutro">{{ periodo.get_status_display }}</span>
+                    {% else %}<span class="badge badge--advertencia">{{ periodo.get_status_display }}</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💰</div><h3>Sin períodos de nómina todavía</h3></div>
+{% endif %}
+
+<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Nuevo período</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Crear período</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
