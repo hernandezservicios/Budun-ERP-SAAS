@@ -91,7 +91,34 @@ INSTALLED_APPS = [
     "apps.reports",
     "apps.permissions",
     "apps.audit",
+    "rest_framework",
+    "apps.api",
 ]
+
+# --- API de Inventario v1 (FASE 15) ---------------------------------------
+# `DEFAULT_AUTHENTICATION_CLASSES=[]`: nunca sesión/JWT genérico — cada
+# vista de `apps.api` declara explícitamente `ApiKeyAuthentication`
+# (ver `apps/api/authentication.py`). `EXCEPTION_HANDLER` propio para el
+# sobre de respuesta consistente (`success`/`data`/`meta`/`errors`,
+# nunca un traceback interno). `DEFAULT_THROTTLE_RATES["api_key"]` es el
+# límite de tasa configurable a nivel de PROYECTO (no por API Key
+# individual todavía — extensión futura simple, ver `docs/api-inventory.md`).
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": [],
+    "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.ApiV1Pagination",
+    "PAGE_SIZE": 20,
+    "EXCEPTION_HANDLER": "apps.api.responses.api_exception_handler",
+    "DEFAULT_THROTTLE_CLASSES": ["apps.api.throttling.ApiKeyRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {"api_key": "120/min"},
+}
+
+# `LocMemCache` — adecuado para un solo proceso (desarrollo y un VPS
+# Windows/Linux de un solo proceso); Redis queda deferido hasta que una
+# fase futura demuestre necesidad real (ver CLAUDE.md).
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+}
 
 # Custom User Model (FASE 3). Debe fijarse antes de la primera migración
 # real de la app "auth"; ver apps/accounts/models.py para el porqué.

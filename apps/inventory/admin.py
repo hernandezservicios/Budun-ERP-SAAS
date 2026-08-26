@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from apps.core.utils import mask_secret
+
 from .models import Category, InventoryUnit, Product, StockMovement
 
 
@@ -68,10 +70,7 @@ class InventoryUnitAdmin(admin.ModelAdmin):
 
     @admin.display(description="Identificador")
     def identificador_enmascarado(self, obj):
-        valor = obj.serial or obj.imei_1 or obj.imei_2 or ""
-        if len(valor) <= 4:
-            return valor
-        return f"···{valor[-4:]}"
+        return mask_secret(obj.serial or obj.imei_1 or obj.imei_2 or "")
 
     def has_add_permission(self, request):
         return False
