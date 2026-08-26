@@ -938,19 +938,30 @@ def get_credit_note_remaining(credit_note):
 
 
 def get_customer_credit_balance(customer):
-    """Saldo a favor TOTAL de un cliente: suma del saldo sin aplicar de
-    todos sus pagos confirmados MÁS el saldo sin aplicar de todas sus
-    notas de crédito emitidas — un ÚNICO saldo (nunca dos balances
-    paralelos, ver docs/accounts-receivable.md), siempre una agregación
-    de lectura sobre `Payment`/`PaymentAllocation`/`CreditNote`/
+    """Saldo a favor TOTAL de un cliente, EN LA MONEDA DEL CLIENTE
+    (`customer.currency`): suma del saldo sin aplicar de sus pagos
+    confirmados MÁS el saldo sin aplicar de sus notas de crédito
+    emitidas — un ÚNICO saldo (nunca dos balances paralelos, ver
+    docs/accounts-receivable.md), siempre una agregación de lectura
+    sobre `Payment`/`PaymentAllocation`/`CreditNote`/
     `CreditNoteApplication` ya existentes, nunca un campo ni tabla
-    nueva de saldo."""
+    nueva de saldo.
+
+    Sin un motor de tipos de cambio (ver docs/currency.md), un pago o
+    nota de crédito en una moneda DISTINTA a `customer.currency` nunca
+    se suma aquí — mezclar DOP+USD (o cualquier otro par) como si
+    fueran la misma unidad sería un error aritmético real, no una
+    simplificación aceptable. Ese pago/nota en otra moneda simplemente
+    no participa en ESTE saldo (necesitaría su propia conversión
+    explícita/auditada/con tasa cuando exista FX real)."""
     total = Decimal("0")
-    pagos = Payment.all_objects.filter(tenant=customer.tenant, customer=customer, status=Payment.Status.CONFIRMED)
+    pagos = Payment.all_objects.filter(
+        tenant=customer.tenant, customer=customer, status=Payment.Status.CONFIRMED, currency=customer.currency,
+    )
     for pago in pagos:
         total += get_unallocated_payment_amount(pago)
     notas = CreditNote.all_objects.filter(
-        tenant=customer.tenant, customer=customer,
+        tenant=customer.tenant, customer=customer, currency=customer.currency,
         status__in=[CreditNote.Status.ISSUED, CreditNote.Status.PARTIALLY_APPLIED],
     )
     for nota in notas:
@@ -1046,6 +1057,17 @@ def allocate_payment(payment, sale, amount, user):
         raise InvalidSalesOperation("El pago y la venta deben pertenecer al mismo tenant.")
     if locked_payment.customer_id != locked_sale.customer_id:
         raise InvalidSalesOperation("Un pago solo puede aplicarse a facturas del mismo cliente.")
+    if locked_payment.currency != locked_sale.currency:
+        # Sin un motor de tipos de cambio (ver docs/currency.md): nunca
+        # mezclar monedas distintas en una misma asignación — se
+        # rechaza con un error de negocio claro en vez de sumar montos
+        # de monedas diferentes como si fueran la misma unidad. Una
+        # conversión explícita/auditada/con tasa queda para cuando
+        # exista FX real (fase futura).
+        raise InvalidSalesOperation(
+            f"El pago está en {locked_payment.currency} y la venta «{locked_sale.number}» está en "
+            f"{locked_sale.currency} — no se puede aplicar un pago en una moneda distinta a la de la factura."
+        )
     if locked_payment.status != Payment.Status.CONFIRMED:
         raise InvalidSalesOperation("Solo un pago confirmado puede aplicarse a una factura.")
     if locked_sale.status not in (Sale.Status.CONFIRMED, Sale.Status.PARTIALLY_RETURNED):
@@ -1273,11 +1295,13 @@ def record_refund(payment, *, amount, user, reason="", return_document=None):
 
 
 @transaction.atomic
-def create_credit_note(tenant, *, customer, amount, user, reason="", source_type=CreditNote.SourceType.MANUAL, source_return=None, source_payment=None, issue_date=None):
+def create_credit_note(tenant, *, customer, amount, user, reason="", source_type=CreditNote.SourceType.MANUAL, source_return=None, source_payment=None, issue_date=None, currency=None):
     """Crea una nota de crédito en DRAFT — todavía no genera saldo a
     favor (mismo principio que `Quotation` DRAFT: existe pero no
     compromete nada). Emitirla (`issue_credit_note`) es el paso que la
-    activa."""
+    activa. `currency` es un snapshot al momento de crearse (por
+    defecto, la moneda actual del cliente) — nunca se recalcula si el
+    cliente cambia de moneda después, ver `docs/currency.md`."""
     if customer is None:
         raise InvalidSalesOperation("Una nota de crédito siempre debe tener un cliente.")
     if amount is None or amount <= 0:
@@ -1285,6 +1309,7 @@ def create_credit_note(tenant, *, customer, amount, user, reason="", source_type
     numero = generate_document_number(tenant, DocumentSequence.DocumentType.CREDIT_NOTE)
     nota = CreditNote.all_objects.create(
         tenant=tenant, customer=customer, number=numero, amount=amount, reason=reason,
+        currency=currency or customer.currency,
         source_type=source_type, source_return=source_return, source_payment=source_payment,
         issue_date=issue_date or timezone.localdate(), user=user,
     )
@@ -1346,6 +1371,13 @@ def apply_credit_note(credit_note, sale, amount, user):
         raise InvalidSalesOperation("La nota de crédito y la venta deben pertenecer al mismo tenant.")
     if locked_note.customer_id != locked_sale.customer_id:
         raise InvalidSalesOperation("Una nota de crédito solo puede aplicarse a facturas del mismo cliente.")
+    if locked_note.currency != locked_sale.currency:
+        # Mismo principio que `allocate_payment` — sin motor de FX (ver
+        # docs/currency.md), nunca mezclar monedas distintas.
+        raise InvalidSalesOperation(
+            f"La nota de crédito está en {locked_note.currency} y la venta «{locked_sale.number}» está en "
+            f"{locked_sale.currency} — no se puede aplicar una nota de crédito en una moneda distinta a la de la factura."
+        )
     if locked_note.status not in (CreditNote.Status.ISSUED, CreditNote.Status.PARTIALLY_APPLIED):
         raise InvalidSalesOperation(
             f"Solo una nota de crédito emitida puede aplicarse (estado actual: {locked_note.get_status_display()})."
@@ -1453,6 +1485,7 @@ def convert_refund_to_credit(payment, amount, user, reason=""):
     nota = create_credit_note(
         locked_payment.tenant, customer=locked_payment.customer, amount=amount, user=user, reason=reason,
         source_type=CreditNote.SourceType.REFUND, source_payment=locked_payment,
+        currency=locked_payment.currency,
     )
     nota = issue_credit_note(nota, user)
     log_activity(

@@ -181,6 +181,20 @@ Ver `docs/invoice-documents.md`.
 | Vistas | `views.py` | Deliberadamente delgadas; vistas de adjuntos compartidas entre los 3 tipos de documento |
 | Plantillas | `templates/sales/*.html` | Design System de FASE 5, tabs para Líneas/Pagos/Devoluciones/Documentos/Actividad |
 
+## Moneda (sincronización posterior a FASE 12 — ver `docs/currency.md`)
+
+`Sale.currency`/`Quotation.currency`/`ProformaInvoice.currency`
+(heredados de `CommercialDocumentMixin`) son snapshots de texto simple
+(`CharField(max_length=3)`, sin catálogo real) tomados de
+`customer.currency` al crear el documento — nunca recalculados si el
+cliente cambia de moneda después. `CreditNote.currency` sigue el mismo
+principio (agregado tras la corrección descrita abajo). Sin un motor
+de tipos de cambio (ver `docs/currency.md` sección 7), `allocate_payment`
+y `apply_credit_note` rechazan explícitamente aplicar un `Payment`/
+`CreditNote` a una `Sale` en una moneda distinta (`InvalidSalesOperation`,
+nunca una conversión automática) — ver `docs/payments.md` regla 9 y
+`docs/accounts-receivable.md` sección 8 para el detalle completo.
+
 ## Qué NO se construyó en esta fase (deliberado)
 
 - **Motor de facturación fiscal electrónica**: ningún campo se agregó a

@@ -65,6 +65,25 @@ class CreditOverageRequiresApproval(InvalidPosOperation):
         )
 
 
+class InsufficientPaymentError(InvalidPosOperation):
+    """Se lanza cuando `amount_received` (la suma de los pagos indicados)
+    no alcanza `amount_due` (el total de la venta) y no hay crédito
+    habilitado que cubra la diferencia (ver `docs/currency.md` sección 7
+    para el vocabulario oficial). Nunca se confirma la venta, nunca se
+    mueve inventario, nunca se toca la caja cuando se lanza esta
+    excepción — `checkout_sale` valida esto ANTES de llamar a
+    `confirm_sale`/`record_payment_for_sale`."""
+
+    def __init__(self, *, amount_due, amount_received):
+        self.amount_due = amount_due
+        self.amount_received = amount_received
+        self.missing_amount = amount_due - amount_received
+        super().__init__(
+            f"El monto recibido ({amount_received}) es insuficiente para cubrir el total de la venta "
+            f"({amount_due}) — faltan {self.missing_amount}. Agrega otro método de pago o aplica crédito autorizado."
+        )
+
+
 # ------------------------------------------------------------------
 # Cajas
 # ------------------------------------------------------------------
@@ -427,7 +446,15 @@ def checkout_sale(sale, *, user, tenant, payments, cash_session=None, use_credit
 
     total_a_cobrar = sum((p["amount"] for p in payments), Decimal("0"))
     saldo_restante_estimado = sale.total - total_a_cobrar
-    if saldo_restante_estimado > 0 and sale.customer and sale.customer.credit_enabled:
+    if saldo_restante_estimado > 0:
+        # amount_received + pagos válidos < amount_due (ver
+        # docs/currency.md sección 7): nunca se confirma la venta salvo
+        # que exista una parte de crédito autorizada que cubra la
+        # diferencia — se rechaza ANTES de confirmar la venta/mover
+        # inventario/tocar la caja, nunca una venta parcialmente
+        # confirmada.
+        if not (sale.customer and sale.customer.credit_enabled):
+            raise InsufficientPaymentError(amount_due=sale.total, amount_received=total_a_cobrar)
         requiere, excedente, limite = check_credit_sale_authorization(
             tenant, user, customer=sale.customer, sale_total=saldo_restante_estimado
         )

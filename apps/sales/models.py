@@ -679,6 +679,11 @@ class CreditNote(TenantScopedModel):
     customer = models.ForeignKey(Customer, verbose_name="cliente", on_delete=models.PROTECT, related_name="+")
     number = models.CharField("número", max_length=30)
     amount = models.DecimalField("monto", max_digits=12, decimal_places=2)
+    currency = models.CharField(
+        "moneda", max_length=3, default="USD",
+        help_text="Snapshot de la moneda del cliente al momento de emitirse — nunca recalculado si "
+        "el cliente cambia de moneda después (mismo principio de snapshot que Sale.currency).",
+    )
     reason = models.CharField("motivo", max_length=255, blank=True)
     status = models.CharField("estado", max_length=20, choices=Status.choices, default=Status.DRAFT)
     source_type = models.CharField("origen", max_length=20, choices=SourceType.choices, default=SourceType.MANUAL)

@@ -80,6 +80,17 @@ services.apply_payment_to_sales(pago, [
    — nunca una excepción genérica ni un `IntegrityError` de PostgreSQL.
 8. Pagos parciales: `amount` puede ser menor al saldo pendiente de la
    factura sin problema; la factura queda `PARTIALLY_PAID`.
+9. El pago y la factura deben compartir la misma `currency`
+   (`payment.currency == sale.currency`) — sin un motor de tipos de
+   cambio (ver `docs/currency.md` sección 7), mezclar monedas
+   distintas en una misma asignación se rechaza con
+   `InvalidSalesOperation` en vez de sumar montos de monedas
+   diferentes como si fueran la misma unidad. Ninguna conversión
+   automática; cuando exista FX real en una fase futura, la conversión
+   deberá ser explícita, auditada y con tasa. Mismo principio aplicado
+   a `apply_credit_note` (`CreditNote.currency` debe coincidir con
+   `Sale.currency`) y a `get_customer_credit_balance` (solo suma
+   `Payment`/`CreditNote` en la moneda del cliente).
 
 ## Saldo pendiente de una factura (`get_sale_balance_due`)
 
@@ -148,11 +159,14 @@ reembolsar desde el saldo ahora libre.
 ## Saldo a favor del cliente (preparación, sin ledger completo)
 
 `get_customer_credit_balance(customer)`: suma `get_unallocated_payment_amount`
-de todos los pagos `CONFIRMED` del cliente. Es una agregación de
-solo lectura sobre `Payment`/`PaymentAllocation`/`Refund` ya
-existentes — **no** una tabla ni un campo de saldo nuevo, ni un ledger
-contable completo (eso queda para una fase posterior si se decide
-construir cuentas por cobrar reales).
+de todos los pagos `CONFIRMED` **en la moneda del cliente**
+(`currency=customer.currency`) y el saldo sin aplicar de sus
+`CreditNote` en esa misma moneda. Es una agregación de solo lectura
+sobre `Payment`/`PaymentAllocation`/`CreditNote`/`CreditNoteApplication`
+ya existentes — **no** una tabla ni un campo de saldo nuevo, ni un
+ledger contable completo (eso queda para una fase posterior si se
+decide construir cuentas por cobrar reales). Un pago o nota en otra
+moneda simplemente no participa en este saldo (ver "Moneda" abajo).
 
 Un `Payment` con `customer=None` (venta de mostrador) **nunca**
 participa en el cálculo de saldo a favor de ningún cliente — no hay
@@ -269,4 +283,6 @@ principio ya vigente de que el `CashMovement`/monto aplicado a la venta
 sigue siendo siempre el neto. Pagos multi-moneda (un `Payment` en una
 moneda distinta a la del documento que paga) quedan preparados
 conceptualmente vía `CurrencyConfiguration`/tipos de cambio futuros —
-ningún motor de conversión (FX) se construye todavía.
+ningún motor de conversión (FX) se construye todavía; **hoy se
+rechazan explícitamente** (ver regla 9 arriba y `KNOWN_ISSUES.md`
+#83), nunca se mezclan ni se convierten automáticamente.

@@ -216,23 +216,26 @@ aplicar). Mismo estándar de trazabilidad documental que
 
 ## 8. Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
 
-`Payment.currency`/`Sale.currency`/`CreditNote` (sin campo `currency`
-propio hoy — hereda implícitamente la moneda del `Customer`/`Sale` que
-la origina) son snapshots de texto libre, sin catálogo real detrás —
-ver `docs/currency.md` para la doctrina oficial (`Currency`/
-`CurrencyDenomination`), que no los migra con este documento.
-**Hallazgo documentado (no corregido, fuera de alcance de una
-sincronización documental)**: `get_customer_credit_balance` suma el
-saldo sin aplicar de los `Payment`/`CreditNote` de un cliente sin
-verificar que todos compartan la misma moneda — si un tenant llegara a
-registrar pagos de un mismo cliente en monedas distintas, la suma hoy
-mezclaría montos de monedas diferentes como si fueran la misma unidad.
-No es un caso real hoy (todo el proyecto usa `"USD"` como default sin
-que ninguna fase haya registrado documentos en monedas distintas para
-un mismo cliente), pero queda anotado en `KNOWN_ISSUES.md` para que la
-fase que implemente `Currency`/`CurrencyConfiguration` decida si
-`get_customer_credit_balance` debe agrupar/validar por moneda antes de
-sumar.
+`Payment.currency`/`Sale.currency`/`CreditNote.currency` (campo propio
+desde la corrección de esta sección — antes se derivaba implícitamente
+de `Customer`/`Sale` sin persistirse) son snapshots de texto libre, sin
+catálogo real detrás — ver `docs/currency.md` para la doctrina oficial
+(`Currency`/`CurrencyDenomination`), que no los migra con este
+documento.
+
+**Corregido (ver `KNOWN_ISSUES.md` #83 y `DECISIONS.md`)**:
+`get_customer_credit_balance` ahora filtra los `Payment`/`CreditNote`
+de un cliente por `currency=customer.currency` antes de sumar — un
+pago o nota en una moneda distinta a la del cliente simplemente no
+participa en este saldo, en vez de mezclarse aritméticamente como si
+fuera la misma unidad. Mismo principio aplicado a `allocate_payment`
+(rechaza aplicar un `Payment` a una `Sale` en otra moneda) y
+`apply_credit_note` (rechaza aplicar una `CreditNote` a una `Sale` en
+otra moneda) — ambos con `InvalidSalesOperation` y un mensaje de
+negocio claro. Sin un motor de tipos de cambio (ver `docs/currency.md`
+sección 7), **no hay conversión automática**: cuando exista FX real en
+una fase futura, la conversión deberá ser explícita, auditada y con
+tasa.
 
 ## 9. Qué se construyó y qué sigue pendiente
 

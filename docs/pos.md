@@ -132,6 +132,17 @@ real de la venta — `record_payment_for_sale`/`allocate_payment` siguen
 rechazando cualquier intento de aplicar más de lo que la venta debe,
 exactamente como en FASE 10.
 
+**Cobro insuficiente** (ver `docs/currency.md` sección 7 y
+`KNOWN_ISSUES.md` #82): antes de confirmar la venta, `checkout_sale`
+verifica que la suma de los pagos indicados cubra `sale.total`. Si no
+la cubre, se rechaza con `InsufficientPaymentError` — salvo que el
+cliente tenga crédito habilitado, en cuyo caso el saldo restante pasa
+por el mismo flujo de `check_credit_sale_authorization`/
+`CreditOverageRequiresApproval` ya existente. La verificación ocurre
+ANTES de confirmar la venta, mover inventario o registrar
+`CashMovement` — nunca una venta parcialmente confirmada con saldo
+pendiente cuando no hay cliente o crédito habilitado que lo respalde.
+
 ## Cobros de cuentas por cobrar (`/pos/cobros/`)
 
 - **Facturas pendientes**: `apps.sales.services.get_customer_pending_sales`
@@ -219,11 +230,10 @@ operativa por `CashRegister`, catálogo `Currency`/`CurrencyDenomination`,
 cierre por denominaciones (`CashDenominationCount`/`CashClosing`,
 inmutable), y sugerencia de cambio por denominaciones (nunca
 obligatoria para el cajero). Ver `docs/currency.md` para el diseño
-completo. Hallazgo documentado (no corregido, fuera de alcance de una
-sincronización documental): `checkout_sale` no bloquea explícitamente
-un cobro insuficiente cuando la venta no tiene cliente o el cliente no
-tiene crédito habilitado — ver `docs/currency.md` sección 7 y
-`KNOWN_ISSUES.md`.
+completo. El cobro insuficiente sin cliente/crédito habilitado —
+antes un hallazgo documentado sin corregir — ya está resuelto (ver
+"Checkout: confirmar + cobrar" arriba, `docs/currency.md` sección 7 y
+`KNOWN_ISSUES.md` #82).
 
 ## Qué NO se construyó en esta fase (deliberado)
 

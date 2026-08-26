@@ -147,3 +147,26 @@ class CreditNoteServiceTests(SalesTestCase):
         services.apply_credit_note(nota, self.sale, Decimal("10"), self.user)
         services.record_payment_for_sale(self.sale, method="cash", amount=Decimal("5"), user=self.user)
         self.assertEqual(services.get_sale_paid_amount(self.sale), Decimal("15"))
+
+    # -- Moneda (ver docs/currency.md sección 7): misma disciplina que
+    # Payment/PaymentAllocation — sin motor de FX, nunca se aplica una
+    # nota de crédito a una factura en otra moneda.
+
+    def test_nota_sin_moneda_explicita_usa_la_moneda_del_cliente(self):
+        nota = services.create_credit_note(self.tenant, customer=self.customer, amount=Decimal("10"), user=self.user)
+        self.assertEqual(nota.currency, self.customer.currency)
+
+    def test_moneda_distinta_entre_nota_y_factura_es_rechazada(self):
+        nota_dop = services.create_credit_note(self.tenant, customer=self.customer, amount=Decimal("100"), user=self.user, currency="DOP")
+        nota_dop = services.issue_credit_note(nota_dop, self.user)
+        with self.assertRaises(services.InvalidSalesOperation):
+            services.apply_credit_note(nota_dop, self.sale, Decimal("10"), self.user)
+        self.assertEqual(services.get_sale_paid_amount(self.sale), Decimal("0"))
+
+    def test_saldo_a_favor_excluye_notas_de_credito_en_otra_moneda(self):
+        nota_usd = services.create_credit_note(self.tenant, customer=self.customer, amount=Decimal("10"), user=self.user)  # USD (cliente)
+        nota_dop = services.create_credit_note(self.tenant, customer=self.customer, amount=Decimal("500"), user=self.user, currency="DOP")
+        services.issue_credit_note(nota_usd, self.user)
+        services.issue_credit_note(nota_dop, self.user)
+        # Solo la nota en USD (moneda del cliente) cuenta para este saldo.
+        self.assertEqual(services.get_customer_credit_balance(self.customer), Decimal("10"))

@@ -244,18 +244,18 @@ insuficiente**, salvo:
 - **otro método de pago** que cubra la diferencia;
 - **una combinación válida de pagos** que sume el total.
 
-**Hallazgo de esta sincronización (documentado, no corregido — fuera
-de alcance de esta sesión, que es exclusivamente documental)**: el
-código actual de `checkout_sale` no bloquea explícitamente un cobro
-insuficiente cuando la venta **no tiene cliente, o el cliente no tiene
-crédito habilitado** — el saldo pendiente simplemente queda registrado
-(`payment_status=PARTIALLY_PAID`/`UNPAID`) sin ningún error. Queda
-anotado en `KNOWN_ISSUES.md` para que la fase que implemente esta
-doctrina decida si ese caso debe bloquearse explícitamente (regla
-estricta de "nunca insuficiente sin crédito/otro método") o si
-seguir permitiendo una venta con saldo pendiente sin cliente es un
-caso de uso legítimo (ej. fiar informalmente a un cliente anónimo) —
-**no se cambia ningún código con este documento**.
+**Corregido (posterior a esta sincronización, ver `KNOWN_ISSUES.md`
+#82 y `DECISIONS.md`)**: `checkout_sale` ahora rechaza explícitamente
+—con `InsufficientPaymentError`, antes de confirmar la venta, mover
+inventario o tocar la caja— un cobro insuficiente cuando la venta **no
+tiene cliente, o el cliente no tiene crédito habilitado**. Regla
+exacta: la venta solo se confirma si `amount_received` (suma de los
+pagos indicados) cubre `amount_due` (`sale.total`), salvo que exista
+una parte de crédito autorizada que cubra la diferencia (mismo flujo
+de `check_credit_sale_authorization`/`ApprovalRequest` ya existente
+para crédito excedido). Caso de referencia: venta=5000,
+recibido=2000, cliente sin crédito habilitado → rechazado, ninguna
+venta parcialmente confirmada.
 
 ## 8. Cambio y pagos mixtos
 

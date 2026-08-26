@@ -212,6 +212,58 @@ class PaymentAllocationServiceTests(SalesTestCase):
         self.assertIn(self.factura_b, pendientes)
         self.assertIn(self.factura_c, pendientes)
 
+    # -- Moneda (ver docs/currency.md sección 7 y docs/accounts-receivable.md): --
+    # sin un motor de FX completo, un pago solo puede aplicarse a una
+    # factura en la MISMA moneda; nunca se mezcla ni se convierte
+    # automáticamente.
+
+    def test_mismo_cliente_misma_moneda_permite_aplicar_pago(self):
+        pago = services.create_payment(
+            self.tenant, customer=self.customer, method="cash", amount=Decimal("100"),
+            user=self.user, currency=self.factura_a.currency,
+        )
+        asignacion = services.allocate_payment(pago, self.factura_a, Decimal("100"), self.user)
+        self.assertEqual(asignacion.amount, Decimal("100"))
+
+    def test_moneda_distinta_entre_pago_y_factura_es_rechazada(self):
+        pago_dop = services.create_payment(
+            self.tenant, customer=self.customer, method="cash", amount=Decimal("5000"),
+            user=self.user, currency="DOP",
+        )
+        with self.assertRaises(services.InvalidSalesOperation):
+            services.allocate_payment(pago_dop, self.factura_a, Decimal("100"), self.user)
+        # Nada debió aplicarse: la factura sigue sin pagos.
+        self.assertEqual(services.get_sale_paid_amount(self.factura_a), Decimal("0"))
+
+    def test_apply_payment_to_sales_rechaza_todo_si_una_factura_tiene_otra_moneda(self):
+        factura_dop = services.create_sale(self.tenant, user=self.user, customer=self.customer, currency="DOP")
+        inv_services.register_stock_in(product=self.producto_cantidad, quantity=Decimal("100"), user=self.user)
+        services.add_sale_item(factura_dop, product=self.producto_cantidad, quantity=Decimal("100"), user=self.user, unit_price=Decimal("1"), tax_rate=Decimal("0"))
+        factura_dop = services.confirm_sale(factura_dop, self.user)
+        pago = services.create_payment(self.tenant, customer=self.customer, method="cash", amount=Decimal("200"), user=self.user)  # USD (moneda por defecto)
+        with self.assertRaises(services.InvalidSalesOperation):
+            services.apply_payment_to_sales(
+                pago,
+                [{"sale": self.factura_a, "amount": Decimal("100")}, {"sale": factura_dop, "amount": Decimal("100")}],
+                self.user,
+            )
+        # Todo o nada: la asignación a factura_a (misma moneda, hubiera sido válida)
+        # también debe revertirse porque la transacción completa falla.
+        self.assertEqual(services.get_sale_paid_amount(self.factura_a), Decimal("0"))
+        self.assertEqual(services.get_unallocated_payment_amount(pago), Decimal("200"))
+
+    def test_saldo_en_dop_no_incluye_pagos_en_usd(self):
+        cliente_dop = Customer.objects.create(tenant=self.tenant, first_name="Cliente", last_name="DOP", currency="DOP")
+        services.create_payment(self.tenant, customer=cliente_dop, method="cash", amount=Decimal("1000"), user=self.user, currency="DOP")
+        services.create_payment(self.tenant, customer=cliente_dop, method="cash", amount=Decimal("500"), user=self.user, currency="USD")
+        self.assertEqual(services.get_customer_credit_balance(cliente_dop), Decimal("1000"))
+
+    def test_saldo_en_usd_no_incluye_pagos_en_dop(self):
+        cliente_usd = Customer.objects.create(tenant=self.tenant, first_name="Cliente", last_name="USD", currency="USD")
+        services.create_payment(self.tenant, customer=cliente_usd, method="cash", amount=Decimal("200"), user=self.user, currency="USD")
+        services.create_payment(self.tenant, customer=cliente_usd, method="cash", amount=Decimal("900"), user=self.user, currency="DOP")
+        self.assertEqual(services.get_customer_credit_balance(cliente_usd), Decimal("200"))
+
 
 class RefundServiceTests(SalesTestCase):
     """Un reembolso solo puede salir del saldo SIN APLICAR de un pago

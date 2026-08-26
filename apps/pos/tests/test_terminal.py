@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.contrib.messages import get_messages
 from django.urls import reverse
 
 from apps.inventory.models import InventoryUnit
@@ -130,6 +131,38 @@ class TerminalHttpViewTests(PosTestCase):
         self.assertRedirects(respuesta, reverse("sales:sale_receipt", args=[sale.pk]))
         sale.refresh_from_db()
         self.assertEqual(sale.status, Sale.Status.CONFIRMED)
+
+    def test_monto_superior_calcula_cambio_correcto(self):
+        # Monto superior -> cambio correcto (ver docs/currency.md
+        # sección 9): el efectivo entregado de más nunca se registra
+        # como parte del pago ni de CashMovement — el efecto neto en
+        # caja es siempre el total de la venta, nunca el monto bruto
+        # entregado por el cliente.
+        respuesta = self.client.get(reverse("pos:terminal_start"))
+        sale = Sale.all_objects.get(tenant=self.tenant, salesperson=self.cajero, status=Sale.Status.DRAFT)
+        self.client.post(reverse("pos:add_item", args=[sale.pk]), {
+            "product_id": self.producto.pk, "quantity": "1", "unit_identifier": "", "discount_percent": "", "discount_amount": "",
+        })
+        sale.refresh_from_db()
+        total = sale.total  # 20.00 * 1.18 = 23.60
+        monto_entregado = total + Decimal("6.40")  # ej. venta 23.60, entrega 30.00 -> cambio 6.40
+
+        respuesta = self.client.post(reverse("pos:checkout", args=[sale.pk]), {
+            "form-TOTAL_FORMS": "2", "form-INITIAL_FORMS": "0", "form-MIN_NUM_FORMS": "0", "form-MAX_NUM_FORMS": "1000",
+            "form-0-method": "cash", "form-0-amount": str(monto_entregado), "form-1-method": "", "form-1-amount": "",
+        })
+        self.assertRedirects(respuesta, reverse("sales:sale_receipt", args=[sale.pk]))
+        sale.refresh_from_db()
+        self.assertEqual(sale.status, Sale.Status.CONFIRMED)
+        self.assertEqual(sale.payment_status, Sale.PaymentStatus.PAID)
+
+        mensajes = [str(m) for m in get_messages(respuesta.wsgi_request)]
+        self.assertTrue(any("Cambio a entregar: 6.40" in m for m in mensajes), mensajes)
+
+        # El Payment y el CashMovement registran el total de la venta
+        # (efecto neto), nunca el monto bruto entregado por el cliente.
+        movimiento_cash = CashMovement.all_objects.get(tenant=self.tenant, movement_type="sale_cash", reference_type="payment")
+        self.assertEqual(movimiento_cash.amount, total)
 
     def test_tenant_a_no_puede_ver_carrito_de_tenant_b(self):
         from apps.tenants.models import Membership, Tenant
