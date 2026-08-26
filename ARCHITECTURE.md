@@ -89,5 +89,19 @@ Incorporado oficialmente a partir de FASE 14 (`apps/accounting`, `apps/reports`,
 
 Reglas permanentes: un `JournalEntry` `POSTED` nunca se edita ni se borra físicamente — toda corrección es un reverso (`reverse_journal_entry`, idempotente). Toda integración automática que envuelve `record_business_event` (patrón `try_record_*`) debe atrapar cualquier excepción y auditar, nunca relanzarla — la contabilización es siempre aditiva/opcional, nunca puede bloquear la venta/pago/gasto/nómina/compra/cierre-de-caja subyacente. Balance General = acumulado desde el origen; Estado de Resultados = acotado al período — nunca la misma lógica de fechas para ambos. `apps/reports` nunca introduce una segunda fuente de verdad ni copia datos de detalle; información sensible (salario/datos bancarios) se filtra siempre en el servidor.
 
+## Roles, Permisos, Auditoría transversal y API de Inventario
+Incorporado oficialmente a partir de FASE 15 (`apps/permissions`, `apps/audit`, `apps/api`, ver `docs/roles-permissions.md`/`docs/audit.md`/`docs/api-inventory.md`). Generaliza — nunca reemplaza — la autorización binaria OWNER/MEMBER y los 7 registros de actividad por dominio ya existentes.
+
+| Concepto | Fuente de verdad | Estado |
+|---|---|---|
+| Roles | `Membership.Role` (OWNER/ADMIN/MANAGER/CASHIER/EMPLOYEE/MEMBER); `SUPER_ADMIN` → `User.is_superuser` | Construido (FASE 15) |
+| Permisos granulares | `apps.permissions.services.has_permission` (catálogo código-definido, jerarquía usuario→rol→tenant→negar) + `RolePermission`/`UserPermissionOverride` (personalización por tenant/usuario) | Construido (FASE 15) — `require_tenant`/`require_role` nunca retirados, retrofit por superficies de mayor riesgo |
+| Auditoría transversal | `apps.audit.AuditLog` (tenant nulable) + `search_audit_events` (`UNION` SQL sobre los 7 `*ActivityLog` + `AuditLog` + `StockMovement`) | Construido (FASE 15) — inmutable, nunca bloquea la operación que audita |
+| API de Inventario v1 | `apps.api` (Django REST Framework), `/api/v1/health,products,categories,inventory,inventory/low-stock,inventory/movements,inventory/serialized` | Construido (FASE 15) — read-only, sin escritura en ningún endpoint |
+| `ApiKey` | Hash SHA-256, secreto en texto plano nunca guardado, una sola clave activa por tenant (rotar reescribe la misma fila) | Construido (FASE 15) |
+| Scopes de API | `inventory:read`/`products:read`/`categories:read`/`inventory_movements:read`/`serialized_inventory:read`/`health:read` | Construido (FASE 15) — nunca acceso financiero por defecto |
+
+Reglas permanentes: el tenant de una request a `/api/v1/` SIEMPRE se resuelve desde la `ApiKey` (nunca de un parámetro enviado por el cliente) — mismo principio de aislamiento ya aplicado en todo el proyecto desde FASE 3. Un permiso de acción (`apps.permissions`) y un umbral de aprobación (`ApprovalPolicy`, FASE 11) son sistemas deliberadamente distintos que coexisten, nunca fusionados. Identificadores sensibles (IMEI/serie, prefijo de `ApiKey`) se enmascaran vía el helper compartido `apps.core.utils.mask_secret`.
+
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

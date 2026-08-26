@@ -1,5 +1,12 @@
 # FASE 15 — Roles + Audit + Inventory API
 
+> **Estado: CONSTRUIDO.** Tres subsistemas, cinco commits de dominio:
+> Roles + Permisos (`apps.permissions`), Auditoría transversal
+> (`apps.audit`), API de Inventario v1 (`apps.api`, backend +
+> Configuración UI), cierre de documentación. Ver `docs/roles-permissions.md`,
+> `docs/audit.md`, `docs/api-inventory.md` para el diseño completo de
+> cada uno.
+
 ## Objetivo
 Roles/permisos, audit log y API de Inventario para CRM IA. Ver `docs/api-inventory.md` para el resumen arquitectónico de la API.
 
@@ -7,27 +14,42 @@ Roles/permisos, audit log y API de Inventario para CRM IA. Ver `docs/api-invento
 Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
 
 ## Criterios de aceptación
-- [ ] roles efectivos en backend
-- [ ] audit log
-- [ ] /api/v1/health/
-- [ ] products/categories/inventory endpoints
-- [ ] API Key por tenant
-- [ ] regenerate/revoke
-- [ ] connection test
-- [ ] status/last test
-- [ ] read-only
-- [ ] scopes/rate limit
-- [ ] API docs
-- [ ] A/B API isolation
+- [x] roles efectivos en backend — `Membership.Role` (OWNER/ADMIN/MANAGER/CASHIER/EMPLOYEE/MEMBER) + `apps.permissions.services.has_permission` (jerarquía usuario→rol→tenant→negar, mismo patrón que `apps.approvals.get_effective_policy`)
+- [x] audit log — `apps.audit.AuditLog` + búsqueda federada (`search_audit_events`, UNION SQL sobre 9 orígenes)
+- [x] `/api/v1/health/`
+- [x] products/categories/inventory endpoints
+- [x] API Key por tenant — `ApiKey` (`UniqueConstraint` por tenant, una sola clave activa a la vez)
+- [x] regenerate/revoke
+- [x] connection test
+- [x] status/last test
+- [x] read-only — ningún POST/PUT/DELETE en ningún endpoint de `/api/v1/`
+- [x] scopes/rate limit
+- [x] API docs — `docs/api-inventory.md` (reescrito de especificación a construido)
+- [x] A/B API isolation — verificado con dos tenants y dos claves independientes
 
 ## Verificación
-- [ ] `python manage.py check` o la validación equivalente está en verde.
-- [ ] Tests relevantes ejecutados.
-- [ ] Smoke test realizado cuando aplique.
-- [ ] Seguridad revisada para el alcance de la fase.
-- [ ] Documentación actualizada.
-- [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
-- [ ] Git commit creado.
+- [x] `python manage.py check` en verde en cada uno de los 4 commits de código.
+- [x] Tests nuevos: 30 (`apps.permissions`) + 27 (`apps.audit`) + 37 (`apps.api`, incluyendo Configuración UI) = 94 tests nuevos.
+- [x] Regresión completa ejecutada tras cada commit: 813 → 840 → 877/877 (877 = 783 de FASE 14 + 94 de esta fase), sin fallas reales (los 2 tracebacks impresos —`RuntimeError` mockeado de un test de FASE 7, `PermissionError` de Windows al borrar un adjunto de gasto ya eliminado— son los ya documentados como esperados).
+- [x] Seguridad revisada: tenant SIEMPRE resuelto desde la credencial (membresía de sesión para roles, hash de la API Key para `/api/v1/`), nunca de un parámetro enviado por el cliente; secretos (API Key) nunca en texto plano; contraseñas nunca auditadas (login fallido redacta `credentials` explícitamente).
+- [x] Documentación: `docs/roles-permissions.md`/`docs/audit.md` (nuevos), `docs/api-inventory.md` (reescrito), `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md`/`FASES_OFICIALES_0_24_ACTUALIZADAS.md` actualizados.
+- [x] `docs/project-status/CURRENT_PHASE.md`/`PHASE_HISTORY.md`/`KNOWN_ISSUES.md`/`DECISIONS.md` actualizados.
+- [x] Git: 5 commits de dominio (Roles+Permisos, Auditoría, API de Inventario backend, Configuración UI, cierre de documentación).
+
+## Alcance deliberadamente NO exhaustivo (documentado, no una brecha)
+
+Retrofit de `require_permission` limitado a las superficies de mayor
+riesgo (datos sensibles de RRHH/Nómina, operaciones contables post/
+reverse/close/reopen, operaciones de caja, Auditoría, Configuración,
+más Clientes/Proveedores como dominio CRUD representativo) — el resto
+de las vistas del proyecto sigue protegido por
+`require_tenant`/`require_role` (binario OWNER/MEMBER, nunca
+retirado), un rollout deliberado por fases. Auditoría de acceso a
+`/api/v1/` no registra cada request individual todavía (alto volumen
+esperado, bajo valor por evento) — solo el ciclo de vida de la clave.
+OpenAPI/Swagger no se agregó (la propia especificación lo condicionaba
+a una dependencia nueva aprobada, que no se pidió). Ambos documentados
+en `docs/roles-permissions.md`/`docs/api-inventory.md`.
 
 ## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
 
@@ -50,6 +72,16 @@ para el resto de la API:
 - Reutilizar `services.search_catalog`/`services.get_current_stock` como
   la fuente de datos de estos endpoints, no reimplementar las consultas.
 
+> **Construido**: `GET /api/v1/inventory/serialized/` (no
+> `/products/{id}/units/` — nombre final decidido durante la
+> construcción, documentado en `docs/api-inventory.md`), enmascara
+> `serial`/`imei_1`/`imei_2` por defecto vía `apps.core.utils.mask_secret`;
+> no existe todavía un scope que permita verlos completos. Reutiliza
+> `InventoryUnit.all_objects` filtrado por `request.tenant`
+> (resuelto desde la API Key), no `search_catalog` directamente (ese
+> servicio prioriza una sola coincidencia exacta, distinto del listado
+> paginado que necesita este endpoint).
+
 ## Nota de FASE 9 — Clientes/Proveedores: auditoría y permisos futuros
 
 FASE 9 agregó una bitácora **mínima y acotada** a su propio módulo
@@ -71,6 +103,14 @@ de FASE 15:
   (`customers:read`, `suppliers:read`, etc.), nunca reutilizar los
   scopes de inventario para datos de un módulo distinto.
 
+> **Construido**: `ActivityLog` de `apps.customers` se dejó como
+> bitácora especializada (decisión tomada) y se **federó** —
+> `apps.audit.services.search_audit_events` la incluye como uno de
+> los 9 orígenes de la búsqueda transversal vía `UNION` SQL, sin
+> reemplazarla ni duplicarla. Clientes/Proveedores es además el
+> dominio CRUD representativo elegido para probar el retrofit de
+> `apps.permissions` de punta a punta (`customers.*`/`suppliers.*`).
+
 ## Nota de FASE 10 — Ventas: auditoría y scopes futuros
 
 FASE 10 agregó otra bitácora **mínima y acotada a su propio módulo**
@@ -91,6 +131,15 @@ implementarlo:
   explícitamente en el alcance de FASE 10, no implementados allí — ver
   `docs/sales.md`) son responsabilidad de esta fase: decidir el umbral
   y qué rol puede autorizar un descuento por encima de él.
+
+> **Construido**: `SalesActivityLog` se dejó como bitácora
+> especializada y federada (mismo tratamiento que `apps.customers`).
+> "Permisos por rol para descuentos altos" **no** se retomó en esta
+> fase — sigue siendo `ApprovalPolicy` (FASE 11), un sistema distinto
+> y deliberadamente separado (umbral de aprobación, no permiso de
+> acción); ambos coexisten, ver `docs/roles-permissions.md` sección 1.
+> Ningún scope de ventas se agregó a la API — sigue siendo
+> exclusivamente Inventario, tal como exigía la especificación.
 
 ## Nota de sincronización — Recursos financieros y de caja para Audit/API
 
@@ -123,6 +172,13 @@ exponerlos/auditarlos, no si construirlos):
   usuario/rol/tenant); esta fase es responsable de generalizarla si el
   proyecto necesita roles más allá de OWNER/MEMBER.
 
+> **Construido**: ningún scope financiero se agregó — regla permanente
+> confirmada, no relajada. `apps.permissions` generaliza el modelo de
+> roles (5 roles no-OWNER nuevos); `ApprovalPolicy` no se tocó, sigue
+> siendo el sistema de umbrales de aprobación, ahora explícitamente
+> documentado como distinto de los permisos de acción de
+> `apps.permissions` (`docs/roles-permissions.md` sección 1).
+
 ## Nota de sincronización — Moneda, caja y denominaciones (Audit/API)
 
 Doctrina oficial agregada en `docs/currency.md`: cuando esta fase
@@ -148,16 +204,16 @@ generalizarla para consultar el nuevo sistema de permisos. La regla
 de auditoría ya construida (`HRActivityLog.SENSITIVE_DATA_VIEWED`, que
 registra cada lectura sensible) debe seguir aplicándose sin cambios.
 
-## Nota de sincronización — Moneda, caja y denominaciones (Audit/API)
-
-Doctrina oficial agregada en `docs/currency.md`: cuando esta fase
-extienda el audit log transversal y la API, `Currency`/
-`CurrencyDenomination`/`CurrencyConfiguration`/`CashClosing`/
-`CashDenominationCount` (especificación, no construidos) deben seguir
-el mismo principio ya aplicado a `Payment`/`CashRegister` en este
-documento: entidades auditables/expuestas bajo su propio scope, nunca
-por defecto ni heredando el scope de otro dominio. No exponer
-configuraciones sensibles de moneda/caja sin scopes explícitos.
+> **Construido exactamente como se anticipó**:
+> `can_view_sensitive_employee_data` ahora delega en
+> `has_permission(tenant, user, "hr.sensitive.view")` — el propietario
+> sigue autorizado incondicionalmente, `HRActivityLog.SENSITIVE_DATA_VIEWED`
+> no se tocó. El mismo patrón se replicó para Nómina
+> (`can_view_sensitive_payroll_data`, permiso `payroll.sensitive.view`,
+> nuevo `PayrollActivityLog.SENSITIVE_DATA_VIEWED` — y además
+> replicado en `apps.audit` por ser una lectura sensible de alto
+> valor, a diferencia de RRHH que ya tenía su propia bitácora antes de
+> que `apps.audit` existiera).
 
 ## Nota de sincronización — Contabilidad General y Reportes (FASE 14, ya construidos)
 
@@ -193,8 +249,21 @@ y para las nuevas integraciones de Compras/AP/Cierre de caja
 (`AccountingActivityLog` ya registra sus fallos de contabilización
 bajo el mismo patrón, sin necesitar un segundo tipo de auditoría).
 
+> **Construido**: `accounting.post`/`accounting.reverse`/
+> `accounting.close_period`/`accounting.reopen_period` conectados a
+> `JournalEntryCreateView`/`JournalEntryReverseView`/
+> `AccountingPeriodCloseView`/`AccountingPeriodReopenView`.
+> `AccountingActivityLog` se federó en `apps.audit` (uno de los 9
+> orígenes), sin segundo registro de auditoría. `TaxCode` y las
+> integraciones de Compras/AP/Cierre de caja **no** recibieron un
+> permiso granular dedicado en esta fase (fuera del Tier 1 acordado,
+> documentado como trabajo incremental futuro en
+> `docs/roles-permissions.md` sección 9) — siguen protegidas por
+> `require_tenant`/`require_role` binario, sin brecha de seguridad.
+> Ningún endpoint de `/api/v1/` expone datos contables/financieros.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
 ## Cierre
-No cerrar la fase sin evidencia. Al cerrarla, detenerse y esperar autorización para iniciar la siguiente, salvo instrucción explícita del usuario.
+Fase cerrada con evidencia (94 tests nuevos, regresión completa 877/877, `manage.py check` limpio en los 4 commits de código, documentación sincronizada). No se avanza a FASE 16 — se detiene aquí, a la espera de autorización explícita del usuario, tal como exigía la instrucción de inicio de esta fase.
