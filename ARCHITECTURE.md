@@ -103,5 +103,19 @@ Incorporado oficialmente a partir de FASE 15 (`apps/permissions`, `apps/audit`, 
 
 Reglas permanentes: el tenant de una request a `/api/v1/` SIEMPRE se resuelve desde la `ApiKey` (nunca de un parámetro enviado por el cliente) — mismo principio de aislamiento ya aplicado en todo el proyecto desde FASE 3. Un permiso de acción (`apps.permissions`) y un umbral de aprobación (`ApprovalPolicy`, FASE 11) son sistemas deliberadamente distintos que coexisten, nunca fusionados. Identificadores sensibles (IMEI/serie, prefijo de `ApiKey`) se enmascaran vía el helper compartido `apps.core.utils.mask_secret`.
 
+### Ampliación final de FASE 15: Catalog API + Integraciones externas Multi-Tenant
+Segunda capa de API (`/api/v1/catalog/`), comercial, deliberadamente separada de la Inventory API administrativa — ver `docs/api-catalog.md`/`docs/integrations.md`.
+
+| Concepto | Fuente de verdad | Estado |
+|---|---|---|
+| Integración externa | `Integration` (`apps.api`) — varias por tenant, espejo estructural de `ApiKey` sin compartir tabla ni scopes | Construido (ampliación) |
+| Credencial de integración | `secret_hash` (SHA-256, mostrado una vez); `app_key` público, nunca usado para autenticar | Construido (ampliación) — mecanismo compartido con `ApiKey` vía `apps.api.crypto` |
+| Scopes de Catalog API | `catalog:read`/`catalog:availability:read`/`catalog:media:read` — catálogo separado de los de Inventory API | Construido (ampliación) — nunca acceso financiero |
+| Catalog API | `apps.api` (Catalog API), `/api/v1/catalog/search,products,products/{id},availability,variants,media` | Construido (ampliación) — read-only, whitelist server-side estricta |
+| Campos comerciales de producto | `Product.brand`/`model_name`/`variant_attributes` (JSON flexible) | Construido (ampliación) — migración aditiva |
+| Imágenes de catálogo | `ProductImage` (`settings.CATALOG_MEDIA_ROOT`, servidas por UUID `public_id`) | Construido (ampliación) — carpeta física distinta de `media-private/` |
+
+Reglas permanentes: una credencial de una capa (`ApiKey`/`Integration`) nunca autentica a la otra. `provider` (quién construyó el consumidor externo) nunca se confunde con una "tool" de agente IA (que vive en el consumidor, nunca en este proyecto — nunca se implementa `search_budun()` ni funciones acopladas a un consumidor concreto). Disponibilidad comercial siempre de la misma fuente de verdad que la Inventory API, nunca un contador paralelo.
+
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

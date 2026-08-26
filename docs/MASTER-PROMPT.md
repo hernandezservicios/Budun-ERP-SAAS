@@ -167,6 +167,14 @@ Incorporado oficialmente a partir de FASE 15 (`apps/permissions`, `apps/audit`, 
 - **Auditoría transversal**: `apps.audit.AuditLog` (tenant nulable) complementa los 7 `*ActivityLog` existentes — `search_audit_events` los federa a todos (más movimientos de inventario) en una búsqueda vía `UNION` SQL, filtros aplicados por rama antes de unir. Inmutable, nunca bloquea la operación que audita.
 - **API de Inventario v1** (`/api/v1/`, Django REST Framework): read-only por defecto, `ApiKey` por tenant (hash SHA-256, secreto mostrado una única vez, como máximo una clave activa a la vez), tenant resuelto siempre desde la clave, scopes cerrados sin acceso financiero, sobre de respuesta consistente, paginación con tope, rate limiting configurable.
 
+### Ampliación final de FASE 15: Catalog API + Integraciones externas
+
+Segunda capa de API (`/api/v1/catalog/`), comercial, deliberadamente separada de la Inventory API administrativa — ver `docs/api-catalog.md`, `docs/integrations.md`:
+
+- `Integration` (varias por tenant, a diferencia de `ApiKey`) autentica esta capa — espejo estructural de `ApiKey`, nunca la misma tabla ni los mismos scopes; comparten solo el mecanismo de hash del secreto (`apps.api.crypto`). `provider` identifica quién construyó el consumidor (solo `BUDUN` con soporte real); las *tools* de un agente IA externo (p. ej. WACRM) viven en el consumidor, nunca en este proyecto.
+- `Product` gana `brand`/`model_name`/`variant_attributes` (JSON flexible) y `ProductImage` (imágenes públicas en `settings.CATALOG_MEDIA_ROOT`, servidas por UUID). Disponibilidad comercial desde la misma fuente de verdad de siempre (`current_stock`), nunca un contador paralelo.
+- Whitelist server-side estricta: nunca IMEI/serie, costo/margen/proveedor, ni datos de otro dominio — verificado con tests que comprueban la ausencia de esos campos.
+
 ## PayPal
 
 Implementar primero Sandbox. Consultar documentación oficial vigente para API y MCP. No inventar herramientas MCP ni endpoints. El frontend se comunica con Django; Django usa una capa de servicios de pago; MCP es herramienta del agente/desarrollo/operación.

@@ -3,6 +3,13 @@
 > **Estado: CONSTRUIDO en FASE 15** (commit "API de Inventario v1").
 > Reemplaza la especificación anterior de este documento — todo lo
 > descrito aquí abajo ya existe en el código, no es un plan.
+>
+> **Nota (ampliación final de FASE 15)**: esta es la API
+> **administrativa** de Inventario (`/api/v1/`). Existe una segunda
+> capa **comercial**, deliberadamente separada — la Catalog API
+> (`/api/v1/catalog/`, credencial `Integration`, scopes `catalog:*`) —
+> ver `docs/api-catalog.md`/`docs/integrations.md`. Ninguna de las dos
+> capas comparte credenciales, scopes ni límites de tasa con la otra.
 
 ## 1. Principio central
 

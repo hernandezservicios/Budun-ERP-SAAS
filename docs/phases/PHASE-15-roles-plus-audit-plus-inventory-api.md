@@ -1,11 +1,14 @@
 # FASE 15 — Roles + Audit + Inventory API
 
-> **Estado: CONSTRUIDO.** Tres subsistemas, cinco commits de dominio:
-> Roles + Permisos (`apps.permissions`), Auditoría transversal
-> (`apps.audit`), API de Inventario v1 (`apps.api`, backend +
-> Configuración UI), cierre de documentación. Ver `docs/roles-permissions.md`,
-> `docs/audit.md`, `docs/api-inventory.md` para el diseño completo de
-> cada uno.
+> **Estado: CONSTRUIDO, incluyendo la ampliación final.** Tres
+> subsistemas del cierre inicial (cinco commits de dominio: Roles +
+> Permisos, Auditoría transversal, API de Inventario v1 backend +
+> Configuración UI, cierre de documentación) MÁS una ampliación final
+> autorizada explícitamente por el usuario después del cierre inicial
+> (Catalog API + Integraciones externas Multi-Tenant, ver sección
+> "Ampliación final" más abajo). Ver `docs/roles-permissions.md`,
+> `docs/audit.md`, `docs/api-inventory.md`, `docs/api-catalog.md`,
+> `docs/integrations.md` para el diseño completo de cada uno.
 
 ## Objetivo
 Roles/permisos, audit log y API de Inventario para CRM IA. Ver `docs/api-inventory.md` para el resumen arquitectónico de la API.
@@ -50,6 +53,54 @@ esperado, bajo valor por evento) — solo el ciclo de vida de la clave.
 OpenAPI/Swagger no se agregó (la propia especificación lo condicionaba
 a una dependencia nueva aprobada, que no se pidió). Ambos documentados
 en `docs/roles-permissions.md`/`docs/api-inventory.md`.
+
+## Ampliación final de FASE 15: Catalog API + Integraciones externas Multi-Tenant
+
+Autorizada explícitamente por el usuario DESPUÉS del cierre inicial
+de FASE 15 ("FASE 15 principal ya está cerrada y aprobada... Esta
+instrucción constituye una ampliación de FASE 15"), con la instrucción
+explícita de preservar `apps.permissions`/`apps.audit`/`apps.api`/
+Inventory API v1/`ApiKey`/scopes/rate limiting/configuración
+existentes, y de NO iniciar FASE 16. Ver `docs/api-catalog.md`/
+`docs/integrations.md` para el diseño completo.
+
+### Criterios de aceptación
+- [x] Catalog API separada de Inventory API — `/api/v1/catalog/`, credencial (`Integration`) y scopes propios, nunca mezclados
+- [x] `search/`, `products/`, `products/{id}/`, `availability/`, `variants/`, `media/` — los 6 endpoints pedidos (nombres ajustados al estilo REST del proyecto, funcionalidad completa)
+- [x] Búsqueda por nombre/SKU/barcode/marca/modelo/variante/color — nunca por IMEI/serial
+- [x] Respuesta de producto vía serializer explícito (whitelist), nunca el modelo Django crudo
+- [x] Campos prohibidos verificados por AUSENCIA con tests dedicados (IMEI/serial/costo/margen/proveedor/datos de otro dominio)
+- [x] Disponibilidad desde la misma fuente de verdad (`current_stock`), nunca un contador paralelo; nunca expone `InventoryUnit` individuales
+- [x] Variantes (`brand`/`model_name`/`variant_attributes`) con ejemplo verificado (Negro/Azul/disponibilidad por variante)
+- [x] Imágenes públicas (`ProductImage`, `CATALOG_MEDIA_ROOT` separado de `media-private/`), URLs absolutas y estables, servidas por UUID no adivinable
+- [x] Arquitectura genérica `Integration` (nunca `WACRMIntegration`) — Multi-Tenant, varias por tenant
+- [x] `provider` separado de "tool" — solo `BUDUN` con soporte real, ningún otro ERP implementado
+- [x] App Key (público) + App Secret (hasheado, mostrado una vez) + credencial de acceso — decisión documentada: mecanismo compartido con `ApiKey` (`apps.api.crypto`), nunca la misma tabla
+- [x] Scopes nuevos (`catalog:read`/`catalog:availability:read`/`catalog:media:read`) sin romper los existentes
+- [x] Permisos internos (`api.integration.view/create/update/rotate/revoke/test`) sin duplicar el catálogo
+- [x] UI de Configuración → Integraciones (crear/scopes/activar-desactivar/probar conexión/rotar/revocar)
+- [x] Test Connection (credencial/autenticación/scopes/respuesta, sin secretos ni traceback)
+- [x] Rate limit separado (`CatalogRateThrottle`, scope `integration`) — Redis sigue deferido
+- [x] Auditoría del ciclo de vida completo de `Integration`, nunca el secreto/token
+- [x] Compatibilidad: `/api/v1/`, `ApiKey`, Inventory API, permisos y auditoría existentes sin cambios de comportamiento
+- [x] WACRM documentado explícitamente como consumidor externo, nunca una dependencia del ERP; ninguna tool de agente IA implementada en este proyecto
+
+### Verificación
+- [x] `python manage.py check` en verde en cada commit de código de esta ampliación.
+- [x] Tests nuevos: 10 (`apps.inventory`, campos comerciales + `ProductImage`) + 52 (`apps.api`: servicios de `Integration` + vistas de Catalog API + Configuración UI de Integraciones) = 64 tests nuevos.
+- [x] Regresión completa ejecutada: **941/941 OK** (877 previos + 64 nuevos, cero fallas reales — los 2 tracebacks impresos son los ya conocidos/esperados). Ver `PHASE_HISTORY.md`.
+- [x] Smoke test HTTP dedicado contra PostgreSQL de desarrollo real (`smoke_catalog_ampliacion.py`, 17/17 verificaciones: producto+variante+stock → imagen → Integration → autenticación → búsqueda → detalle con variantes+imagen → disponibilidad → variantes dedicado → media metadatos+archivo público → scope insuficiente → credencial revocada → aislamiento Multi-Tenant → UI de Configuración).
+- [x] Seguridad revisada: tenant siempre resuelto desde la credencial de `Integration`; whitelist server-side verificada por ausencia; imágenes públicas servidas por UUID no adivinable, nunca ID secuencial; secreto de integración nunca en texto plano/logs/auditoría/errores.
+- [x] Documentación: `docs/api-catalog.md`/`docs/integrations.md` (nuevos); `docs/api-inventory.md` con nota de cruce; `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md` actualizados; este documento actualizado.
+- [x] `docs/project-status/CURRENT_PHASE.md`/`PHASE_HISTORY.md`/`KNOWN_ISSUES.md`/`DECISIONS.md` actualizados.
+
+### Decisiones de diseño explícitas (no ambiguas, documentadas en `DECISIONS.md`)
+- `Integration` es un modelo separado de `ApiKey`, nunca una migración que renombre/reutilice sus campos — mismo criterio ya aplicado a `SupplierPayment`/`Payment` (espejo estructural, nunca la misma tabla). Comparten solo `apps.api.crypto` (generación/hash del secreto).
+- `App Secret` se hashea (SHA-256, irrecuperable), no se "cifra" de forma reversible — mismo criterio que `ApiKey` y que las mejores prácticas de la industria (GitHub/Stripe/AWS: un secreto de API nunca se muestra dos veces). "Nunca guardar el Bearer token" (sección de auditoría de la especificación) es incompatible con una encriptación reversible que permitiera "mostrarlo cuando corresponda" más de una vez.
+- `is_enabled` (reversible) se modela SEPARADO de `status=REVOKED` (terminal) — revocar no tiene "reactivar"; deshabilitar sí.
+- `variant_attributes` es JSON flexible, nunca columnas fijas `color`/`capacity`/`size` — las dimensiones de variante varían por rubro y no se hardcodean.
+- La búsqueda por color/variante se resuelve con filtros ESTRUCTURADOS (`?color=`, `?capacity=`) sobre las claves del JSON, no con un `icontains` de texto libre sobre `variant_attributes` (Postgres/Django no lo soportan de forma directa y confiable).
+- No se implementó soporte funcional para `provider=OTHER_ERP` — el valor existe en el catálogo (preparado), pedido explícitamente como "no implementar otro ERP funcional".
 
 ## Nota de FASE 8 — Interfaz de Inventario Serializado a consumir
 
