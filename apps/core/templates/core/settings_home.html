@@ -33,11 +33,19 @@
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-4);">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">🔌 API de Inventario</h3>
-        <p>Genera y administra la clave de API de solo lectura para integraciones externas y agentes CRM/IA.</p>
+        <p>Genera y administra la clave de API administrativa de solo lectura (productos/inventario) para integraciones externas y agentes CRM/IA.</p>
         <a class="btn btn--contorno" href="{% url 'api_config:config' %}">Administrar</a>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">🛒 Integraciones (Catalog API)</h3>
+        <p>Conecta CRM/agentes IA externos (p. ej. WACRM) a la Catalog API comercial (catálogo, disponibilidad, imágenes) — capa independiente de la API de Inventario.</p>
+        <a class="btn btn--contorno" href="{% url 'api_integrations:list' %}">Administrar</a>
     </div>
 </div>
 {% endblock %}

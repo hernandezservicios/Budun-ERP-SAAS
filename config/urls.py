@@ -38,6 +38,8 @@ urlpatterns = [
     path("configuracion/permisos/", include("apps.permissions.urls")),
     path("configuracion/auditoria/", include("apps.audit.urls")),
     path("configuracion/api-inventario/", include("apps.api.config_urls")),
+    path("configuracion/integraciones/", include("apps.api.integration_urls")),
+    path("api/v1/catalog/", include("apps.api.catalog_urls")),
     path("api/v1/", include("apps.api.urls")),
     path("", include("apps.core.urls")),
 ]

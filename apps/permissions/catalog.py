@@ -103,6 +103,14 @@ PERMISSION_CATALOG = [
     ("api.inventory.rotate", "Rotar la clave de la API de Inventario", "api"),
     ("api.inventory.revoke", "Revocar la clave de la API de Inventario", "api"),
 
+    # Integraciones externas / Catalog API (ampliación final de FASE 15).
+    ("api.integration.view", "Ver integraciones externas", "api"),
+    ("api.integration.create", "Crear integraciones externas", "api"),
+    ("api.integration.update", "Editar integraciones externas (scopes, activar/desactivar)", "api"),
+    ("api.integration.rotate", "Rotar la credencial de una integración", "api"),
+    ("api.integration.revoke", "Revocar una integración", "api"),
+    ("api.integration.test", "Probar conexión de una integración", "api"),
+
     ("audit.view", "Ver auditoría", "audit"),
     ("audit.export", "Exportar auditoría", "audit"),
     ("audit.sensitive.view", "Ver eventos de auditoría sensibles", "audit"),
@@ -135,6 +143,7 @@ _TODOS = list(PERMISSION_CODES)
 _ADMIN_EXCLUYE = {
     "accounting.close_period", "accounting.reopen_period",
     "api.inventory.manage", "api.inventory.rotate", "api.inventory.revoke",
+    "api.integration.create", "api.integration.update", "api.integration.rotate", "api.integration.revoke",
     "settings.manage",
 }
 

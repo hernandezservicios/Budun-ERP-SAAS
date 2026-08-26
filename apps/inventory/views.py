@@ -30,11 +30,12 @@ from .forms import (
     InventoryUnitForm,
     InventoryUnitStatusForm,
     ProductForm,
+    ProductImageForm,
     StockAdjustmentForm,
     StockInForm,
     StockOutForm,
 )
-from .models import Category, InventoryUnit, Product
+from .models import Category, InventoryUnit, Product, ProductImage
 from .services import InvalidInventoryOperation
 
 
@@ -160,6 +161,8 @@ class ProductDetailView(LoginRequiredMixin, TenantRequiredMixin, DetailView):
             context["unit_status_form"] = InventoryUnitStatusForm()
         else:
             context["movements"] = services.get_product_movements(self.object, limit=15)
+        context["images"] = services.get_product_images(self.object)
+        context["image_form"] = ProductImageForm()
         return context
 
 
@@ -387,4 +390,49 @@ class UnitStatusChangeView(LoginRequiredMixin, TenantRequiredMixin, View):
                 messages.success(request, "Estado de la unidad actualizado correctamente.")
         else:
             messages.error(request, "Selecciona un estado válido.")
+        return redirect("inventory:product_detail", pk=product.pk)
+
+
+# ---------------------------------------------------------------------
+# Imágenes de producto (ampliación final de FASE 15, Catalog API — ver
+# docs/api-catalog.md)
+# ---------------------------------------------------------------------
+
+
+class ProductImageUploadView(LoginRequiredMixin, TenantRequiredMixin, View):
+    def post(self, request, pk):
+        product = get_object_or_404(Product, pk=pk, tenant=request.tenant)
+        form = ProductImageForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                services.register_product_image(
+                    product=product, archivo=form.cleaned_data["image"], user=request.user,
+                    is_primary=form.cleaned_data["is_primary"],
+                )
+            except InvalidInventoryOperation as error:
+                messages.error(request, "; ".join(error.messages) if hasattr(error, "messages") else str(error))
+            else:
+                messages.success(request, "Imagen agregada correctamente.")
+        else:
+            for lista_errores in form.errors.values():
+                for error in lista_errores:
+                    messages.error(request, error)
+        return redirect("inventory:product_detail", pk=product.pk)
+
+
+class ProductImageDeleteView(LoginRequiredMixin, TenantRequiredMixin, View):
+    def post(self, request, pk, image_pk):
+        product = get_object_or_404(Product, pk=pk, tenant=request.tenant)
+        imagen = get_object_or_404(ProductImage, pk=image_pk, tenant=request.tenant, product=product)
+        services.delete_product_image(imagen)
+        messages.success(request, "Imagen eliminada correctamente.")
+        return redirect("inventory:product_detail", pk=product.pk)
+
+
+class ProductImageSetPrimaryView(LoginRequiredMixin, TenantRequiredMixin, View):
+    def post(self, request, pk, image_pk):
+        product = get_object_or_404(Product, pk=pk, tenant=request.tenant)
+        imagen = get_object_or_404(ProductImage, pk=image_pk, tenant=request.tenant, product=product)
+        services.set_primary_product_image(imagen)
+        messages.success(request, "Imagen principal actualizada.")
         return redirect("inventory:product_detail", pk=product.pk)

@@ -179,4 +179,52 @@
     {% endif %}
 </section>
 {% endif %}
+
+{# ---------- Imágenes de catálogo (Catalog API — ver docs/api-catalog.md) ---------- #}
+<section class="panel-seccion" aria-labelledby="titulo-imagenes">
+    <h2 class="panel-seccion__titulo" id="titulo-imagenes">Imágenes de catálogo</h2>
+    <p class="encabezado-pagina__descripcion">Imágenes comerciales/publicables, expuestas por la Catalog API (<code>/api/v1/catalog/</code>) a integraciones externas. Nunca reutiliza documentos privados.</p>
+    {% if images %}
+    <div class="tabla-envoltorio" style="margin-bottom: var(--espacio-4);">
+        <table class="tabla">
+            <thead><tr><th>Vista previa</th><th>Nombre original</th><th>Principal</th><th></th></tr></thead>
+            <tbody>
+                {% for imagen in images %}
+                <tr>
+                    <td><img src="{% url 'catalog:media_file' imagen.public_id %}" alt="{{ imagen.original_filename }}" style="max-height: 3rem;"></td>
+                    <td>{{ imagen.original_filename }}</td>
+                    <td>{% if imagen.is_primary %}<span class="badge badge--verde">Principal</span>{% else %}—{% endif %}</td>
+                    <td>
+                        {% if not imagen.is_primary %}
+                        <form method="post" action="{% url 'inventory:product_image_set_primary' product.pk imagen.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn--contorno">Marcar principal</button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="{% url 'inventory:product_image_delete' product.pk imagen.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn--peligro">Eliminar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="estado-vacio tarjeta" style="margin-bottom: var(--espacio-4);"><div class="estado-vacio__icono" aria-hidden="true">🖼️</div><h3>Sin imágenes todavía</h3></div>
+    {% endif %}
+    <div class="tarjeta" style="max-width: 28rem;">
+        <div class="tarjeta__cuerpo">
+            <h3 class="panel-seccion__titulo">Agregar imagen</h3>
+            <form method="post" action="{% url 'inventory:product_image_upload' product.pk %}" enctype="multipart/form-data" novalidate>
+                {% csrf_token %}
+                {% for field in image_form %}
+                {% include "customers/_campo.html" with field=field %}
+                {% endfor %}
+                <button type="submit" class="btn btn--primario">Subir</button>
+            </form>
+        </div>
+    </div>
+</section>
 {% endblock %}

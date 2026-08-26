@@ -46,7 +46,7 @@ from django.db import transaction
 from django.db.models import Case, Count, DecimalField, F, OuterRef, Q, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce
 
-from .models import Category, InventoryUnit, Product, StockMovement
+from .models import Category, InventoryUnit, Product, ProductImage, StockMovement
 
 
 class InvalidInventoryOperation(ValidationError):
@@ -549,3 +549,76 @@ def search_catalog(tenant, query):
         .order_by("name")
     )
     return [SearchResult(product=producto) for producto in productos]
+
+
+# ------------------------------------------------------------------
+# Imágenes de producto y agrupación de variantes (ampliación final de
+# FASE 15, Catalog API — ver docs/api-catalog.md). Nunca una segunda
+# fuente de verdad de disponibilidad: la agrupación de variantes solo
+# junta productos ya existentes por `brand`+`model_name`, la
+# disponibilidad de cada uno sigue viniendo de `get_current_stock`.
+# ------------------------------------------------------------------
+
+_EXTENSIONES_IMAGEN_PERMITIDAS = {".png", ".jpg", ".jpeg"}
+
+
+def register_product_image(*, product, archivo, user, is_primary=False):
+    """Valida (extensión + firma binaria + tamaño) y guarda una imagen
+    comercial de un producto. Reutiliza la MISMA validación de archivos
+    ya usada para documentos de Clientes/Proveedores (import diferido:
+    `apps.inventory`, FASE 8, es anterior a `apps.customers`, FASE 9, en
+    la cadena de dependencias del proyecto — nunca un import a nivel de
+    módulo en sentido contrario)."""
+    from apps.customers.file_validation import nombre_original_seguro, validar_archivo_adjunto
+
+    extension, content_type = validar_archivo_adjunto(archivo)
+    if extension not in _EXTENSIONES_IMAGEN_PERMITIDAS:
+        raise InvalidInventoryOperation("Solo se permiten imágenes PNG o JPG para el catálogo.")
+
+    if is_primary:
+        ProductImage.all_objects.filter(tenant=product.tenant, product=product).update(is_primary=False)
+    elif not ProductImage.all_objects.filter(tenant=product.tenant, product=product).exists():
+        is_primary = True  # la primera imagen de un producto es principal por defecto.
+
+    return ProductImage.all_objects.create(
+        tenant=product.tenant, product=product, image=archivo, is_primary=is_primary,
+        original_filename=nombre_original_seguro(archivo.name), content_type=content_type,
+        size_bytes=archivo.size, uploaded_by=user,
+    )
+
+
+def set_primary_product_image(imagen):
+    ProductImage.all_objects.filter(tenant=imagen.tenant, product_id=imagen.product_id).update(is_primary=False)
+    imagen.is_primary = True
+    imagen.save(update_fields=["is_primary"])
+    return imagen
+
+
+def delete_product_image(imagen):
+    # El archivo físico se borra vía la señal `post_delete` (ver
+    # models.py) — mismo patrón que `CustomerDocument`.
+    imagen.delete()
+
+
+def get_product_images(product):
+    return ProductImage.all_objects.filter(tenant=product.tenant, product=product).order_by("-is_primary", "order", "id")
+
+
+def get_variant_group(product):
+    """Productos "variantes entre sí" de `product`: mismo tenant,
+    `brand`+`model_name` no vacíos e iguales — incluye al propio
+    `product`. Un producto sin marca/modelo no tiene grupo (devuelve
+    solo sí mismo)."""
+    if not product.brand or not product.model_name:
+        return Product.all_objects.filter(pk=product.pk)
+    return Product.all_objects.filter(
+        tenant=product.tenant, brand=product.brand, model_name=product.model_name, is_active=True,
+    ).order_by("name")
+
+
+def get_variant_availability(product):
+    """El grupo de variantes de `product`, con `current_stock` anotado
+    en una sola consulta (reutiliza `list_products_with_stock` — nunca
+    una segunda fuente de disponibilidad)."""
+    grupo_pks = list(get_variant_group(product).values_list("pk", flat=True))
+    return list_products_with_stock(product.tenant, only_active=True).filter(pk__in=grupo_pks)

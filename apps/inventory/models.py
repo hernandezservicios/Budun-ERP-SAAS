@@ -19,14 +19,20 @@ Esto hace imposible, por diseño, que el stock mostrado contradiga el
 historial real, para ambos tipos de producto.
 """
 
+import os
+import uuid
 from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.utils import timezone
 
 from apps.tenants.models import TenantScopedModel
+
+from .storage import catalog_media_storage
 
 
 class Category(TenantScopedModel):
@@ -93,6 +99,18 @@ class Product(TenantScopedModel):
     min_stock = models.DecimalField(
         "stock mínimo", max_digits=12, decimal_places=3, default=Decimal("0")
     )
+    # Campos comerciales (ampliación final de FASE 15, Catalog API — ver
+    # docs/api-catalog.md). Opcionales: un producto sin marca/modelo
+    # sigue siendo válido, simplemente no aparece agrupado en variantes.
+    # `variant_attributes` es deliberadamente un JSON flexible (nunca
+    # columnas fijas `color`/`capacity`/`size`) — las dimensiones de
+    # variante son abiertas y varían por rubro, mismo principio que evitó
+    # hardcodear denominaciones de moneda o categorías de gasto en fases
+    # anteriores. Dos productos son "variantes entre sí" en la Catalog
+    # API si comparten `tenant`+`brand`+`model_name` (ambos no vacíos).
+    brand = models.CharField("marca", max_length=100, blank=True)
+    model_name = models.CharField("modelo", max_length=100, blank=True)
+    variant_attributes = models.JSONField("atributos de variante", default=dict, blank=True)
     created_at = models.DateTimeField("creado", auto_now_add=True)
     updated_at = models.DateTimeField("actualizado", auto_now=True)
 
@@ -312,3 +330,67 @@ class InventoryUnit(TenantScopedModel):
     def __str__(self):
         identificador = self.serial or self.imei_1 or self.imei_2 or f"#{self.pk}"
         return f"{self.product.sku} · {identificador} ({self.get_status_display()})"
+
+
+def _ruta_imagen_producto(instance, filename):
+    """Nunca el nombre original como ruta en disco (mismo criterio que
+    `apps.customers.models._ruta_documento_cliente` — defensa contra
+    path traversal/colisiones): nombre aleatorio, organizado por
+    tenant y producto, dentro de `catalog_media_storage`."""
+    extension = os.path.splitext(filename)[1].lower()
+    return f"{instance.tenant_id}/{instance.product_id}/{uuid.uuid4().hex}{extension}"
+
+
+class ProductImage(TenantScopedModel):
+    """Imagen comercial/publicable de un producto (ampliación final de
+    FASE 15, Catalog API — ver `docs/api-catalog.md`). Nunca reutiliza
+    `media-private/` ni ningún documento de Clientes/Proveedores —
+    almacenamiento y vía de acceso completamente separados (ver
+    `apps/inventory/storage.py`). `public_id` (UUID) es el único
+    identificador usado para servirla externamente — nunca el `id`
+    secuencial, para no permitir enumerar imágenes de otros
+    productos/tenants por adivinanza."""
+
+    public_id = models.UUIDField("id público", default=uuid.uuid4, editable=False, unique=True)
+    product = models.ForeignKey(
+        Product, verbose_name="producto", related_name="images", on_delete=models.CASCADE,
+    )
+    image = models.ImageField("imagen", upload_to=_ruta_imagen_producto, storage=catalog_media_storage)
+    is_primary = models.BooleanField("imagen principal", default=False)
+    order = models.PositiveIntegerField("orden", default=0)
+    original_filename = models.CharField("nombre original", max_length=255, blank=True)
+    content_type = models.CharField("tipo de contenido detectado", max_length=100, blank=True)
+    size_bytes = models.PositiveIntegerField("tamaño (bytes)", default=0)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, verbose_name="subida por", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+    uploaded_at = models.DateTimeField("subida", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "imagen de producto"
+        verbose_name_plural = "imágenes de producto"
+        ordering = ["-is_primary", "order", "id"]
+        indexes = [
+            models.Index(fields=["tenant", "product"], name="idx_prodimg_tenant_producto"),
+        ]
+
+    def __str__(self):
+        return f"Imagen de {self.product.sku} ({'principal' if self.is_primary else 'secundaria'})"
+
+
+@receiver(post_delete, sender=ProductImage)
+def _eliminar_archivo_al_borrar_imagen(sender, instance, **kwargs):
+    """Borra el archivo físico de `catalog-media/` cuando se elimina la
+    fila — mismo patrón que `apps.customers.models.
+    _eliminar_archivo_al_borrar_documento` (nunca propaga un error de
+    limpieza de disco, la fila ya se borró de PostgreSQL)."""
+    if instance.image:
+        try:
+            instance.image.delete(save=False)
+        except OSError:
+            import logging
+
+            logging.getLogger("apps.inventory.catalog_media").exception(
+                "No se pudo borrar el archivo físico de la imagen eliminada: %s", instance.image.name
+            )

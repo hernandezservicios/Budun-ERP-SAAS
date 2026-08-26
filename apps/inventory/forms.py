@@ -42,6 +42,8 @@ class ProductForm(forms.ModelForm):
             "tax_rate",
             "min_stock",
             "is_active",
+            "brand",
+            "model_name",
         ]
         labels = {
             "name": "Nombre",
@@ -55,6 +57,8 @@ class ProductForm(forms.ModelForm):
             "tax_rate": "Impuesto (%)",
             "min_stock": "Stock mínimo",
             "is_active": "Activo",
+            "brand": "Marca",
+            "model_name": "Modelo (agrupa variantes de color/capacidad/etc. en la Catalog API)",
         }
         help_texts = {
             "inventory_tracking_type": (
@@ -203,3 +207,13 @@ class InventoryUnitStatusForm(forms.Form):
 
     new_status = forms.ChoiceField(label="Nuevo estado", choices=InventoryUnit.Status.choices)
     notes = forms.CharField(label="Notas", max_length=255, required=False)
+
+
+class ProductImageForm(forms.Form):
+    """Imagen comercial para la Catalog API (ampliación final de FASE 15
+    — ver docs/api-catalog.md). La validación real de contenido (firma
+    binaria + tamaño) vive en `services.register_product_image`, nunca
+    solo en este formulario."""
+
+    image = forms.ImageField(label="Imagen (PNG o JPG)")
+    is_primary = forms.BooleanField(label="Imagen principal", required=False)

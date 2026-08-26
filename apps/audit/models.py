@@ -40,6 +40,14 @@ class AuditLog(models.Model):
         API_KEY_ROTATED = "api_key_rotated", "Clave de API rotada"
         API_KEY_REVOKED = "api_key_revoked", "Clave de API revocada"
         API_ACCESS = "api_access", "Acceso a la API"
+        # Integraciones externas / Catalog API (ampliación final de FASE 15,
+        # ver docs/integrations.md) — distintas de API_KEY_* (esas son de
+        # la API administrativa de Inventario, `ApiKey`).
+        INTEGRATION_CREATED = "integration_created", "Integración creada"
+        INTEGRATION_ROTATED = "integration_rotated", "Integración rotada"
+        INTEGRATION_REVOKED = "integration_revoked", "Integración revocada"
+        INTEGRATION_ENABLED = "integration_enabled", "Integración habilitada"
+        INTEGRATION_DISABLED = "integration_disabled", "Integración deshabilitada"
         SENSITIVE_DATA_VIEWED = "sensitive_data_viewed", "Datos sensibles vistos"
         EXPORT_PERFORMED = "export_performed", "Exportación realizada"
         GENERIC = "generic", "Evento genérico"

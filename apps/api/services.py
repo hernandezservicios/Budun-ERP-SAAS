@@ -4,14 +4,12 @@ secreto en texto plano SOLO existe como valor de retorno de
 `generate_api_key`/`rotate_api_key` — nunca se guarda, nunca se
 recupera después (ni siquiera un superusuario puede verlo de nuevo)."""
 
-import hashlib
-import secrets
-
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
 
+from .crypto import generate_secret, hash_secret
 from .models import ApiKey
 from .scopes import is_valid_scope_list
 
@@ -21,18 +19,6 @@ PREFIJO = "bk_"
 class InvalidApiKeyOperation(ValidationError):
     """Scopes inválidos, ya existe una clave activa, clave no
     encontrada, etc."""
-
-
-def _hash_secreto(secreto):
-    return hashlib.sha256(secreto.encode("utf-8")).hexdigest()
-
-
-def _generar_secreto():
-    # 32 bytes de entropía criptográfica real (`secrets`, nunca
-    # `random`) — suficiente para que el hash SHA-256 (rápido, no
-    # pensado para contraseñas humanas) sea seguro igual: la entropía
-    # del secreto es la que protege, no la lentitud del hash.
-    return secrets.token_urlsafe(32)
 
 
 def _audit(tenant, *, action, user, api_key, **extra):
@@ -64,10 +50,10 @@ def generate_api_key(tenant, *, user, scopes):
     if ApiKey.all_objects.filter(tenant=tenant).exists():
         raise InvalidApiKeyOperation("Este tenant ya tiene una clave de API — usa rotar en vez de generar.")
 
-    secreto = _generar_secreto()
+    secreto = generate_secret()
     prefijo = f"{PREFIJO}{secreto[:8]}"
     api_key = ApiKey.all_objects.create(
-        tenant=tenant, key_prefix=prefijo, key_hash=_hash_secreto(secreto), scopes=list(scopes), created_by=user,
+        tenant=tenant, key_prefix=prefijo, key_hash=hash_secret(secreto), scopes=list(scopes), created_by=user,
     )
     _audit(tenant, action=AuditLog.Action.API_KEY_CREATED, user=user, api_key=api_key, after={"scopes": scopes})
     return api_key, secreto
@@ -76,9 +62,9 @@ def generate_api_key(tenant, *, user, scopes):
 def rotate_api_key(api_key, *, user):
     """Reemplaza el hash de la MISMA fila — invalida la clave anterior
     de inmediato, nunca hay dos claves activas a la vez."""
-    secreto = _generar_secreto()
+    secreto = generate_secret()
     api_key.key_prefix = f"{PREFIJO}{secreto[:8]}"
-    api_key.key_hash = _hash_secreto(secreto)
+    api_key.key_hash = hash_secret(secreto)
     api_key.status = ApiKey.Status.ACTIVE
     api_key.rotated_at = timezone.now()
     api_key.save(update_fields=["key_prefix", "key_hash", "status", "rotated_at"])
@@ -112,7 +98,7 @@ def authenticate_api_key(secreto):
     hay coincidencia, está revocada o expiró."""
     if not secreto:
         return None
-    api_key = ApiKey.all_objects.filter(key_hash=_hash_secreto(secreto), status=ApiKey.Status.ACTIVE).first()
+    api_key = ApiKey.all_objects.filter(key_hash=hash_secret(secreto), status=ApiKey.Status.ACTIVE).first()
     if api_key is None:
         return None
     if api_key.expires_at is not None and api_key.expires_at <= timezone.now():

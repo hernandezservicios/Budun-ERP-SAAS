@@ -61,3 +61,76 @@ class ApiKey(TenantScopedModel):
     @property
     def is_active(self):
         return self.status == self.Status.ACTIVE
+
+
+class Integration(TenantScopedModel):
+    """Aplicación/integración externa conectada a la Catalog API
+    (ampliación final de FASE 15, ver `docs/integrations.md`) — un
+    tenant puede tener VARIAS (a diferencia de `ApiKey`, que es una
+    sola por tenant para la API administrativa de Inventario). Espejo
+    estructural deliberado de `ApiKey` (mismo criterio ya usado en el
+    proyecto para `SupplierPayment`/`Payment`: dos conceptos separados
+    que nunca comparten tabla, aunque su forma sea casi idéntica) —
+    nunca la misma fila que `ApiKey`, nunca comparten scopes.
+
+    `provider` identifica QUIÉN construyó el consumidor (hoy solo
+    `BUDUN` tiene soporte real) — separado del concepto de "tool" que
+    un consumidor externo (p. ej. WACRM) construye sobre su PROPIA
+    arquitectura; este proyecto nunca implementa tools de terceros.
+
+    `app_key` es un identificador público (visible siempre, útil para
+    logs/soporte) — nunca se usa para resolver la autenticación por sí
+    solo; la request se autentica exclusivamente por el hash del
+    secreto (`secret_hash`), igual que `ApiKey.key_hash`. `is_enabled`
+    es un interruptor reversible (activar/desactivar) — distinto de
+    `status=REVOKED`, que es terminal (revocar no tiene "reactivar")."""
+
+    class Provider(models.TextChoices):
+        BUDUN = "budun", "Budun ERP"
+        OTHER_ERP = "other_erp", "Otro ERP"
+        FUTURE = "future", "Futuro"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Activa"
+        REVOKED = "revoked", "Revocada"
+
+    name = models.CharField("nombre", max_length=100)
+    provider = models.CharField("provider", max_length=20, choices=Provider.choices, default=Provider.BUDUN)
+    app_key = models.CharField("app key", max_length=32, unique=True)
+    secret_hash = models.CharField("hash del secreto", max_length=64, unique=True)
+    scopes = models.JSONField("scopes", default=list)
+    status = models.CharField("estado", max_length=10, choices=Status.choices, default=Status.ACTIVE)
+    is_enabled = models.BooleanField("habilitada", default=True)
+    expires_at = models.DateTimeField("expira", null=True, blank=True)
+
+    created_at = models.DateTimeField("creada", auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, verbose_name="creada por", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+    rotated_at = models.DateTimeField("última rotación", null=True, blank=True)
+    revoked_at = models.DateTimeField("revocada", null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, verbose_name="revocada por", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+
+    last_tested_at = models.DateTimeField("última prueba", null=True, blank=True)
+    last_test_ok = models.BooleanField("última prueba exitosa", null=True, blank=True)
+    last_test_error = models.CharField("último error", max_length=255, blank=True)
+    last_used_at = models.DateTimeField("último uso", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "integración"
+        verbose_name_plural = "integraciones"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "name"], name="unique_integration_tenant_nombre"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_provider_display()}) — {self.tenant}"
+
+    @property
+    def is_active(self):
+        return self.status == self.Status.ACTIVE and self.is_enabled

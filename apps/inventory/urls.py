@@ -23,4 +23,15 @@ urlpatterns = [
         views.UnitStatusChangeView.as_view(),
         name="unit_status_change",
     ),
+    path("productos/<int:pk>/imagenes/", views.ProductImageUploadView.as_view(), name="product_image_upload"),
+    path(
+        "productos/<int:pk>/imagenes/<int:image_pk>/eliminar/",
+        views.ProductImageDeleteView.as_view(),
+        name="product_image_delete",
+    ),
+    path(
+        "productos/<int:pk>/imagenes/<int:image_pk>/principal/",
+        views.ProductImageSetPrimaryView.as_view(),
+        name="product_image_set_primary",
+    ),
 ]

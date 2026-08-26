@@ -9,6 +9,7 @@ __pycache__/
 htmlcov/
 staticfiles/
 media-private/
+catalog-media/
 *.dump
 *.sql
 .DS_Store

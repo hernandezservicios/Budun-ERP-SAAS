@@ -1,0 +1,81 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ integration.name }} — Integraciones — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'core:settings' %}">Configuración</a></li>
+        <li><a href="{% url 'api_integrations:list' %}">Integraciones</a></li>
+        <li aria-current="page">{{ integration.name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>{{ integration.name }}</h1>
+</div>
+
+{% if secreto_nuevo %}
+<div class="alerta alerta--advertencia" role="alert" style="margin-bottom: var(--espacio-6);">
+    <strong>Copia esta credencial ahora — no volverá a mostrarse:</strong>
+    <pre style="user-select: all; overflow-x: auto;">{{ secreto_nuevo }}</pre>
+</div>
+{% endif %}
+
+<div class="tarjeta" style="margin-bottom: var(--espacio-6); max-width: 40rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Conexión</h3>
+        <dl>
+            <dt>Base URL</dt><dd><code>/api/v1/catalog/</code></dd>
+            <dt>Provider</dt><dd>{{ integration.get_provider_display }}</dd>
+            <dt>App Key</dt><dd><code>{{ integration.app_key }}</code></dd>
+            <dt>Estado</dt><dd>
+                {% if integration.status == "revoked" %}<span class="badge badge--peligro">Revocada</span>
+                {% elif not integration.is_enabled %}<span class="badge badge--advertencia">Deshabilitada</span>
+                {% else %}<span class="badge badge--verde">Activa</span>{% endif %}
+            </dd>
+            <dt>Scopes</dt><dd>{{ integration.scopes|join:", " }}</dd>
+            <dt>Creada</dt><dd>{{ integration.created_at|date:"d M Y H:i" }}</dd>
+            <dt>Última rotación</dt><dd>{{ integration.rotated_at|default:"—" }}</dd>
+            <dt>Última prueba</dt><dd>
+                {% if integration.last_tested_at %}
+                    {{ integration.last_tested_at|date:"d M Y H:i" }} —
+                    {% if integration.last_test_ok %}<span class="badge badge--verde">Conectado</span>{% else %}<span class="badge badge--peligro">Error: {{ integration.last_test_error }}</span>{% endif %}
+                {% else %}Nunca probada{% endif %}
+            </dd>
+            <dt>Último uso</dt><dd>{{ integration.last_used_at|default:"—" }}</dd>
+        </dl>
+
+        <div class="acciones-rapidas">
+            <form method="post" action="{% url 'api_integrations:rotate' integration.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--contorno">Rotar credencial</button>
+            </form>
+            <form method="post" action="{% url 'api_integrations:test_connection' integration.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--contorno">Probar conexión</button>
+            </form>
+            <form method="post" action="{% url 'api_integrations:toggle' integration.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--contorno">{% if integration.is_enabled %}Deshabilitar{% else %}Habilitar{% endif %}</button>
+            </form>
+            {% if integration.status != "revoked" %}
+            <form method="post" action="{% url 'api_integrations:revoke' integration.pk %}" style="display:inline;" onsubmit="return confirm('¿Revocar esta integración? No podrá reactivarse.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--peligro">Revocar</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <form method="post" action="{% url 'api_integrations:update_scopes' integration.pk %}" novalidate style="margin-top: var(--espacio-4);">
+            {% csrf_token %}
+            <p><strong>Scopes</strong></p>
+            {% for field in scopes_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--contorno">Guardar scopes</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

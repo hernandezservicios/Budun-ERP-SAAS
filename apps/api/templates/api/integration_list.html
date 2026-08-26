@@ -1,0 +1,59 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Integraciones — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'core:settings' %}">Configuración</a></li>
+        <li aria-current="page">Integraciones</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Integraciones</h1>
+        <p class="encabezado-pagina__descripcion">Aplicaciones externas (CRM, agentes IA) conectadas a la Catalog API (<code>/api/v1/catalog/</code>) — capa comercial de solo lectura, independiente de la API de Inventario administrativa.</p>
+    </div>
+</div>
+
+{% if integrations %}
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Nombre</th><th>Provider</th><th>App Key</th><th>Estado</th><th>Última conexión</th><th></th></tr></thead>
+        <tbody>
+            {% for integration in integrations %}
+            <tr>
+                <td>{{ integration.name }}</td>
+                <td>{{ integration.get_provider_display }}</td>
+                <td><code>{{ integration.app_key }}</code></td>
+                <td>
+                    {% if integration.status == "revoked" %}<span class="badge badge--peligro">Revocada</span>
+                    {% elif not integration.is_enabled %}<span class="badge badge--advertencia">Deshabilitada</span>
+                    {% else %}<span class="badge badge--verde">Activa</span>{% endif %}
+                </td>
+                <td>{{ integration.last_used_at|default:"—" }}</td>
+                <td><a class="btn btn--contorno" href="{% url 'api_integrations:detail' integration.pk %}">Administrar</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta" style="margin-bottom: var(--espacio-6);"><div class="estado-vacio__icono" aria-hidden="true">🔌</div><h3>Sin integraciones todavía</h3></div>
+{% endif %}
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Nueva integración</h3>
+        <form method="post" action="{% url 'api_integrations:create' %}" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Crear</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

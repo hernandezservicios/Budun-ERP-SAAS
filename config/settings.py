@@ -95,14 +95,17 @@ INSTALLED_APPS = [
     "apps.api",
 ]
 
-# --- API de Inventario v1 (FASE 15) ---------------------------------------
+# --- API de Inventario v1 + Catalog API (FASE 15 + ampliación final) -----
 # `DEFAULT_AUTHENTICATION_CLASSES=[]`: nunca sesión/JWT genérico — cada
 # vista de `apps.api` declara explícitamente `ApiKeyAuthentication`
-# (ver `apps/api/authentication.py`). `EXCEPTION_HANDLER` propio para el
-# sobre de respuesta consistente (`success`/`data`/`meta`/`errors`,
-# nunca un traceback interno). `DEFAULT_THROTTLE_RATES["api_key"]` es el
-# límite de tasa configurable a nivel de PROYECTO (no por API Key
-# individual todavía — extensión futura simple, ver `docs/api-inventory.md`).
+# (Inventory API) o `IntegrationCredentialAuthentication` (Catalog API,
+# ver `apps/api/integration_authentication.py`). `EXCEPTION_HANDLER`
+# propio para el sobre de respuesta consistente
+# (`success`/`data`/`meta`/`errors`, nunca un traceback interno).
+# `DEFAULT_THROTTLE_RATES["api_key"]`/`["integration"]` son límites de
+# tasa SEPARADOS (uno por capa) configurables a nivel de PROYECTO — no
+# por credencial individual todavía, extensión futura simple (ver
+# `docs/api-inventory.md`/`docs/integrations.md`).
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [],
@@ -110,7 +113,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "apps.api.responses.api_exception_handler",
     "DEFAULT_THROTTLE_CLASSES": ["apps.api.throttling.ApiKeyRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"api_key": "120/min"},
+    "DEFAULT_THROTTLE_RATES": {"api_key": "120/min", "integration": "120/min"},
 }
 
 # `LocMemCache` — adecuado para un solo proceso (desarrollo y un VPS
@@ -214,6 +217,19 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 # se expone tal cual en una plantilla como enlace de descarga directo.
 MEDIA_URL = "media-private/"
 MEDIA_ROOT = BASE_DIR / "media-private"
+
+# --- Imágenes comerciales de catálogo (ampliación final de FASE 15,
+# Catalog API — ver docs/api-catalog.md) ----------------------------------
+# Carpeta física DISTINTA de `media-private/`: estas imágenes son
+# explícitamente públicas/publicables (el tenant las sube para que un
+# CRM/agente externo las muestre), a diferencia de los documentos de
+# Clientes/Proveedores. Se sirven vía una vista pública dedicada
+# (`apps.api.catalog_views.CatalogMediaView`, sin autenticación —
+# es contenido que el propio tenant marcó como público, identificado por
+# un UUID no adivinable, nunca por el ID secuencial del producto) —
+# nunca registradas con `static()` en `config/urls.py` (eso expondría el
+# árbol completo de la carpeta sin pasar por la vista/validación).
+CATALOG_MEDIA_ROOT = BASE_DIR / "catalog-media"
 
 # Límite duro a nivel de Django (además de la validación explícita en
 # `apps.customers.file_validation`, que corre antes y da un mensaje más
