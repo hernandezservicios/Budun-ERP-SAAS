@@ -326,6 +326,13 @@ def record_payroll_payment(tenant, payroll, *, method, amount, user, currency=No
         action=PayrollActivityLog.Action.PAYMENT_RECORDED, user=user,
         details=f"{locked_payroll.employee_name_snapshot}: {method} {amount}",
     )
+
+    # FASE 14 (Contabilidad General): contabilización automática,
+    # deliberadamente resiliente — nunca debe poder romper el pago de
+    # nómina. Import diferido, ver nota en apps.sales.services.confirm_sale.
+    from apps.accounting.services import try_record_payroll_payment
+
+    try_record_payroll_payment(pago, user)
     return pago
 
 

@@ -397,6 +397,15 @@ def record_expense_payment(
         tenant, entity_type="expense", entity_id=locked_expense.pk, entity_label=locked_expense.number,
         action=ExpensesActivityLog.Action.PAYMENT_RECORDED, user=user, details=f"{method} {amount}",
     )
+
+    # FASE 14 (Contabilidad General): contabilización automática,
+    # deliberadamente resiliente — nunca debe poder romper el pago del
+    # gasto. Import diferido para evitar un ciclo de importación
+    # (apps.accounting.services importa apps.sales.services, y
+    # apps.expenses ya depende de apps.sales/apps.pos).
+    from apps.accounting.services import try_record_expense_payment
+
+    try_record_expense_payment(pago, user)
     return pago
 
 

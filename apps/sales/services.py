@@ -89,6 +89,10 @@ _PREFIJOS_POR_DEFECTO = {
     # literalmente, nunca reimplementan su propia numeración.
     DocumentSequence.DocumentType.EXPENSE: "GAS",
     DocumentSequence.DocumentType.PAYROLL_PERIOD: "NOM",
+    # FASE 14 (Contabilidad General) — apps.accounting.services llama a
+    # generate_document_number literalmente, nunca reimplementa su
+    # propia numeración.
+    DocumentSequence.DocumentType.JOURNAL_ENTRY: "AST",
 }
 
 
@@ -831,6 +835,15 @@ def confirm_sale(sale, user):
     locked.confirmed_by = user
     locked.save(update_fields=["status", "confirmed_at", "confirmed_by", "updated_at"])
     log_activity(locked.tenant, entity_type="sale", entity_id=locked.pk, entity_label=locked.number, action=SalesActivityLog.Action.CONFIRMED, user=user)
+
+    # FASE 14 (Contabilidad General): contabilización automática,
+    # deliberadamente resiliente — nunca debe poder romper la venta.
+    # Import diferido (no al nivel de módulo) para evitar un ciclo de
+    # importación: apps.accounting.services ya importa
+    # apps.sales.services (generate_document_number).
+    from apps.accounting.services import try_record_sale_confirmed
+
+    try_record_sale_confirmed(locked, user)
     return locked
 
 
@@ -1045,6 +1058,13 @@ def create_payment(tenant, *, customer=None, method, amount, user, currency=None
         action=SalesActivityLog.Action.PAYMENT_RECORDED, user=user,
         details=(customer.display_name if customer else ""),
     )
+
+    # FASE 14 (Contabilidad General): contabilización automática,
+    # deliberadamente resiliente — nunca debe poder romper el registro
+    # del pago. Import diferido, ver nota en confirm_sale.
+    from apps.accounting.services import try_record_customer_payment
+
+    try_record_customer_payment(payment, user)
     return payment
 
 

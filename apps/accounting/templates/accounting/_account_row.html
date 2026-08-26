@@ -1,0 +1,17 @@
+<tr>
+    <td style="padding-left: calc(var(--espacio-4) * {{ nodo.cuenta.level }});">{{ nodo.cuenta.code }}</td>
+    <td>{{ nodo.cuenta.name }}</td>
+    <td>{{ nodo.cuenta.get_account_type_display }}</td>
+    <td>{{ nodo.cuenta.get_normal_balance_display }}</td>
+    <td>{% if nodo.cuenta.allows_posting %}Sí{% else %}No{% endif %}</td>
+    <td>
+        {% if nodo.cuenta.is_active %}<span class="badge badge--verde">Activa</span>{% else %}<span class="badge badge--neutro">Inactiva</span>{% endif %}
+        <form action="{% url 'accounting:account_toggle' nodo.cuenta.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno btn--sm">{% if nodo.cuenta.is_active %}Desactivar{% else %}Activar{% endif %}</button>
+        </form>
+    </td>
+</tr>
+{% for hijo in nodo.hijos %}
+{% include "accounting/_account_row.html" with nodo=hijo %}
+{% endfor %}

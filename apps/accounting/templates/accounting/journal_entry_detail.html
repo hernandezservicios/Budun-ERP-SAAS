@@ -1,0 +1,53 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ asiento.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:journal_entry_list' %}">Asientos</a></li>
+        <li aria-current="page">{{ asiento.number }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ asiento.number }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ asiento.entry_date|date:"d M Y" }} · {{ asiento.description }}
+            · <span class="badge badge--azul">{{ asiento.get_status_display }}</span>
+            {% if reversado %}<span class="badge badge--advertencia">Reversado</span>{% endif %}
+            {% if asiento.reversal_of %}<span class="badge badge--neutro">Reverso de {{ asiento.reversal_of.number }}</span>{% endif %}
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        {% if asiento.status == "posted" and not reversado %}
+        <form action="{% url 'accounting:journal_entry_reverse' asiento.pk %}" method="post"
+              style="display:inline-flex; gap: var(--espacio-2); align-items:center;"
+              onsubmit="return confirm('¿Reversar este asiento? Se generará un asiento nuevo con los montos invertidos.');">
+            {% csrf_token %}
+            <input type="text" name="reason" class="input" placeholder="Motivo del reverso (opcional)">
+            <button type="submit" class="btn btn--contorno">Reversar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Cuenta</th><th>Descripción</th><th>Cliente/Proveedor</th><th>Débito</th><th>Crédito</th></tr></thead>
+        <tbody>
+            {% for linea in lineas %}
+            <tr>
+                <td>{{ linea.account.code }} — {{ linea.account.name }}</td>
+                <td>{{ linea.description }}</td>
+                <td>{% if linea.customer %}{{ linea.customer.display_name }}{% elif linea.supplier %}{{ linea.supplier.display_name }}{% else %}—{% endif %}</td>
+                <td>{% if linea.debit %}{{ linea.currency }} {{ linea.debit }}{% endif %}</td>
+                <td>{% if linea.credit %}{{ linea.currency }} {{ linea.credit }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

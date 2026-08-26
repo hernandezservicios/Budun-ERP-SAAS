@@ -1,0 +1,43 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Nuevo asiento contable — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:journal_entry_list' %}">Asientos</a></li>
+        <li aria-current="page">Nuevo</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Nuevo asiento contable</h1>
+    <p class="encabezado-pagina__descripcion">Los débitos deben igualar a los créditos — se contabiliza de inmediato al guardar.</p>
+</div>
+
+<div class="tarjeta" style="max-width: 56rem;">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <h3 class="panel-seccion__titulo">Encabezado</h3>
+            {% for field in header_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+
+            <h3 class="panel-seccion__titulo" style="margin-top: var(--espacio-6);">Líneas (débito o crédito, nunca ambos)</h3>
+            {{ line_formset.management_form }}
+            {% for line_form in line_formset %}
+            <div class="tarjeta" style="margin-bottom: var(--espacio-3);">
+                <div class="tarjeta__cuerpo" style="display:flex; flex-wrap:wrap; gap: var(--espacio-3);">
+                    {% for field in line_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Contabilizar asiento</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

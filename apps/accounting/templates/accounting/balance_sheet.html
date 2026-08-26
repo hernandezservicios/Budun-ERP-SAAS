@@ -1,0 +1,76 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Balance General — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:account_list' %}">Contabilidad</a></li>
+        <li aria-current="page">Balance General</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Balance General</h1>
+    <p class="encabezado-pagina__descripcion">Estado de situación financiera — saldos acumulados hasta el fin del período seleccionado.</p>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo" style="display:flex; gap: var(--espacio-4); align-items:flex-end; flex-wrap:wrap;">
+        <div class="campo" style="min-width:220px; margin-bottom:0;">
+            <label for="id_periodo">Período (hasta)</label>
+            <select id="id_periodo" name="periodo" class="select">
+                {% for p in periodos %}
+                <option value="{{ p.pk }}" {% if periodo.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn--primario">Ver</button>
+    </div>
+</form>
+
+{% if balance %}
+<div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Activos</h3>
+        <table class="tabla">
+            <tbody>
+                {% for fila in balance.assets %}
+                <tr><td>{{ fila.code }} — {{ fila.name }}</td><td>{{ fila.balance }}</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot><tr><th>Total Activos</th><th>{{ balance.total_assets }}</th></tr></tfoot>
+        </table>
+    </div>
+</div>
+<div class="tarjeta" style="margin-bottom: var(--espacio-4);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Pasivos</h3>
+        <table class="tabla">
+            <tbody>
+                {% for fila in balance.liabilities %}
+                <tr><td>{{ fila.code }} — {{ fila.name }}</td><td>{{ fila.balance }}</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot><tr><th>Total Pasivos</th><th>{{ balance.total_liabilities }}</th></tr></tfoot>
+        </table>
+    </div>
+</div>
+<div class="tarjeta">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Patrimonio</h3>
+        <table class="tabla">
+            <tbody>
+                {% for fila in balance.equity %}
+                <tr><td>{{ fila.code }} — {{ fila.name }}</td><td>{{ fila.balance }}</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot><tr><th>Total Patrimonio</th><th>{{ balance.total_equity }}</th></tr></tfoot>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📊</div><h3>Sin períodos contables todavía</h3></div>
+{% endif %}
+{% endblock %}

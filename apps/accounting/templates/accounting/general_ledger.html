@@ -1,0 +1,64 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Libro Mayor — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:account_list' %}">Contabilidad</a></li>
+        <li aria-current="page">Libro Mayor</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Libro Mayor</h1>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo" style="display:flex; gap: var(--espacio-4); align-items:flex-end; flex-wrap:wrap;">
+        <div class="campo" style="min-width:220px; margin-bottom:0;">
+            <label for="id_cuenta">Cuenta</label>
+            <select id="id_cuenta" name="cuenta" class="select">
+                <option value="">— Selecciona —</option>
+                {% for c in cuentas %}
+                <option value="{{ c.pk }}" {% if cuenta.pk == c.pk %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="campo" style="margin-bottom:0;">
+            <label for="id_desde">Desde</label>
+            <input type="date" id="id_desde" name="desde" class="input" value="{{ desde }}">
+        </div>
+        <div class="campo" style="margin-bottom:0;">
+            <label for="id_hasta">Hasta</label>
+            <input type="date" id="id_hasta" name="hasta" class="input" value="{{ hasta }}">
+        </div>
+        <button type="submit" class="btn btn--primario">Ver</button>
+    </div>
+</form>
+
+{% if cuenta %}
+{% if filas %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Fecha</th><th>Asiento</th><th>Descripción</th><th>Débito</th><th>Crédito</th><th>Saldo</th></tr></thead>
+        <tbody>
+            {% for fila in filas %}
+            <tr>
+                <td>{{ fila.line.journal_entry.entry_date|date:"d M Y" }}</td>
+                <td><a href="{% url 'accounting:journal_entry_detail' fila.line.journal_entry.pk %}">{{ fila.line.journal_entry.number }}</a></td>
+                <td>{{ fila.line.description|default:fila.line.journal_entry.description }}</td>
+                <td>{% if fila.line.debit %}{{ fila.line.debit }}{% endif %}</td>
+                <td>{% if fila.line.credit %}{{ fila.line.credit }}{% endif %}</td>
+                <td>{{ fila.running_balance }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📒</div><h3>Sin movimientos para esta cuenta</h3></div>
+{% endif %}
+{% endif %}
+{% endblock %}

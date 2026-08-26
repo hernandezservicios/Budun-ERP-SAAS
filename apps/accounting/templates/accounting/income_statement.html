@@ -1,0 +1,72 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Estado de Resultados — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:account_list' %}">Contabilidad</a></li>
+        <li aria-current="page">Estado de Resultados</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Estado de Resultados</h1>
+    <p class="encabezado-pagina__descripcion">Solo el movimiento dentro del rango del período seleccionado (ingresos/costos/gastos se reinician cada período).</p>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo" style="display:flex; gap: var(--espacio-4); align-items:flex-end; flex-wrap:wrap;">
+        <div class="campo" style="min-width:220px; margin-bottom:0;">
+            <label for="id_periodo">Período</label>
+            <select id="id_periodo" name="periodo" class="select">
+                {% for p in periodos %}
+                <option value="{{ p.pk }}" {% if periodo.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn--primario">Ver</button>
+    </div>
+</form>
+
+{% if estado %}
+<div class="tarjeta">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Ingresos</h3>
+        <table class="tabla">
+            <tbody>
+                {% for fila in estado.revenue %}
+                <tr><td>{{ fila.code }} — {{ fila.name }}</td><td>{{ fila.balance }}</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot><tr><th>Total Ingresos</th><th>{{ estado.total_revenue }}</th></tr></tfoot>
+        </table>
+
+        <h3 class="panel-seccion__titulo" style="margin-top: var(--espacio-6);">Costo de ventas</h3>
+        <table class="tabla">
+            <tbody>
+                {% for fila in estado.cost %}
+                <tr><td>{{ fila.code }} — {{ fila.name }}</td><td>{{ fila.balance }}</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot><tr><th>Total Costo</th><th>{{ estado.total_cost }}</th></tr></tfoot>
+        </table>
+        <p><strong>Utilidad bruta:</strong> {{ estado.gross_profit }}</p>
+
+        <h3 class="panel-seccion__titulo" style="margin-top: var(--espacio-6);">Gastos</h3>
+        <table class="tabla">
+            <tbody>
+                {% for fila in estado.expense %}
+                <tr><td>{{ fila.code }} — {{ fila.name }}</td><td>{{ fila.balance }}</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot><tr><th>Total Gastos</th><th>{{ estado.total_expense }}</th></tr></tfoot>
+        </table>
+        <p style="font-size: var(--texto-lg);"><strong>Utilidad neta:</strong> {{ estado.net_income }}</p>
+    </div>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📊</div><h3>Sin períodos contables todavía</h3></div>
+{% endif %}
+{% endblock %}

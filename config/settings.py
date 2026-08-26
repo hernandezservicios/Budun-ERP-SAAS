@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     "apps.expenses",
     "apps.hr",
     "apps.payroll",
+    "apps.accounting",
 ]
 
 # Custom User Model (FASE 3). Debe fijarse antes de la primera migración

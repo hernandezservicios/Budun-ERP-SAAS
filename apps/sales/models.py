@@ -159,6 +159,9 @@ class DocumentSequence(TenantScopedModel):
         # segundo sistema de numeración por tenant.
         EXPENSE = "expense", "Gasto"
         PAYROLL_PERIOD = "payroll_period", "Período de nómina"
+        # FASE 14 (Contabilidad General): mismo patrón — nunca un
+        # segundo sistema de numeración por tenant.
+        JOURNAL_ENTRY = "journal_entry", "Asiento contable"
 
     document_type = models.CharField("tipo de documento", max_length=20, choices=DocumentType.choices)
     prefix = models.CharField("prefijo", max_length=10)

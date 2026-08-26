@@ -1,0 +1,83 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ periodo.name }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:period_list' %}">Períodos</a></li>
+        <li aria-current="page">{{ periodo.name }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ periodo.name }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ periodo.start_date|date:"d M Y" }} — {{ periodo.end_date|date:"d M Y" }}
+            · <span class="badge badge--azul">{{ periodo.get_status_display }}</span>
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        {% if periodo.status == "open" or periodo.status == "reopened" %}
+        <form action="{% url 'accounting:period_close' periodo.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cerrar este período? No admitirá más asientos normales.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primario">Cerrar período</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if periodo.status == "closed" %}
+<div class="tarjeta" style="margin-bottom: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Reabrir período</h3>
+        <form method="post" action="{% url 'accounting:period_reopen' periodo.pk %}" novalidate>
+            {% csrf_token %}
+            {% for field in reopen_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--contorno">Reabrir con motivo</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if asientos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Número</th><th>Fecha</th><th>Descripción</th><th>Origen</th><th>Estado</th></tr></thead>
+        <tbody>
+            {% for asiento in asientos %}
+            <tr>
+                <td><a href="{% url 'accounting:journal_entry_detail' asiento.pk %}">{{ asiento.number }}</a></td>
+                <td>{{ asiento.entry_date|date:"d M Y" }}</td>
+                <td>{{ asiento.description }}</td>
+                <td>{{ asiento.source_type|default:"manual" }}</td>
+                <td>{% if asiento.status == "posted" %}<span class="badge badge--verde">Contabilizado</span>{% else %}<span class="badge badge--neutro">Borrador</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📒</div><h3>Sin asientos en este período</h3></div>
+{% endif %}
+
+<div class="tarjeta" style="margin-top: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Actividad</h3>
+        {% if activity_log %}
+        <ul class="lista-actividad">
+            {% for evento in activity_log %}
+            <li><strong>{{ evento.get_action_display }}</strong> — {{ evento.details }} · {{ evento.user }} · {{ evento.created_at|date:"d M Y H:i" }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>Sin actividad registrada.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

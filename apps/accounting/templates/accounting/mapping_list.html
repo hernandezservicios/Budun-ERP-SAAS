@@ -1,0 +1,51 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Mapeo de cuentas contables — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:account_list' %}">Contabilidad</a></li>
+        <li aria-current="page">Mapeo de cuentas</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Mapeo de cuentas contables</h1>
+        <p class="encabezado-pagina__descripcion">Traduce cada evento de negocio (venta, pago, gasto, nómina) a la cuenta real donde se contabiliza automáticamente. Sin configurar, ese evento simplemente no se contabiliza — nunca bloquea la operación.</p>
+    </div>
+</div>
+
+{% if mapeos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Evento</th><th>Cuenta</th></tr></thead>
+        <tbody>
+            {% for mapeo in mapeos %}
+            <tr>
+                <td>{{ mapeo.get_key_display }}</td>
+                <td>{{ mapeo.account.code }} — {{ mapeo.account.name }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🔗</div><h3>Sin mapeos configurados todavía</h3><p>La contabilización automática está preparada pero inactiva hasta que configures al menos las cuentas básicas.</p></div>
+{% endif %}
+
+<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Configurar mapeo</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Guardar mapeo</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

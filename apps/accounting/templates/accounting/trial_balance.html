@@ -1,0 +1,60 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Balance de comprobación — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'accounting:account_list' %}">Contabilidad</a></li>
+        <li aria-current="page">Balance de comprobación</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Balance de comprobación</h1>
+</div>
+
+<form method="get" class="tarjeta" style="margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo" style="display:flex; gap: var(--espacio-4); align-items:flex-end; flex-wrap:wrap;">
+        <div class="campo" style="min-width:220px; margin-bottom:0;">
+            <label for="id_periodo">Período</label>
+            <select id="id_periodo" name="periodo" class="select">
+                {% for p in periodos %}
+                <option value="{{ p.pk }}" {% if periodo.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn--primario">Ver</button>
+    </div>
+</form>
+
+{% if balance %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Código</th><th>Cuenta</th><th>Débito</th><th>Crédito</th><th>Saldo</th></tr></thead>
+        <tbody>
+            {% for fila in balance.rows %}
+            <tr>
+                <td>{{ fila.code }}</td>
+                <td>{{ fila.name }}</td>
+                <td>{{ fila.debit }}</td>
+                <td>{{ fila.credit }}</td>
+                <td>{{ fila.balance }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr><th colspan="2">Totales</th><th>{{ balance.total_debit }}</th><th>{{ balance.total_credit }}</th><th></th></tr>
+        </tfoot>
+    </table>
+</div>
+{% if balance.total_debit == balance.total_credit %}
+<p class="badge badge--verde" style="margin-top: var(--espacio-4);">El balance cuadra</p>
+{% else %}
+<p class="badge badge--peligro" style="margin-top: var(--espacio-4);">El balance NO cuadra</p>
+{% endif %}
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📊</div><h3>Sin períodos contables todavía</h3></div>
+{% endif %}
+{% endblock %}
