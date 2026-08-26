@@ -1,0 +1,70 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Categorías de gasto — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'expenses:expense_list' %}">Gastos</a></li>
+        <li aria-current="page">Categorías</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Categorías de gasto</h1>
+        <p class="encabezado-pagina__descripcion">Configurables por tenant — agrega, desactiva o usa las sugeridas.</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <form action="{% url 'expenses:category_seed_defaults' %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Crear categorías sugeridas</button>
+        </form>
+    </div>
+</div>
+
+{% if categorias %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Nombre</th><th>Descripción</th><th>Estado</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+        <tbody>
+            {% for categoria in categorias %}
+            <tr>
+                <td>{{ categoria.name }}</td>
+                <td>{{ categoria.description|default:"—" }}</td>
+                <td>
+                    {% if categoria.is_active %}<span class="badge badge--verde">Activa</span>{% else %}<span class="badge badge--neutro">Inactiva</span>{% endif %}
+                </td>
+                <td>
+                    <form action="{% url 'expenses:category_toggle' categoria.pk %}" method="post" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--contorno btn--sm">{% if categoria.is_active %}Desactivar{% else %}Activar{% endif %}</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">🏷️</div>
+    <h3>Sin categorías todavía</h3>
+    <p>Crea las categorías sugeridas o agrega las tuyas propias.</p>
+</div>
+{% endif %}
+
+<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Nueva categoría</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Crear categoría</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

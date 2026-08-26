@@ -39,10 +39,22 @@ class RolePolicyForm(forms.Form):
         help_text="FASE 12 (Compras): porcentaje por encima de lo pendiente que puede recibirse sin autorización.",
     )
 
+    # FASE 13 (Gastos): mismo criterio `required=False` que los dos
+    # campos de FASE 12 arriba — un formulario existente que no lo envíe
+    # simplemente no cambia este límite (normalizado a 0 en `clean`).
+    max_expense_amount = forms.DecimalField(
+        label="Gasto autorizable sin aprobación (monto)", max_digits=12, decimal_places=2,
+        min_value=Decimal("0"), initial=Decimal("0"), required=False,
+        help_text="FASE 13 (Gastos): un gasto con total mayor a este límite requiere autorización.",
+    )
+
     def clean_max_purchase_order_amount(self):
         return self.cleaned_data.get("max_purchase_order_amount") or Decimal("0")
 
     def clean_max_over_receiving_percent(self):
         return self.cleaned_data.get("max_over_receiving_percent") or Decimal("0")
+
+    def clean_max_expense_amount(self):
+        return self.cleaned_data.get("max_expense_amount") or Decimal("0")
     can_approve = forms.BooleanField(label="Puede resolver solicitudes de autorización", required=False)
     notes = forms.CharField(label="Notas", max_length=255, required=False)

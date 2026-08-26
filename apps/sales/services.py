@@ -84,6 +84,11 @@ _PREFIJOS_POR_DEFECTO = {
     DocumentSequence.DocumentType.PURCHASE_ORDER: "OC",
     DocumentSequence.DocumentType.PURCHASE_RECEIPT: "REC",
     DocumentSequence.DocumentType.SUPPLIER_RETURN: "DEVP",
+    # FASE 13 (Gastos + RRHH + Nómina) — apps.expenses.services/
+    # apps.payroll.services llaman a generate_document_number
+    # literalmente, nunca reimplementan su propia numeración.
+    DocumentSequence.DocumentType.EXPENSE: "GAS",
+    DocumentSequence.DocumentType.PAYROLL_PERIOD: "NOM",
 }
 
 

@@ -136,6 +136,11 @@ class CashMovement(TenantScopedModel):
         # "anticipo sin factura todavía".
         SUPPLIER_PAYMENT_CASH = "supplier_payment_cash", "Pago a proveedor en efectivo"
         SUPPLIER_ADVANCE_CASH = "supplier_advance_cash", "Anticipo a proveedor en efectivo"
+        # FASE 13 (Gastos + Nómina): mismo principio — solo el efectivo
+        # afecta el efectivo físico; transferencia/tarjeta no generan
+        # movimiento de caja.
+        EXPENSE_PAYMENT_CASH = "expense_payment_cash", "Pago de gasto en efectivo"
+        PAYROLL_PAYMENT_CASH = "payroll_payment_cash", "Pago de nómina en efectivo"
 
     cash_session = models.ForeignKey(
         CashSession, verbose_name="sesión de caja", on_delete=models.PROTECT, related_name="movements"

@@ -124,6 +124,17 @@ def check_purchase_authorization(tenant, user, *, amount):
     return amount <= limite, limite
 
 
+def check_expense_authorization(tenant, user, *, amount):
+    """FASE 13 (Gastos): ¿puede este usuario aprobar un gasto por
+    `amount` sin autorización adicional? Mismo patrón que
+    `check_purchase_authorization`. Devuelve `(autorizado: bool, limite)`."""
+    if is_owner(tenant, user):
+        return True, None
+    politica = get_effective_policy(tenant, user)
+    limite = politica.max_expense_amount if politica else Decimal("0")
+    return amount <= limite, limite
+
+
 def check_over_receiving_authorization(tenant, user, *, excess_percent):
     """FASE 12 (Compras): ¿puede este usuario recibir por encima de la
     cantidad pendiente de una línea de orden de compra, en el porcentaje
@@ -253,7 +264,7 @@ def get_policies(tenant):
 @transaction.atomic
 def set_role_policy(
     tenant, *, role, max_discount_percent, max_discount_amount, max_credit_overage, can_approve, notes="",
-    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"),
+    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"), max_expense_amount=Decimal("0"),
 ):
     politica, _creada = ApprovalPolicy.all_objects.update_or_create(
         tenant=tenant, scope=ApprovalPolicy.Scope.ROLE, role=role,
@@ -261,6 +272,7 @@ def set_role_policy(
             max_discount_percent=max_discount_percent, max_discount_amount=max_discount_amount,
             max_credit_overage=max_credit_overage, can_approve=can_approve, notes=notes,
             max_purchase_order_amount=max_purchase_order_amount, max_over_receiving_percent=max_over_receiving_percent,
+            max_expense_amount=max_expense_amount,
         ),
     )
     return politica
@@ -269,7 +281,7 @@ def set_role_policy(
 @transaction.atomic
 def set_user_policy(
     tenant, *, user, max_discount_percent, max_discount_amount, max_credit_overage, can_approve, notes="",
-    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"),
+    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"), max_expense_amount=Decimal("0"),
 ):
     politica, _creada = ApprovalPolicy.all_objects.update_or_create(
         tenant=tenant, scope=ApprovalPolicy.Scope.USER, user=user,
@@ -277,6 +289,7 @@ def set_user_policy(
             max_discount_percent=max_discount_percent, max_discount_amount=max_discount_amount,
             max_credit_overage=max_credit_overage, can_approve=can_approve, notes=notes,
             max_purchase_order_amount=max_purchase_order_amount, max_over_receiving_percent=max_over_receiving_percent,
+            max_expense_amount=max_expense_amount,
         ),
     )
     return politica
@@ -285,7 +298,7 @@ def set_user_policy(
 @transaction.atomic
 def set_tenant_default_policy(
     tenant, *, max_discount_percent, max_discount_amount, max_credit_overage, can_approve=False, notes="",
-    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"),
+    max_purchase_order_amount=Decimal("0"), max_over_receiving_percent=Decimal("0"), max_expense_amount=Decimal("0"),
 ):
     politica, _creada = ApprovalPolicy.all_objects.update_or_create(
         tenant=tenant, scope=ApprovalPolicy.Scope.TENANT,
@@ -293,6 +306,7 @@ def set_tenant_default_policy(
             max_discount_percent=max_discount_percent, max_discount_amount=max_discount_amount,
             max_credit_overage=max_credit_overage, can_approve=can_approve, notes=notes,
             max_purchase_order_amount=max_purchase_order_amount, max_over_receiving_percent=max_over_receiving_percent,
+            max_expense_amount=max_expense_amount,
         ),
     )
     return politica

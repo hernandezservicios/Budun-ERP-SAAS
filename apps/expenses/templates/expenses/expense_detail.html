@@ -1,0 +1,196 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ gasto.number }} — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'expenses:expense_list' %}">Gastos</a></li>
+        <li aria-current="page">{{ gasto.number }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ gasto.number }}</h1>
+        <p class="encabezado-pagina__descripcion">
+            {{ gasto.category.name }}{% if gasto.supplier %} · {{ gasto.supplier.display_name }}{% endif %}
+            · {{ gasto.expense_date|date:"d M Y" }}
+            · <span class="badge badge--azul">{{ gasto.get_status_display }}</span>
+            {% if gasto.is_exceptional %}<span class="badge badge--advertencia">Excepcional</span>{% endif %}
+            · Total: {{ gasto.currency }} {{ gasto.total }}
+        </p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        {% if gasto.status == "draft" or gasto.status == "rejected" %}
+        <form action="{% url 'expenses:expense_submit' gasto.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primario">Enviar a aprobación</button>
+        </form>
+        <form action="{% url 'expenses:expense_cancel' gasto.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cancelar este gasto?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Cancelar</button>
+        </form>
+        {% endif %}
+        {% if gasto.status == "pending_approval" %}
+        <form action="{% url 'expenses:expense_approve' gasto.pk %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primario">Aprobar</button>
+        </form>
+        <form action="{% url 'expenses:expense_reject' gasto.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Rechazar este gasto?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Rechazar</button>
+        </form>
+        {% endif %}
+        {% if gasto.status == "approved" %}
+        <form action="{% url 'expenses:expense_cancel' gasto.pk %}" method="post" style="display:inline;"
+              onsubmit="return confirm('¿Cancelar este gasto aprobado?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--contorno">Cancelar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div data-tabs style="margin-bottom: var(--espacio-6);">
+    <div class="tabs__lista" role="tablist" aria-label="Secciones del gasto">
+        <button class="tabs__boton" role="tab" id="tab-detalle" aria-controls="panel-detalle" aria-selected="true" tabindex="0">Detalle</button>
+        <button class="tabs__boton" role="tab" id="tab-pagos" aria-controls="panel-pagos" aria-selected="false" tabindex="-1">Pagos ({{ pagos|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-documentos" aria-controls="panel-documentos" aria-selected="false" tabindex="-1">Documentos ({{ documentos|length }})</button>
+        <button class="tabs__boton" role="tab" id="tab-actividad" aria-controls="panel-actividad" aria-selected="false" tabindex="-1">Actividad</button>
+    </div>
+
+    <div id="panel-detalle" role="tabpanel" aria-labelledby="tab-detalle" class="tabs__panel">
+        <div class="tarjeta">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Datos del gasto</h3>
+                <p><strong>Descripción:</strong> {{ gasto.description }}</p>
+                <p><strong>Monto:</strong> {{ gasto.currency }} {{ gasto.amount }} · <strong>Impuesto:</strong> {{ gasto.currency }} {{ gasto.tax_amount }} · <strong>Descuento:</strong> {{ gasto.currency }} {{ gasto.discount_amount }}</p>
+                <p><strong>Total:</strong> {{ gasto.currency }} {{ gasto.total }} · <strong>Saldo pendiente:</strong> {{ gasto.currency }} {{ saldo_pendiente }}</p>
+                {% if gasto.due_date %}<p><strong>Fecha de vencimiento:</strong> {{ gasto.due_date|date:"d M Y" }}</p>{% endif %}
+                {% if gasto.notes %}<p><strong>Notas:</strong> {{ gasto.notes }}</p>{% endif %}
+                {% if gasto.is_exceptional %}<p><strong>Motivo de excepcionalidad:</strong> {{ gasto.exceptional_reason }}</p>{% endif %}
+            </div>
+        </div>
+
+        {% if puede_editar %}
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 36rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Editar gasto</h3>
+                <form method="post" action="{% url 'expenses:expense_edit' gasto.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in edit_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Guardar cambios</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-pagos" role="tabpanel" aria-labelledby="tab-pagos" class="tabs__panel" hidden>
+        {% if pagos %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Método</th><th>Monto</th><th>Estado</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for pago in pagos %}
+                    <tr>
+                        <td>{{ pago.get_method_display }}</td>
+                        <td>{{ pago.currency }} {{ pago.amount }}</td>
+                        <td>
+                            {% if pago.status == "voided" %}<span class="badge badge--peligro">Anulado</span>{% else %}<span class="badge badge--verde">Confirmado</span>{% endif %}
+                        </td>
+                        <td>{{ pago.created_at|date:"d M Y H:i" }}</td>
+                        <td style="white-space:nowrap;">
+                            {% if pago.status != "voided" %}
+                            <form action="{% url 'expenses:expense_payment_void' gasto.pk pago.pk %}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('¿Anular este pago?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Anular</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💵</div><h3>Sin pagos registrados</h3></div>
+        {% endif %}
+
+        {% if gasto.status == "approved" or gasto.status == "partially_paid" %}
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Registrar pago</h3>
+                <form method="post" action="{% url 'expenses:expense_payment_add' gasto.pk %}" novalidate>
+                    {% csrf_token %}
+                    {% for field in payment_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Registrar pago</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="panel-documentos" role="tabpanel" aria-labelledby="tab-documentos" class="tabs__panel" hidden>
+        {% if documentos %}
+        <div class="tabla-envoltorio">
+            <table class="tabla">
+                <thead><tr><th>Archivo</th><th>Categoría</th><th>Subido</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <tbody>
+                    {% for documento in documentos %}
+                    <tr>
+                        <td>{{ documento.original_filename }}</td>
+                        <td>{{ documento.get_category_display }}</td>
+                        <td>{{ documento.uploaded_at|date:"d M Y" }}</td>
+                        <td style="white-space:nowrap;">
+                            <a class="btn btn--contorno btn--sm" href="{% url 'expenses:expense_document_download' gasto.pk documento.pk %}">Descargar</a>
+                            <form action="{% url 'expenses:expense_document_delete' gasto.pk documento.pk %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--contorno btn--sm">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos adjuntos</h3></div>
+        {% endif %}
+
+        <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
+            <div class="tarjeta__cuerpo">
+                <h3 class="panel-seccion__titulo">Subir documento</h3>
+                <form method="post" action="{% url 'expenses:expense_document_upload' gasto.pk %}" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% for field in document_form %}
+                    {% include "customers/_campo.html" with field=field %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn--primario">Subir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-actividad" role="tabpanel" aria-labelledby="tab-actividad" class="tabs__panel" hidden>
+        {% if activity_log %}
+        <ul class="lista-actividad">
+            {% for evento in activity_log %}
+            <li><strong>{{ evento.get_action_display }}</strong> — {{ evento.details }} · {{ evento.user }} · {{ evento.created_at|date:"d M Y H:i" }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕒</div><h3>Sin actividad registrada</h3></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

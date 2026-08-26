@@ -69,6 +69,14 @@ class ApprovalPolicy(TenantScopedModel):
         "línea de orden de compra que puede recibirse sin autorización adicional "
         "(0 = ninguna sobre-recepción permitida sin aprobación explícita).",
     )
+    max_expense_amount = models.DecimalField(
+        "total de gasto autorizable sin aprobación",
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        help_text="FASE 13 (Gastos): un gasto con total mayor a este límite requiere "
+        "autorización antes de aprobarse. Mismo patrón que max_purchase_order_amount.",
+    )
     can_approve = models.BooleanField("puede resolver solicitudes de autorización", default=False)
     notes = models.CharField("notas", max_length=255, blank=True)
     created_at = models.DateTimeField("creada", auto_now_add=True)
@@ -101,7 +109,8 @@ class ApprovalPolicy(TenantScopedModel):
                 & models.Q(max_discount_amount__gte=0)
                 & models.Q(max_credit_overage__gte=0)
                 & models.Q(max_purchase_order_amount__gte=0)
-                & models.Q(max_over_receiving_percent__gte=0),
+                & models.Q(max_over_receiving_percent__gte=0)
+                & models.Q(max_expense_amount__gte=0),
                 name="approvalpolicy_limites_no_negativos",
             ),
         ]
@@ -131,6 +140,11 @@ class ApprovalRequest(TenantScopedModel):
         # get_usable_approved_request), solo dos tipos de acción nuevos.
         PURCHASE_OVER_THRESHOLD = "purchase_over_threshold", "Compra sobre el límite"
         OVER_RECEIVING = "over_receiving", "Sobre-recepción de compra"
+        # FASE 13 (Gastos + RRHH + Nómina): mismas primitivas reutilizables.
+        EXPENSE_OVER_THRESHOLD = "expense_over_threshold", "Gasto sobre el límite"
+        EXPENSE_EXCEPTIONAL = "expense_exceptional", "Gasto excepcional"
+        LEAVE_REQUEST = "leave_request", "Solicitud de ausencia/vacaciones"
+        PAYROLL_APPROVAL = "payroll_approval", "Aprobación de nómina"
         OTHER = "other", "Otro"
 
     class Status(models.TextChoices):
