@@ -118,3 +118,18 @@ disciplina de validación.
 asignaciones concurrentes del mismo pago, o dos asignaciones
 concurrentes a la misma factura, nunca sobre-aplican (mismo patrón
 verificado con hilos reales para `PaymentAllocation` en FASE 10/11).
+
+## Contabilización automática (ampliación de cierre de FASE 14)
+
+`confirm_supplier_invoice`/`create_supplier_payment`/
+`create_supplier_return` ahora contabilizan automáticamente — ver
+`docs/accounting.md` sección 13 para el diseño completo. En resumen:
+factura confirmada → Dr Inventario (líneas ligadas a una orden real)
+y/o Dr Gasto Operativo (líneas sin orden) y/o Dr Impuesto por
+Recuperar, Cr Cuentas por Pagar; pago a proveedor → Dr Cuentas por
+Pagar / Cr Efectivo; devolución a proveedor → Dr Cuentas por Pagar /
+Cr Inventario, solo si ya existe una factura contabilizada para esa
+orden. Deliberadamente resiliente (`try_record_*`, nunca bloquea la
+operación de Compras subyacente) — mismo criterio que las
+integraciones de Ventas/Gastos/Nómina desde el cierre inicial de
+FASE 14.

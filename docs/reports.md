@@ -1,9 +1,17 @@
-# Reportes (FASE 14 — construido)
+# Reportes (FASE 14 — construido, ampliado en el cierre controlado posterior)
 
 `apps/reports` es la plataforma integral de reportes — construida
 sobre el motor de Contabilidad General (`apps.accounting`, ver
 `docs/accounting.md`) y reutilizando literalmente los servicios de
 cada dominio de negocio ya existente.
+
+**Ampliación de cierre de FASE 14**: agrega margen bruto (COGS) al
+reporte de Ventas, valorización de inventario (+ reconciliación
+contra el Libro Mayor), Estados de Cuenta de Cliente/Proveedor
+(resumen + detalle cronológico, pedidos explícitamente y pendientes
+desde `docs/accounts-receivable.md` sección 6), y exportación PDF/XLSX
+real (`reportlab`/`openpyxl`, ambas puro-Python, aprobadas
+explícitamente por el usuario) — ver las secciones nuevas más abajo.
 
 ## Principio central: reportes son agregaciones de lectura, nunca una fuente de verdad nueva
 
@@ -57,13 +65,35 @@ incluye salario/datos bancarios en ninguna fila, ni siquiera para el
 propietario (esa información vive en el detalle del empleado,
 `apps.hr`, no en un reporte agregado).
 
-## Exportación
+## Exportación (CSV + PDF + XLSX — ampliación de cierre de FASE 14)
 
-CSV está disponible en los reportes tabulares principales (Ventas,
-Gastos, Cuentas por Cobrar, Cuentas por Pagar) — genera el archivo al
-vuelo desde las mismas `rows` que ve la pantalla, sin dependencias
-nuevas. PDF/XLSX/JSON de exportación y reportes programados **no se
-construyeron** en esta fase (ver "Qué NO se construyó" abajo).
+CSV/PDF/XLSX están disponibles en los reportes tabulares principales
+(Ventas, Gastos, Cuentas por Cobrar, Cuentas por Pagar) y en los dos
+Estados de Cuenta nuevos — 6 reportes con exportación completa. El
+resto mantiene solo pantalla, documentado como brecha conocida ("no
+todos los reportes necesitan todos los formatos", explícitamente
+permitido por el propio pedido de esta ampliación).
+
+`apps/reports/exports.py` — dos funciones genéricas, mismo patrón que
+`_csv_response` (header + rows, nunca un exportador distinto por
+reporte):
+
+- `pdf_response`: PDF real vía `reportlab` (puro-Python, sin
+  dependencias nativas) — título, tenant, filtros, usuario y fecha de
+  generación, tabla con encabezado repetido por página, orientación
+  horizontal automática si hay más de 5 columnas. Sin logo de tenant
+  — `Tenant` no tiene un campo de logo/branding hoy (ninguna función
+  de "subir logo" existe en el proyecto), documentado, no inventado.
+- `xlsx_response`: XLSX real vía `openpyxl` (puro-Python) — una hoja,
+  encabezados en negrita, ancho de columna automático.
+
+Ambas librerías fueron aprobadas explícitamente por el usuario para
+esta ampliación — a diferencia de WeasyPrint/ReportLab-con-GTK,
+rechazadas en FASE 10/14 por depender de librerías nativas del
+sistema operativo (problemático en Windows sin Docker).
+
+JSON de exportación y reportes programados **no se construyeron**
+(ver "Qué NO se construyó" abajo).
 
 ## Multi-Tenancy y performance
 
@@ -83,12 +113,36 @@ ver `docs/currency.md`) — mezclar monedas reales en los totales
 agregados queda documentado como una limitación conocida hasta que
 exista ese motor.
 
-## Qué NO se construyó en esta fase (deliberado)
+## Costo, margen y valorización (ampliación de cierre de FASE 14)
 
-- **Exportación PDF/XLSX**: ninguna librería nueva instalada sin
-  decisión explícita del usuario (mismo criterio que
-  `docs/invoice-documents.md` desde FASE 10 — impresión HTML
-  `@media print` en vez de PDF binario).
+- **Reporte de Ventas**: `cost_total` (SUM de `SaleItem.cost_amount`,
+  ver `docs/accounting.md` sección 12) y `margin` (subtotal −
+  descuentos − costo) en `summary` — una sola consulta agregada,
+  nunca un recálculo por venta (evita N+1). También cuenta
+  devoluciones/refunds/notas de crédito del mismo rango de fechas
+  (aproximado por período, no filtrado por cliente/estado como la
+  venta misma — simplificación documentada).
+- **Reporte de Inventario**: `inventory_value` (reutiliza
+  `apps.inventory.services.get_inventory_valuation` literalmente) y
+  `gl_reconciliation` (compara ese valor contra el saldo real de la
+  cuenta `INVENTORY_ASSET` en el Libro Mayor — `None` si el tenant no
+  configuró ese mapeo todavía, nada que reconciliar).
+
+## Estados de Cuenta (Cliente y Proveedor — ampliación de cierre de FASE 14)
+
+Dos vistas nuevas (`CustomerStatementView`/`SupplierStatementView`,
+`reports:customer_statement`/`reports:supplier_statement`) — resumen
+(saldo pendiente actual, facturado/comprado histórico, saldo a
+favor/anticipos) + detalle cronológico (ventas/facturas, pagos, notas
+de crédito, ordenados por fecha) para UN cliente/proveedor. Responden
+el requisito explícito de reportes de Clientes/Proveedores y la
+promesa pendiente desde FASE 11 (`docs/accounts-receivable.md` sección
+6, "Customer Statement"). Agregan exclusivamente sobre
+`apps.sales`/`apps.purchases` ya existentes — nunca una copia de esos
+datos ni un ledger nuevo.
+
+## Qué NO se construyó (deliberado)
+
 - **Reportes programados** (envío por email diario/semanal/mensual):
   arquitectura no preparada en esta fase — no hay infraestructura de
   tareas en segundo plano todavía (mismo criterio que

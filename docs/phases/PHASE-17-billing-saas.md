@@ -96,6 +96,12 @@ sería una contabilidad interna de Budun ERP como operador del SaaS —
 fuera del alcance de `apps.accounting`, que es exclusivamente
 tenant-scoped para la contabilidad de cada empresa cliente.
 
+**Actualización (ampliación de cierre de FASE 14)**: el mismo
+principio se extiende a las cuentas nuevas (`accounts_payable`,
+`inventory_asset`, `cost_of_goods_sold`, `cash_over`/`cash_short`,
+`TaxCode`) — todas tenant-scoped, ninguna registra ni puede registrar
+la relación Tenant↔Budun ERP.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

@@ -365,6 +365,17 @@ documento.
   correctamente** desde FASE 11, tal como se confirma en las secciones
   5, 7 y 9 — esta sincronización documenta el vocabulario oficial y
   formaliza el comportamiento existente, sin ningún cambio de código.
+- **Contabilidad General (`apps.accounting`, FASE 14)**: la doctrina
+  de moneda a nivel de ASIENTO CONTABLE (un `JournalEntry` nunca
+  mezcla monedas entre sus líneas; campos FX-prep `original_amount`/
+  `original_currency`/`exchange_rate` en `JournalEntryLine`) vive en
+  `docs/accounting.md` — este documento no la duplica. `CashClosing`/
+  `CashDenominationCount` (secciones 4-5 de este documento) siguen sin
+  construirse; el cierre de sesión de caja SÍ se conectó a
+  contabilidad en la ampliación de cierre de FASE 14 (Cash Over/Cash
+  Short, ver `docs/accounting.md` sección 14) usando el evento de
+  cierre YA existente (`CashSession.status=CLOSED`), sin esperar a que
+  exista el motor de denominaciones.
 
 ## 12. Qué NO se construye con este documento
 

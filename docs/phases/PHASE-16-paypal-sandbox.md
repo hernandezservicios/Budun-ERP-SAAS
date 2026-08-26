@@ -95,6 +95,13 @@ PayPal" en la cuenta de control, esa es una decisión de plan de
 cuentas del tenant (un `AccountMapping` diferente o una subcuenta),
 nunca un cambio en la arquitectura de `record_business_event`.
 
+**Actualización (ampliación de cierre de FASE 14)**: los 12
+`AccountMapping.Key` disponibles hoy incluyen `accounts_payable`
+(Cuentas por Pagar) — si esta fase llegara a necesitar reembolsos de
+PayPal hacia proveedores o un flujo de pago saliente, el mismo
+`create_supplier_payment`/`try_record_supplier_payment` ya conectado
+para Compras aplicaría igual, sin inventar una segunda integración.
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 

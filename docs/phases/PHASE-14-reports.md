@@ -45,6 +45,42 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [x] `docs/project-status/CURRENT_PHASE.md`/`PHASE_HISTORY.md`/`KNOWN_ISSUES.md`/`DECISIONS.md` actualizados
 - [x] Git commit: dos commits de dominio (`apps.accounting`, `apps.reports`) + un commit de cierre de documentación
 
+## Ampliación de cierre de FASE 14 (COGS, Compras/AP, Cierre de Caja, Impuestos multi-código)
+
+Cierre inicial de FASE 14 dejó documentadas 4 integraciones sin
+conectar por falta de decisiones de política contable. El usuario las
+entregó explícitamente en una instrucción posterior ("cierre contable
+controlado", sin rehacer FASE 14, sin iniciar FASE 15) — construido en
+commits de dominio adicionales:
+
+- [x] Costeo: SERIALIZED costo específico (sin cambios); QUANTITY
+  promedio ponderado nuevo (`StockMovement.unit_cost`/
+  `average_cost_after`) — nunca FIFO.
+- [x] COGS: asiento separado del de ingresos, reverso proporcional en
+  devoluciones, `Refund` monetario nunca lo afecta.
+- [x] Compras/Cuentas por Pagar: factura de proveedor confirmada, pago
+  a proveedor, devolución a proveedor — todos contabilizados,
+  distinguiendo inventario de gasto operativo.
+- [x] Cierre de caja: Cash Over/Cash Short en `close_cash_session`.
+- [x] Impuestos multi-código: `TaxCode`/`SaleItemTax`, aditivo, solo
+  Ventas por ahora.
+- [x] Reportes: margen bruto en Ventas, valorización de inventario +
+  reconciliación contable, Estados de Cuenta de Cliente/Proveedor.
+- [x] Exportación PDF/XLSX real (`reportlab`/`openpyxl`, aprobados
+  explícitamente por el usuario) en los reportes tabulares principales.
+- [x] Tests nuevos, regresión completa, smoke test ampliado.
+- [x] Documentación sincronizada (`docs/accounting.md` secciones 11-16,
+  `docs/reports.md`, `docs/inventory.md`, `docs/currency.md`,
+  `docs/accounts-payable.md`, `CLAUDE.md`/`MASTER-PROMPT.md`/
+  `ARCHITECTURE.md`, este archivo, `PHASE_HISTORY.md`/
+  `KNOWN_ISSUES.md`/`DECISIONS.md`).
+
+Deliberadamente NO construido en esta ampliación (documentado, no
+inventado): GRNI (recibido-no-facturado), impuestos multi-código en
+Compras, retenciones/normativa fiscal de país específico, Flujo de
+Efectivo/Patrimonio como estados formales, reportes programados,
+streaming/paginación real de grandes volúmenes.
+
 ## Reportes de Inventario (requisito explícito, sección dedicada)
 
 Los reportes de inventario/stock deben distinguir explícitamente los dos

@@ -39,6 +39,34 @@ ni borra un movimiento ya creado; `on_delete=PROTECT` en
 `StockMovement.product` impide borrar un producto que tiene historial
 (solo se puede desactivar, ver `docs/products.md`).
 
+## Costeo por promedio ponderado (ampliación de cierre de FASE 14)
+
+`StockMovement` gana dos columnas nuevas, en el MISMO patrón que
+`stock_before`/`stock_after` (calculadas y guardadas una sola vez por
+movimiento, nunca editadas después): `unit_cost` (costo de ESE
+movimiento — el costo del lote en una entrada, o el promedio vigente
+consumido en una salida; `null` en un ajuste, un conteo físico no
+trae un costo confiable) y `average_cost_after` (promedio ponderado
+por unidad vigente DESPUÉS de este movimiento). "Costo promedio
+actual de un producto" = `average_cost_after` del `StockMovement` más
+reciente — exactamente como el stock actual = `stock_after` del más
+reciente (`services.get_current_average_cost`). En una entrada con
+costo conocido: `nuevo_promedio = (stock_anterior×promedio_anterior +
+cantidad×costo_del_lote) / stock_posterior`. En una salida, el
+promedio NO cambia — retirar unidades a su propio costo promedio
+nunca altera el promedio de las que quedan; el costo consumido es el
+promedio vigente en ese instante (base real de COGS, ver
+`docs/accounting.md` sección 11).
+
+Esta es la ÚNICA política de costeo para productos QUANTITY — nunca
+FIFO en esta ampliación (descartado explícitamente por el usuario).
+Los productos SERIALIZED siguen usando costo específico por unidad
+(`InventoryUnit.unit_cost`, sin cambios, ver más abajo). Nuevo:
+`get_inventory_valuation(tenant)` — valor total de inventario
+(QUANTITY: stock actual × promedio; SERIALIZED: suma de `unit_cost`
+de unidades `EN_STOCK`), usado por el reporte de Inventario y por la
+reconciliación contable.
+
 ## `services.py`: única vía para tocar el stock
 
 Ninguna vista crea un `StockMovement` directamente. Todo pasa por:

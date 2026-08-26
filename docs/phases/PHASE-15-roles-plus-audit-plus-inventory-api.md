@@ -185,6 +185,14 @@ debe respetarlos, nunca duplicarlos:
   financieras/contables sin una decisión explícita y un scope nuevo
   dedicado.
 
+**Actualización (ampliación de cierre de FASE 14)**: además de
+`Account`/`AccountingPeriod`/`JournalEntry`, esta fase hereda
+candidatos de permiso granular equivalentes para `TaxCode`
+(configuración de impuestos, hoy solo el propietario puede crearlos)
+y para las nuevas integraciones de Compras/AP/Cierre de caja
+(`AccountingActivityLog` ya registra sus fallos de contabilización
+bajo el mismo patrón, sin necesitar un segundo tipo de auditoría).
+
 ## Dependencias
 Revisar fases anteriores y `docs/phases/PHASES.md`.
 
