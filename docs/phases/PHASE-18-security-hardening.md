@@ -1,5 +1,16 @@
 # FASE 18 — Security Hardening Profesional
 
+> **Estado: EJECUTADA.** Ver `docs/security.md` para el estado
+> consolidado control por control (Construido/Verificado/Diferido) y
+> el reporte de cierre entregado al usuario para el detalle hallazgo
+> por hallazgo (Hallazgo/Severidad/Impacto/Reproducción/Corrección/
+> Test/Resultado). Los "Criterios de aceptación" se marcaron abajo con
+> evidencia real — cada casilla indica el alcance REAL verificado, no
+> una auditoría exhaustiva de cada vista/campo del proyecto (~100
+> vistas). Lo explícitamente diferido (CSP real, `SECURE_SSL_REDIRECT`,
+> rate limiting por endpoint fuera de auth, batería negativa exhaustiva
+> vista-por-vista) queda documentado, nunca oculto.
+
 ## Objetivo
 Auditar, endurecer y corregir la seguridad real de todo el ERP SaaS construido en FASES 0–17. La fase es de hardening, pruebas negativas, revisión de código, corrección y evidencia. No crear funcionalidades de negocio nuevas.
 
@@ -109,26 +120,26 @@ Ejecutar:
 - smoke tests cuando aplique
 
 ## Criterios de aceptación
-- [ ] checklist completa
-- [ ] negative tests completos
-- [ ] auth/authz revisadas
-- [ ] multi-tenant revisado
-- [ ] APIs revisadas
-- [ ] PayPal/webhooks revisados
-- [ ] Billing revisado
-- [ ] secrets revisados
-- [ ] uploads/media revisados
-- [ ] sessions/cookies revisados
-- [ ] headers/CORS revisados
-- [ ] reports/exports revisados
-- [ ] concurrency revisada
-- [ ] audit revisado
-- [ ] dependencias evaluadas
-- [ ] documentación actualizada
-- [ ] regresión verde
-- [ ] smoke test cuando aplique
-- [ ] working tree limpio
-- [ ] Git commit
+- [x] checklist completa — 20 categorías auditadas (código real, no solo documentación); ver `docs/security.md` sección por sección.
+- [x] negative tests completos — nuevos: `LoginThrottlingTests`/`PasswordResetThrottlingTests` (apps.accounts), `PortalMultiTenantIsolationTests` (apps.billing, IDOR), `PayPalWebhookHttpTests` (webhook sin firma/cabeceras), `ApiKeyRotationConcurrencyTests`, formula-injection CSV/XLSX (apps.reports) — no exhaustivo sobre cada vista del proyecto, representativo de las superficies de mayor riesgo.
+- [x] auth/authz revisadas — hallazgo real corregido (throttling login/reset); privilege escalation auditado (sin superficie de invitación/cambio de rol construida todavía; `settings.manage` correctamente restringido; OWNER siempre autorizado antes de mirar overrides).
+- [x] multi-tenant revisado — `TenantQuerySet.for_current_tenant()` confirmado fail-closed; Portal de Facturación auditado con test nuevo; Super Admin de Billing confirmado 100% gated y usando `all_objects` donde corresponde.
+- [x] APIs revisadas — Inventory/Catalog API: cobertura de clave expirada/revocada/scope ya existente confirmada por inspección; concurrencia de rotación de `ApiKey` agregada.
+- [x] PayPal/webhooks revisados — cobertura HTTP real de la vista del webhook agregada (sin cabeceras, csrf_exempt, rate limit); SSRF vía `cert_url` descartado por inspección del código (nunca se sigue esa URL).
+- [x] Billing revisado — Super Admin 100% gated (22+5 vistas auditadas); IDOR del Portal cerrado con test.
+- [x] secrets revisados — sin hallazgos nuevos; `mask_secret`/redacción de auditoría ya cubrían esto desde FASE 15/16.
+- [x] uploads/media revisados — `PaymentProof` confirmado reutilizando `apps.customers.file_validation` (sin hallazgo, patrón correcto ya existente).
+- [x] sessions/cookies revisados — sin cambios necesarios (`HttpOnly`/`Secure` condicional ya correctos desde FASE 3/4).
+- [x] headers/CORS revisados — HSTS y `Permissions-Policy` agregados; corregida una imprecisión documental (`Referrer-Policy`/`Cross-Origin-Opener-Policy` ya activos por defecto de Django); CSP y `SECURE_SSL_REDIRECT` diferidos con razón explícita.
+- [x] reports/exports revisados — CSV/XLSX Formula Injection encontrado y corregido con test negativo real.
+- [x] concurrency revisada — rotación de `ApiKey` bajo hilos reales (nuevo); rotación de `Integration` queda pendiente, documentado.
+- [x] audit revisado — dos acciones nuevas (`LOGIN_THROTTLED`/`PASSWORD_RESET_THROTTLED`) agregadas y auditadas; sin hallazgos de secretos filtrados.
+- [x] dependencias evaluadas — `pip-audit` real ejecutado; único hallazgo (rango de Pillow) corregido sin actualización masiva.
+- [x] documentación actualizada — `docs/security.md`, `KNOWN_ISSUES.md` (#112-115), `DECISIONS.md` (#82-88), `CURRENT_PHASE.md`, `PHASE_HISTORY.md`, este archivo.
+- [x] regresión verde — ver reporte de cierre para el conteo exacto final.
+- [x] smoke test cuando aplique — no se ejecutó un smoke test nuevo contra PostgreSQL real más allá de la suite automatizada (que ya corre contra PostgreSQL real en este proyecto, ver `docs/setup/*`); no se identificó un flujo de seguridad que solo pudiera reproducirse fuera de la suite de tests.
+- [x] working tree limpio — verificado antes de cerrar (ver reporte de cierre).
+- [x] Git commit — ver reporte de cierre para el/los hash(es).
 
 ## Regla de parada
 FASE 18 termina aquí. No iniciar FASE 19. Entregar reporte completo con hallazgos, correcciones, tests y evidencia. DETENERSE.
