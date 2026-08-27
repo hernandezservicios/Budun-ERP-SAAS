@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from django.urls import reverse
 
 from ._helpers import ReportsTestCase
@@ -35,6 +37,31 @@ class ReportsHttpTests(ReportsTestCase):
         respuesta = self.owner_client.get(reverse("reports:sales"), {"export": "xlsx"})
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    def test_export_csv_neutraliza_formula_injection_en_nombre_de_cliente(self):
+        """FASE 18 — Security Hardening. Un cliente con un nombre que
+        empieza con `=` (fórmula de Excel/Sheets, ej. para ejecutar un
+        comando en la máquina de quien abre el reporte) nunca debe
+        llegar crudo a la celda exportada."""
+        self.customer.first_name = "=cmd|'/c calc'!A1"
+        self.customer.save()
+
+        respuesta = self.owner_client.get(reverse("reports:sales"), {"export": "csv"})
+        contenido = respuesta.content.decode("utf-8")
+        self.assertNotIn(",=cmd|", contenido)
+        self.assertIn("'=cmd|", contenido)
+
+    def test_export_xlsx_neutraliza_formula_injection_en_nombre_de_cliente(self):
+        from openpyxl import load_workbook
+
+        self.customer.first_name = "=cmd|'/c calc'!A1"
+        self.customer.save()
+
+        respuesta = self.owner_client.get(reverse("reports:sales"), {"export": "xlsx"})
+        libro = load_workbook(BytesIO(respuesta.content))
+        valores = [celda.value for fila in libro.active.iter_rows() for celda in fila if celda.value]
+        self.assertTrue(any(str(v).startswith("'=cmd|") for v in valores))
+        self.assertFalse(any(str(v) == "=cmd|'/c calc'!A1" for v in valores))
 
     def test_estado_de_cuenta_de_cliente_responde_200(self):
         respuesta = self.owner_client.get(reverse("reports:customer_statement", args=[self.customer.pk]))

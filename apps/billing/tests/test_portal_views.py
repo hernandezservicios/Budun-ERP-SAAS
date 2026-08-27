@@ -130,3 +130,75 @@ class ChangePlanAndCancelViewTests(TestCase):
         self.assertRedirects(respuesta, reverse("billing_portal:status"))
         self.subscription.refresh_from_db()
         self.assertTrue(self.subscription.cancel_at_period_end)
+
+
+class PortalMultiTenantIsolationTests(TestCase):
+    """FASE 18 — Security Hardening. Ninguno de los endpoints del
+    Portal de Facturación que reciben `invoice_id` en la URL existía
+    con una prueba explícita de aislamiento Multi-Tenant — se agrega
+    aquí: el tenant B nunca debe poder ver ni operar sobre una factura
+    del tenant A manipulando el ID en la URL (IDOR)."""
+
+    def setUp(self):
+        self.tenant_a, self.owner_a = crear_tenant_con_owner(
+            name="Empresa Portal A", slug="empresa-portal-a", email="portal.a@example.com"
+        )
+        self.tenant_b, self.owner_b = crear_tenant_con_owner(
+            name="Empresa Portal B", slug="empresa-portal-b", email="portal.b@example.com"
+        )
+        self.plan, self.version = crear_plan_con_version()
+        self.saas_customer = crear_saas_customer()
+        subscription_a = subscription_services.create_subscription(
+            self.tenant_a, saas_customer=self.saas_customer, plan_version=self.version
+        )
+        self.invoice_a, _creada = invoicing_services.generate_invoice_for_subscription(subscription_a)
+
+        from apps.billing.models import BankAccount
+
+        self.bank_account = BankAccount.objects.create(
+            bank_name="Banco de Prueba", country="RD", currency="USD",
+            account_holder="Budun ERP", account_number="0000",
+        )
+        # Autenticado como el OWNER del tenant B — intenta acceder a
+        # recursos de la factura del tenant A.
+        self.client.login(username=self.owner_b.email, password="clave-de-prueba-987")
+
+    def test_ver_instrucciones_de_transferencia_de_factura_de_otro_tenant_da_404(self):
+        respuesta = self.client.get(
+            reverse("billing_portal:transfer_instructions", args=[self.invoice_a.pk])
+        )
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_subir_comprobante_para_factura_de_otro_tenant_da_404_y_no_crea_nada(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        respuesta = self.client.post(
+            reverse("billing_portal:transfer_instructions", args=[self.invoice_a.pk]),
+            {
+                "bank_account": self.bank_account.pk, "declared_amount": "29.00",
+                "declared_currency": "USD", "declared_bank_name": "Mi Banco",
+                "file": SimpleUploadedFile("comprobante.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf"),
+            },
+        )
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertEqual(PaymentProof.all_objects.filter(invoice=self.invoice_a).count(), 0)
+
+    def test_iniciar_cobro_paypal_de_factura_de_otro_tenant_da_404(self):
+        respuesta = self.client.get(
+            reverse("billing_portal:checkout_paypal_initiate", args=[self.invoice_a.pk])
+        )
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_retorno_paypal_de_factura_de_otro_tenant_da_404(self):
+        respuesta = self.client.get(
+            reverse("billing_portal:checkout_paypal_return", args=[self.invoice_a.pk]),
+            {"token": "cualquier-token"},
+        )
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_cancelar_pago_paypal_de_factura_de_otro_tenant_da_404(self):
+        respuesta = self.client.get(
+            reverse("billing_portal:checkout_paypal_cancel", args=[self.invoice_a.pk]),
+            {"token": "cualquier-token"},
+        )
+        self.assertEqual(respuesta.status_code, 404)

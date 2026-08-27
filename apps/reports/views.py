@@ -22,6 +22,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from apps.core.utils import sanitize_cell_value
 from apps.customers.models import Customer, Supplier
 from apps.hr.services import can_view_sensitive_employee_data
 from apps.tenants.permissions import TenantRequiredMixin
@@ -60,9 +61,12 @@ def _csv_response(filename, header, rows):
     respuesta = HttpResponse(content_type="text/csv")
     respuesta["Content-Disposition"] = f'attachment; filename="{filename}"'
     escritor = csv.writer(respuesta)
-    escritor.writerow(header)
+    # `sanitize_cell_value` (FASE 18 — Security Hardening): nunca
+    # escribir una celda controlada por el usuario que Excel/Sheets
+    # pueda interpretar como fórmula (CSV Formula Injection).
+    escritor.writerow([sanitize_cell_value(valor) for valor in header])
     for fila in rows:
-        escritor.writerow(fila)
+        escritor.writerow([sanitize_cell_value(valor) for valor in fila])
     return respuesta
 
 

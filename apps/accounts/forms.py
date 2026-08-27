@@ -2,7 +2,19 @@ from django import forms
 from django.contrib.auth import password_validation
 from django.contrib.auth.forms import AuthenticationForm
 
+from apps.core.utils import get_client_ip
+
+from . import rate_limit
 from .models import User
+
+# Throttling de login (FASE 18 — Security Hardening): dos ejes
+# independientes, ver `apps.accounts.rate_limit`. Valores conservadores
+# — no bloquean un uso legítimo normal (nadie falla 5 veces seguidas
+# su propia contraseña en 15 minutos) pero cierran fuerza bruta y
+# credential stuffing.
+LOGIN_MAX_ATTEMPTS_PER_EMAIL = 5
+LOGIN_MAX_ATTEMPTS_PER_IP = 20
+LOGIN_THROTTLE_WINDOW_SECONDS = 15 * 60
 
 
 class RegistrationForm(forms.ModelForm):
@@ -71,6 +83,59 @@ class EmailAuthenticationForm(AuthenticationForm):
             "datos e inténtalo de nuevo."
         ),
     }
+
+    def clean(self):
+        """Throttling de fuerza bruta (FASE 18 — Security Hardening,
+        hallazgo ya documentado desde FASE 4). Se verifica ANTES de
+        `authenticate()` (evita incluso el costo de hashear la
+        contraseña una vez bloqueado) y se registra un intento fallido
+        DESPUÉS solo si las credenciales resultan inválidas — un
+        bloqueo nunca revela, con un mensaje distinto, que la causa es
+        el límite de tasa en vez de una contraseña incorrecta."""
+        email = (self.data.get("username") or "").strip().lower()
+        ip = get_client_ip(self.request) if self.request is not None else None
+
+        if rate_limit.is_blocked(
+            "login_email", email, max_attempts=LOGIN_MAX_ATTEMPTS_PER_EMAIL
+        ) or rate_limit.is_blocked(
+            "login_ip", ip, max_attempts=LOGIN_MAX_ATTEMPTS_PER_IP
+        ):
+            self._auditar_bloqueo(email, ip)
+            raise forms.ValidationError(self.error_messages["invalid_login"], code="invalid_login")
+
+        try:
+            cleaned_data = super().clean()
+        except forms.ValidationError:
+            rate_limit.register_attempt(
+                "login_email", email, window_seconds=LOGIN_THROTTLE_WINDOW_SECONDS
+            )
+            rate_limit.register_attempt(
+                "login_ip", ip, window_seconds=LOGIN_THROTTLE_WINDOW_SECONDS
+            )
+            raise
+
+        # Login exitoso: limpia cualquier intento fallido previo para
+        # que un usuario legítimo nunca quede penalizado por errores
+        # de tecleo anteriores una vez que ya demostró su contraseña.
+        rate_limit.reset("login_email", email)
+        rate_limit.reset("login_ip", ip)
+        return cleaned_data
+
+    def _auditar_bloqueo(self, email, ip):
+        # Import diferido + resiliente — mismo criterio que el resto de
+        # integraciones automáticas del proyecto (`apps.reports._audit_export`,
+        # `apps.audit.signals`): la auditoría nunca debe poder romper ni
+        # bloquear el login que está auditando.
+        try:
+            from apps.audit.models import AuditLog
+            from apps.audit.services import log_event
+
+            log_event(
+                None, action=AuditLog.Action.LOGIN_THROTTLED, domain="auth",
+                ip_address=ip, metadata={"email": email} if email else {},
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class ProfileForm(forms.ModelForm):

@@ -20,6 +20,8 @@ from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from reportlab.lib import colors
+
+from apps.core.utils import sanitize_cell_value
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import cm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -70,11 +72,15 @@ def xlsx_response(*, filename, sheet_title, header, rows):
     hoja = libro.active
     hoja.title = sheet_title[:31]  # límite de Excel para nombres de hoja
 
-    hoja.append(list(header))
+    # `sanitize_cell_value` (FASE 18 — Security Hardening): nunca
+    # escribir una celda controlada por el usuario que Excel/Sheets
+    # pueda interpretar como fórmula (XLSX Formula Injection) — mismo
+    # criterio que `apps.reports.views._csv_response`.
+    hoja.append([sanitize_cell_value(valor) for valor in header])
     for celda in hoja[1]:
         celda.font = Font(bold=True)
     for fila in rows:
-        hoja.append(list(fila))
+        hoja.append([sanitize_cell_value(valor) for valor in fila])
 
     for columna in hoja.columns:
         ancho = max((len(str(c.value)) for c in columna if c.value is not None), default=10)

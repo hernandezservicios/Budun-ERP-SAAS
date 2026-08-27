@@ -130,6 +130,13 @@ AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # FASE 18 (Security Hardening): cabecera `Permissions-Policy` — ver
+    # `apps/core/security_headers.py` para el porqué de un middleware
+    # propio en vez de una dependencia nueva. Justo después de
+    # `SecurityMiddleware` (junto al resto de cabeceras de seguridad
+    # HTTP que Django ya aplica: `X-Content-Type-Options`,
+    # `Referrer-Policy`, `Cross-Origin-Opener-Policy`, HSTS).
+    "apps.core.security_headers.PermissionsPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -277,3 +284,33 @@ X_FRAME_OPTIONS = "DENY"
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+    # HSTS (FASE 18 — Security Hardening). Solo tiene sentido con
+    # `DEBUG=False` (producción real, con HTTPS) — un navegador ignora
+    # esta cabecera si llega por HTTP plano, y en desarrollo local
+    # (HTTP) forzarla no tendría efecto pero sí complicaría probar la
+    # app sin certificado. Arranque deliberadamente conservador
+    # (1 día, sin subdominios, sin `preload`): estos tres valores se
+    # incrementan de forma progresiva (patrón estándar: probar en corto
+    # antes de comprometerse a un `max-age` largo) una vez que FASE 21
+    # confirme el despliegue HTTPS real en el VPS de Hostinger — subir
+    # a un año y agregar `includeSubDomains`/`preload` sin verificación
+    # real en producción sería alto riesgo (un `max-age` largo con un
+    # certificado mal configurado deja el sitio inaccesible durante ese
+    # tiempo en cualquier navegador que ya lo haya visitado).
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", 60 * 60 * 24))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", default=False)
+    SECURE_HSTS_PRELOAD = _env_bool("DJANGO_HSTS_PRELOAD", default=False)
+
+# `SECURE_SSL_REDIRECT` y una Content-Security-Policy real quedan
+# deliberadamente fuera de esta fase (ver docs/security.md): la
+# redirección forzada depende de que el proxy de producción (Nginx,
+# FASE 21 — Hostinger Deployment) reenvíe `X-Forwarded-Proto` de forma
+# confiable (`SECURE_PROXY_SSL_HEADER`) — activarla sin esa
+# verificación real podría producir un bucle de redirección que deje
+# el sitio completo inaccesible. Una CSP real exigiría antes una
+# auditoría de todas las plantillas para separar estilos/scripts
+# inline ya existentes (o migrarlos a nonce) — introducirla sin esa
+# pasada dedicada arriesga con romper la UI en producción, exactamente
+# lo que esta fase pide evitar ("no introducir una CSP incompatible
+# con la aplicación sin probarla").

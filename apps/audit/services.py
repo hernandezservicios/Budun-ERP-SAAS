@@ -12,6 +12,7 @@ from django.db.models import CharField, F, Q, Value
 from django.db.models.functions import Cast
 
 from apps.accounting.models import AccountingActivityLog
+from apps.core.utils import get_client_ip  # noqa: F401 — reexportado (ver abajo)
 from apps.customers.models import ActivityLog as CustomersActivityLog
 from apps.expenses.models import ExpensesActivityLog
 from apps.hr.models import HRActivityLog
@@ -21,17 +22,6 @@ from apps.purchases.models import PurchasesActivityLog
 from apps.sales.models import SalesActivityLog
 
 from .models import AuditLog
-
-
-def get_client_ip(request):
-    """IP real del cliente — respeta `X-Forwarded-For` (primer valor,
-    el más cercano al cliente) cuando el proyecto corra detrás de un
-    proxy/balanceador en producción (ver `docs/setup/*`), con
-    `REMOTE_ADDR` como respaldo en desarrollo directo."""
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
 
 
 def log_event(

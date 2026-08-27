@@ -11,14 +11,19 @@ construye los objetos directamente) — ver
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from apps.audit.models import AuditLog
 from apps.tenants.models import Membership, Tenant
 from apps.tenants.services import create_isolation_sample
 from apps.tenants.scoping import tenant_context
+
+from . import forms as accounts_forms
+from . import views as accounts_views
 
 User = get_user_model()
 
@@ -381,3 +386,124 @@ class PasswordChangeTests(TestCase):
             },
         )
         self.assertFalse(respuesta.context["form"].is_valid())
+
+
+class LoginThrottlingTests(TestCase):
+    """FASE 18 — Security Hardening. Hallazgo ya documentado desde
+    FASE 4 (`docs/authentication.md`) y confirmado en la
+    sincronización de FASE 18 (`docs/security.md`): ni el login tenía
+    ningún límite de intentos. Estas pruebas reproducen el intento de
+    fuerza bruta y demuestran que ahora queda bloqueado — ver
+    `apps.accounts.forms.EmailAuthenticationForm.clean` /
+    `apps.accounts.rate_limit`."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            email="fuerza-bruta@example.com", password="clave-correcta-987"
+        )
+
+    def _post_login(self, email, password):
+        return self.client.post(
+            reverse("accounts:login"), {"username": email, "password": password}
+        )
+
+    def test_bloquea_por_email_tras_agotar_intentos_incluso_con_password_correcta(self):
+        for _ in range(accounts_forms.LOGIN_MAX_ATTEMPTS_PER_EMAIL):
+            respuesta = self._post_login("fuerza-bruta@example.com", "password-incorrecta")
+            self.assertEqual(respuesta.status_code, 200)
+
+        # El intento siguiente queda bloqueado por el límite de tasa —
+        # ni siquiera se llega a comparar la contraseña: una contraseña
+        # CORRECTA tampoco permite iniciar sesión mientras dure el
+        # bloqueo (si se comparara, demostraría que el límite de tasa
+        # no se está aplicando de verdad antes de `authenticate()`).
+        respuesta_bloqueada = self._post_login("fuerza-bruta@example.com", "clave-correcta-987")
+        self.assertEqual(respuesta_bloqueada.status_code, 200)
+        self.assertFalse(respuesta_bloqueada.context["form"].is_valid())
+        # Mismo mensaje genérico que una contraseña incorrecta — el
+        # bloqueo nunca se distingue del error normal de credenciales.
+        self.assertContains(respuesta_bloqueada, "incorrectos")
+
+        self.assertTrue(
+            AuditLog.objects.filter(action=AuditLog.Action.LOGIN_THROTTLED).exists()
+        )
+
+    def test_login_exitoso_resetea_el_contador_de_intentos_fallidos(self):
+        # Menos intentos que el límite, luego un login exitoso.
+        for _ in range(accounts_forms.LOGIN_MAX_ATTEMPTS_PER_EMAIL - 1):
+            self._post_login("fuerza-bruta@example.com", "password-incorrecta")
+
+        respuesta_ok = self._post_login("fuerza-bruta@example.com", "clave-correcta-987")
+        self.assertRedirects(respuesta_ok, reverse("accounts:onboarding"))
+
+        # Tras el login exitoso, el contador se limpió: puede volver a
+        # fallar `LOGIN_MAX_ATTEMPTS_PER_EMAIL - 1` veces sin bloquearse
+        # de inmediato por arrastre del intento anterior.
+        self.client.logout()
+        for _ in range(accounts_forms.LOGIN_MAX_ATTEMPTS_PER_EMAIL - 1):
+            respuesta = self._post_login("fuerza-bruta@example.com", "password-incorrecta")
+            self.assertContains(respuesta, "incorrectos")
+
+        respuesta_valida = self._post_login("fuerza-bruta@example.com", "clave-correcta-987")
+        self.assertRedirects(respuesta_valida, reverse("accounts:onboarding"))
+
+    def test_bloqueo_por_ip_afecta_a_cualquier_cuenta_desde_ese_origen(self):
+        # Muchos emails DISTINTOS (nunca repetidos) desde el mismo
+        # cliente de pruebas — cada uno se queda muy por debajo de su
+        # propio límite por-email, pero el contador por-IP los suma a
+        # todos y termina bloqueando el origen completo.
+        for indice in range(accounts_forms.LOGIN_MAX_ATTEMPTS_PER_IP):
+            self._post_login(f"cuenta-{indice}@example.com", "password-incorrecta")
+
+        # Un usuario legítimo, nunca antes usado, con la contraseña
+        # correcta, también queda bloqueado por el límite de IP.
+        respuesta = self._post_login("fuerza-bruta@example.com", "clave-correcta-987")
+        self.assertFalse(respuesta.context["form"].is_valid())
+        self.assertContains(respuesta, "incorrectos")
+
+
+class PasswordResetThrottlingTests(TestCase):
+    """FASE 18 — Security Hardening: mismo hallazgo que el login, eje
+    independiente (`apps.accounts.views.AccountPasswordResetView`)."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            email="reset-throttle@example.com", password="clave-original-987"
+        )
+
+    def _post_reset(self, email):
+        return self.client.post(reverse("accounts:password_reset"), {"email": email})
+
+    def test_bloquea_envio_de_correo_tras_agotar_intentos_por_email(self):
+        for _ in range(accounts_views.PASSWORD_RESET_MAX_ATTEMPTS_PER_EMAIL):
+            respuesta = self._post_reset("reset-throttle@example.com")
+            self.assertRedirects(respuesta, reverse("accounts:password_reset_done"))
+        self.assertEqual(len(mail.outbox), accounts_views.PASSWORD_RESET_MAX_ATTEMPTS_PER_EMAIL)
+
+        # El intento siguiente muestra la MISMA página de "listo" (nunca
+        # revela que la causa fue el límite de tasa) pero ya no envía
+        # un correo nuevo.
+        respuesta_bloqueada = self._post_reset("reset-throttle@example.com")
+        self.assertRedirects(respuesta_bloqueada, reverse("accounts:password_reset_done"))
+        self.assertEqual(len(mail.outbox), accounts_views.PASSWORD_RESET_MAX_ATTEMPTS_PER_EMAIL)
+
+        self.assertTrue(
+            AuditLog.objects.filter(action=AuditLog.Action.PASSWORD_RESET_THROTTLED).exists()
+        )
+
+    def test_bloqueo_por_ip_afecta_solicitudes_a_cualquier_email(self):
+        for indice in range(accounts_views.PASSWORD_RESET_MAX_ATTEMPTS_PER_IP):
+            # Emails distintos (incluso inexistentes: Django nunca
+            # revela si la cuenta existe, así que no envía correo para
+            # estos, pero el intento igual cuenta contra el límite de
+            # IP) para no tropezar primero con el límite por-email.
+            self._post_reset(f"quien-sea-{indice}@example.com")
+
+        correos_antes = len(mail.outbox)
+        respuesta = self._post_reset("reset-throttle@example.com")
+        self.assertRedirects(respuesta, reverse("accounts:password_reset_done"))
+        # Bloqueado por IP: ningún correo nuevo, ni siquiera para una
+        # cuenta real que nunca había solicitado un reset antes.
+        self.assertEqual(len(mail.outbox), correos_antes)

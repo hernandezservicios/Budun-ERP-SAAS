@@ -155,3 +155,43 @@ class ErrorPagesTests(TestCase):
         html = render_to_string("500.html")
         self.assertIn("Algo salió mal", html)
         self.assertIn("500", html)
+
+
+class HttpSecurityHeadersTests(TestCase):
+    """FASE 18 — Security Hardening. Bloquea por regresión las
+    cabeceras HTTP de seguridad que el proyecto ya envía (algunas por
+    default de Django — `Referrer-Policy`/`Cross-Origin-Opener-Policy`
+    desde Django 3.0/4.0 — y otras explícitas en `config/settings.py`)
+    y prueba las dos añadidas en esta fase: HSTS y `Permissions-Policy`
+    (ver `apps/core/security_headers.py`)."""
+
+    def test_cabeceras_de_seguridad_base_siempre_presentes(self):
+        respuesta = self.client.get(reverse("core:home"))
+        self.assertEqual(respuesta.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(respuesta.headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(respuesta.headers.get("Referrer-Policy"), "same-origin")
+        self.assertEqual(respuesta.headers.get("Cross-Origin-Opener-Policy"), "same-origin")
+
+    def test_permissions_policy_deshabilita_apis_no_usadas(self):
+        respuesta = self.client.get(reverse("core:home"))
+        cabecera = respuesta.headers.get("Permissions-Policy")
+        self.assertIsNotNone(cabecera)
+        for capacidad in ("camera=()", "microphone=()", "geolocation=()", "payment=()"):
+            self.assertIn(capacidad, cabecera)
+
+    def test_hsts_no_se_envia_sobre_http_plano(self):
+        """HSTS solo tiene sentido — y Django solo la envía — sobre una
+        conexión HTTPS real; nunca debe verse en una request insegura,
+        ni siquiera con el setting activado."""
+        with override_settings(SECURE_HSTS_SECONDS=86400):
+            respuesta = self.client.get(reverse("core:home"), secure=False)
+        self.assertIsNone(respuesta.headers.get("Strict-Transport-Security"))
+
+    def test_hsts_se_envia_sobre_https_cuando_esta_configurado(self):
+        with override_settings(
+            SECURE_HSTS_SECONDS=86400,
+            SECURE_HSTS_INCLUDE_SUBDOMAINS=False,
+            SECURE_HSTS_PRELOAD=False,
+        ):
+            respuesta = self.client.get(reverse("core:home"), secure=True)
+        self.assertEqual(respuesta.headers.get("Strict-Transport-Security"), "max-age=86400")

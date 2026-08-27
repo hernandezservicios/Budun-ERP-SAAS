@@ -34,6 +34,12 @@ class AuditLog(models.Model):
         LOGIN = "login", "Inicio de sesión"
         LOGOUT = "logout", "Cierre de sesión"
         LOGIN_FAILED = "login_failed", "Inicio de sesión fallido"
+        # FASE 18 (Security Hardening): throttling real de login/recuperación
+        # de contraseña — ver `apps.accounts.rate_limit`. Un bloqueo por
+        # límite de intentos es un evento distinto de un simple
+        # LOGIN_FAILED (aquí ni siquiera se intentó autenticar).
+        LOGIN_THROTTLED = "login_throttled", "Inicio de sesión bloqueado por límite de intentos"
+        PASSWORD_RESET_THROTTLED = "password_reset_throttled", "Recuperación de contraseña bloqueada por límite"
         PERMISSION_CHANGED = "permission_changed", "Permiso modificado"
         ROLE_CHANGED = "role_changed", "Rol modificado"
         API_KEY_CREATED = "api_key_created", "Clave de API creada"

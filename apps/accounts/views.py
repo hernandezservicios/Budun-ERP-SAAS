@@ -16,9 +16,23 @@ from django.urls import reverse_lazy
 from django.utils.text import slugify
 from django.views.generic import CreateView, FormView, UpdateView
 
+from apps.core.utils import get_client_ip
 from apps.tenants.models import Membership, Tenant
 
+from . import rate_limit
 from .forms import EmailAuthenticationForm, OnboardingForm, ProfileForm, RegistrationForm
+
+# Throttling de recuperación de contraseña (FASE 18 — Security
+# Hardening): límites independientes de los de login
+# (`apps.accounts.forms`, scopes "login_email"/"login_ip") — un
+# atacante que agota el límite de login nunca agota, de paso, el de
+# recuperación de contraseña ni viceversa. Ventana más amplia (1 hora)
+# porque el abuso aquí no es "adivinar una contraseña" sino "bombardear
+# de correos" o forzar el costo de una consulta a la base de datos por
+# cada intento.
+PASSWORD_RESET_MAX_ATTEMPTS_PER_EMAIL = 5
+PASSWORD_RESET_MAX_ATTEMPTS_PER_IP = 10
+PASSWORD_RESET_THROTTLE_WINDOW_SECONDS = 60 * 60
 
 
 class RegisterView(CreateView):
@@ -157,10 +171,58 @@ class ProfileView(LoginRequiredMixin, UpdateView):
 
 
 class AccountPasswordResetView(PasswordResetView):
+    """FASE 18 (Security Hardening): además de lo que Django ya cubre
+    (token de un solo uso con expiración, y una respuesta idéntica
+    exista o no la cuenta — Django nunca revela existencia de email),
+    se añade throttling real por IP y por email para cerrar el abuso
+    de bombardeo de correos / consultas repetidas a la base de datos
+    (hallazgo documentado desde FASE 4/`docs/security.md`, mismo eje
+    que el login pero con scopes y ventana propios — ver
+    `PASSWORD_RESET_MAX_ATTEMPTS_PER_*` arriba)."""
+
     template_name = "accounts/password_reset_form.html"
     email_template_name = "accounts/password_reset_email.html"
     subject_template_name = "accounts/password_reset_subject.txt"
     success_url = reverse_lazy("accounts:password_reset_done")
+
+    def form_valid(self, form):
+        email = (form.cleaned_data.get("email") or "").strip().lower()
+        ip = get_client_ip(self.request)
+
+        if rate_limit.is_blocked(
+            "pwreset_email", email, max_attempts=PASSWORD_RESET_MAX_ATTEMPTS_PER_EMAIL
+        ) or rate_limit.is_blocked(
+            "pwreset_ip", ip, max_attempts=PASSWORD_RESET_MAX_ATTEMPTS_PER_IP
+        ):
+            self._auditar_bloqueo(email, ip)
+            # Misma página de "listo" que un envío real: nunca revela,
+            # con una respuesta distinta, que la causa fue el límite de
+            # tasa — igual criterio que Django ya aplica para no
+            # revelar si el email existe o no.
+            return redirect(self.get_success_url())
+
+        rate_limit.register_attempt(
+            "pwreset_email", email, window_seconds=PASSWORD_RESET_THROTTLE_WINDOW_SECONDS
+        )
+        rate_limit.register_attempt(
+            "pwreset_ip", ip, window_seconds=PASSWORD_RESET_THROTTLE_WINDOW_SECONDS
+        )
+        return super().form_valid(form)
+
+    def _auditar_bloqueo(self, email, ip):
+        # Import diferido + resiliente — mismo criterio que
+        # `EmailAuthenticationForm._auditar_bloqueo` / el resto de
+        # integraciones automáticas del proyecto.
+        try:
+            from apps.audit.models import AuditLog
+            from apps.audit.services import log_event
+
+            log_event(
+                None, action=AuditLog.Action.PASSWORD_RESET_THROTTLED, domain="auth",
+                ip_address=ip, metadata={"email": email} if email else {},
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class AccountPasswordResetDoneView(PasswordResetDoneView):
