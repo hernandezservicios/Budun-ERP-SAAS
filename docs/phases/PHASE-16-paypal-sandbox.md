@@ -1,109 +1,295 @@
-# FASE 16 — PayPal Sandbox
+# FASE 16 — PayPal Sandbox + Pagos Online + Integración con Billing SaaS
 
-## Objetivo
-Integración PayPal Sandbox mediante service layer; Orders/Payments/Subscriptions/Webhooks según alcance. Configurar MCP con documentación oficial vigente. Ver `docs/paypal.md` para el resumen arquitectónico.
+## 1. Objetivo
 
-## Regla incremental
-Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
+Implementar la integración profesional de PayPal como proveedor de pagos online de la plataforma SaaS, sin crear un segundo sistema de pagos, suscripciones o facturación.
 
-## Criterios de aceptación
-- [ ] Sandbox funciona
-- [ ] webhooks verifican
-- [ ] idempotencia
-- [ ] secrets fuera de Git
+PayPal debe ser un proveedor externo de Billing SaaS.
 
-## Verificación
-- [ ] `python manage.py check` o la validación equivalente está en verde.
-- [ ] Tests relevantes ejecutados.
-- [ ] Smoke test realizado cuando aplique.
-- [ ] Seguridad revisada para el alcance de la fase.
+La fase debe preparar y validar:
+
+- Sandbox;
+- credenciales seguras;
+- checkout/orden o suscripción según el diseño aprobado;
+- confirmación;
+- webhooks;
+- validación de webhooks;
+- idempotencia;
+- reconciliación;
+- errores y reintentos;
+- cancelaciones;
+- refunds cuando correspondan;
+- integración contable/financiera del SaaS cuando corresponda.
+
+## 2. Separación de dominios
+
+### ERP operativo del tenant
+
+Incluye:
+
+- ventas;
+- clientes;
+- CxC;
+- compras;
+- CxP;
+- caja;
+- inventario;
+- gastos;
+- RRHH;
+- nómina;
+- contabilidad.
+
+### Billing SaaS
+
+Incluye lo que cada tenant paga al operador del SaaS por usar la plataforma.
+
+No reutilizar `apps.sales.Payment`, `PaymentAllocation` o CxC del tenant como almacenamiento del Billing SaaS.
+
+PayPal debe terminar en los modelos/servicios propios de Billing SaaS.
+
+## 3. Regla incremental
+
+Crear únicamente lo necesario para FASE 16 y sus dependencias inmediatas.
+
+No implementar el Billing SaaS completo de FASE 17 dentro de esta fase.
+
+La integración debe quedar preparada para consumir el núcleo que FASE 17 implementará.
+
+## 4. Provider abstraction
+
+PayPal debe integrarse mediante una capa de provider/adaptador.
+
+Conceptualmente:
+
+```text
+Billing SaaS
+    ↓
+Payment Provider Interface
+    ↓
+PayPal Provider
+```
+
+No colocar lógica de PayPal directamente en modelos de Billing.
+
+La arquitectura debe permitir futuros proveedores sin rehacer el núcleo.
+
+## 5. Credenciales
+
+Las credenciales de PayPal deben:
+
+- almacenarse de forma segura;
+- permanecer fuera de Git;
+- no aparecer en logs;
+- no llegar al frontend;
+- no llegar al LLM;
+- diferenciar Sandbox y Live;
+- validar configuración antes de operar.
+
+## 6. Configuración
+
+La configuración debe existir en el ámbito correcto de plataforma/SaaS.
+
+Debe permitir:
+
+- modo Sandbox/Live;
+- Client ID;
+- Client Secret;
+- estado;
+- Test Connection cuando sea viable;
+- información de la cuenta/cuenta comercial asociada cuando sea necesario.
+
+No confundir credenciales PayPal del SaaS con configuraciones PayPal de un tenant.
+
+## 7. Orders / Payments / Subscriptions
+
+La implementación debe utilizar los conceptos reales de PayPal que correspondan al flujo elegido.
+
+No asumir que una Order de PayPal es una Invoice interna ni almacenar dos fuentes equivalentes.
+
+Debe existir mapeo explícito:
+
+```text
+PayPal external event
+        ↓
+Billing payment/subscription event
+```
+
+## 8. Webhooks
+
+Los webhooks son fuente crítica de confirmación asíncrona.
+
+Deben:
+
+- validar autenticidad/firma con el mecanismo oficial aplicable;
+- validar tipo de evento;
+- identificar la operación externa;
+- soportar eventos duplicados;
+- soportar eventos fuera de orden;
+- ser idempotentes;
+- no activar una suscripción solamente por parámetros del navegador.
+
+## 9. Idempotencia y reconciliación
+
+Un mismo evento externo no puede:
+
+- crear dos pagos;
+- activar dos veces una suscripción;
+- extender dos veces el período;
+- generar dos refunds.
+
+Debe existir una llave de idempotencia/event identifier adecuada.
+
+Mantener separados:
+
+- identificador externo;
+- estado del proveedor;
+- estado interno.
+
+Los campos definitivos deben agregarse solo si tienen uso real en la implementación.
+
+## 10. Integración con Payment
+
+Si FASE 16 confirma un pago SaaS:
+
+```text
+PayPal
+→ Provider
+→ Billing Payment Service
+```
+
+No escribir directamente en la base desde el webhook.
+
+Toda mutación de negocio debe pasar por el servicio central.
+
+## 11. Multi-moneda
+
+No hardcodear una única moneda.
+
+Debe conservarse:
+
+- moneda interna;
+- monto interno;
+- moneda reportada por PayPal;
+- monto reportado por PayPal;
+
+cuando sean necesarios para reconciliación.
+
+Nunca mezclar monedas sin una regla explícita.
+
+## 12. Refund
+
+Los reembolsos de PayPal pueden ser asíncronos.
+
+El dominio interno debe poder representar al menos el ciclo:
+
+```text
+PENDING
+→ COMPLETED
+```
+
+y fallos:
+
+```text
+PENDING
+→ FAILED
+```
+
+sin borrar el historial.
+
+No crear un estado paralelo innecesario si el modelo de Billing ya lo contempla.
+
+## 13. Contabilidad
+
+No utilizar `apps.accounting` tenant-scoped para registrar automáticamente la relación Tenant→SaaS.
+
+Si el operador SaaS necesita contabilidad propia, deberá ser un dominio separado de la contabilidad del tenant.
+
+FASE 16 únicamente debe respetar las interfaces que existan para esa futura trazabilidad.
+
+## 14. Seguridad
+
+Probar:
+
+- credenciales inválidas;
+- modo incorrecto;
+- webhook inválido;
+- webhook duplicado;
+- webhook fuera de orden;
+- payload manipulado;
+- refund duplicado;
+- aislamiento de plataforma;
+- no exposición de secretos.
+
+## 15. Tests
+
+Mínimos:
+
+- configuración;
+- autenticación;
+- order/payment;
+- webhook;
+- idempotencia;
+- reconciliación;
+- cancelación;
+- refund;
+- errores/reintentos;
+- multi-moneda;
+- regresión.
+
+## 16. Smoke test
+
+Probar en Sandbox:
+
+```text
+checkout
+→ pago
+→ webhook
+→ Billing event
+→ reconciliación
+```
+
+y, cuando corresponda:
+
+```text
+refund
+→ webhook/event
+→ estado interno actualizado
+```
+
+## 17. Dependencias
+
+Revisar:
+
+- `docs/billing.md`;
+- `docs/payments.md`;
+- `docs/currency.md`;
+- FASE 15;
+- arquitectura real del proyecto.
+
+No inventar endpoints de PayPal.
+
+Cuando la implementación lo requiera, consultar la documentación oficial vigente de PayPal antes de fijar detalles del API.
+
+## 18. Criterios de aceptación
+
+- [ ] Sandbox funcional.
+- [ ] Credenciales seguras.
+- [ ] Webhooks validados.
+- [ ] Idempotencia.
+- [ ] Reconciliación.
+- [ ] Refund cuando corresponda.
+- [ ] Multi-moneda.
+- [ ] Sin duplicar el Billing.
+- [ ] Seguridad revisada.
+- [ ] Suite completa verde.
+- [ ] Smoke test real.
 - [ ] Documentación actualizada.
-- [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
-- [ ] Git commit creado.
+- [ ] Git commit.
 
-## Nota de FASE 10 — Interfaz de Pagos a consumir sin acoplar `Sale` a PayPal
+## 19. Regla de parada
 
-FASE 10 preparó explícitamente `apps.sales.services` (`create_payment`/
-`record_payment_for_sale`/`allocate_payment`) como el único punto de
-entrada para registrar y aplicar un pago (ver `docs/payments.md`), con
-`Payment.method` extensible (`CASH`/`CARD`/`TRANSFER`/`OTHER`)
-precisamente para no acoplar `Sale`/`Payment` a ningún proveedor
-concreto. Esta fase debe:
+Al cerrar FASE 16:
 
-- Agregar el flujo `Django → Payment Service → PayPal` (o equivalente)
-  como una capa que, al confirmar un pago de PayPal (vía webhook
-  verificado), llame a `services.record_payment_for_sale(sale, method=...,
-  amount=..., idempotency_key=<id de la transacción de PayPal>, ...)`
-  (o `services.create_payment`/`apply_payment_to_sales` si el webhook
-  debe cubrir varias facturas a la vez) — la `idempotency_key` ya
-  existente es exactamente el mecanismo pensado para que un webhook
-  reintentado nunca duplique el pago. Ver `docs/payments.md` para el
-  ledger `Payment`/`PaymentAllocation` sobre el que se construye esto.
-- `Refund.status` ya prevé `PENDING`/`FAILED` (no solo `COMPLETED`) para
-  cuando un reembolso de PayPal sea asíncrono — usarlos en vez de
-  agregar un campo de estado paralelo.
-- Nunca registrar un pago directamente en `Payment` desde el código de
-  integración con PayPal: siempre a través de
-  `apps.sales.services.create_payment`/`record_payment_for_sale`/
-  `apply_payment_to_sales`/`record_refund`.
+**DETENERSE.**
 
-## Nota de sincronización — Preparación de campos, sin agregarlos todavía
-
-Sincronización de doctrina previa a FASE 11, sin implementación nueva:
-cuando esta fase integre un proveedor real, `Payment` necesitará
-campos de reconciliación que **hoy no existen y no se agregan con este
-documento** (mismo principio de "nunca una columna sin uso real hoy"
-aplicado desde FASE 8):
-
-- `external_id` (ID de la transacción en el proveedor).
-- `provider` (extensible, mismo patrón que `PaymentMethod`).
-- `provider_status` (estado reportado por el proveedor, puede diferir
-  de `Payment.status` mientras se reconcilia).
-- Idempotencia ante webhooks: `Payment.idempotency_key` ya existe y es
-  exactamente el mecanismo a usar (el ID de transacción del proveedor
-  como clave), sin necesidad de un campo nuevo.
-- Reembolsos vía proveedor: `Refund.status` ya prevé `PENDING`/`FAILED`
-  para una confirmación asíncrona (ver arriba).
-- Reconciliación de webhooks: un webhook debe poder confirmar/actualizar
-  un `Payment`/`Refund` existente por `idempotency_key`/`external_id`,
-  nunca crear un segundo registro paralelo cuando el evento llega
-  duplicado o fuera de orden.
-
-## Nota de sincronización — Moneda
-
-Doctrina oficial agregada en `docs/currency.md`/`docs/paypal.md`: esta
-fase debe usar la moneda del `Payment`/documento cuando sea compatible
-con PayPal, nunca hardcodear una sola moneda. Campos de reconciliación
-adicionales, sin agregarlos todavía: `provider_currency`/
-`provider_amount` (junto a `external_id`/`provider`/`provider_status`
-ya previstos arriba).
-
-## Nota de sincronización — Contabilización automática ya conectada (FASE 14, ya construida)
-
-FASE 14 conectó `apps.sales.services.create_payment` a la
-contabilización automática (`try_record_customer_payment`, ver
-`docs/accounting.md` sección 7: Dr Efectivo y equivalentes / Cr
-Cuentas por cobrar). Como esta fase debe registrar todo pago de PayPal
-exclusivamente a través de `create_payment`/`record_payment_for_sale`/
-`apply_payment_to_sales` (nunca escribiendo `Payment` directamente,
-ver la nota de FASE 10 arriba), un pago de PayPal confirmado por
-webhook **ya queda contabilizado automáticamente sin cambio adicional**
-en `apps.accounting` — siempre que el tenant tenga configurado
-`AccountMapping` para `cash_and_equivalents`/`accounts_receivable`. Si
-esta fase necesita distinguir "efectivo físico" de "efectivo en
-PayPal" en la cuenta de control, esa es una decisión de plan de
-cuentas del tenant (un `AccountMapping` diferente o una subcuenta),
-nunca un cambio en la arquitectura de `record_business_event`.
-
-**Actualización (ampliación de cierre de FASE 14)**: los 12
-`AccountMapping.Key` disponibles hoy incluyen `accounts_payable`
-(Cuentas por Pagar) — si esta fase llegara a necesitar reembolsos de
-PayPal hacia proveedores o un flujo de pago saliente, el mismo
-`create_supplier_payment`/`try_record_supplier_payment` ya conectado
-para Compras aplicaría igual, sin inventar una segunda integración.
-
-## Dependencias
-Revisar fases anteriores y `docs/phases/PHASES.md`.
-
-## Cierre
-No cerrar la fase sin evidencia. Al cerrarla, detenerse y esperar autorización para iniciar la siguiente, salvo instrucción explícita del usuario.
+No iniciar FASE 17 automáticamente.

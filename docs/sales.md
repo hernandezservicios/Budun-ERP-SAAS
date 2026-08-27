@@ -208,9 +208,14 @@ nunca una conversión automática) — ver `docs/payments.md` regla 9 y
   no está aprobado como dependencia nueva sin decisión explícita del
   usuario. Ver `docs/invoice-documents.md`.
 - **Integración real de pagos (PayPal, pasarelas)**: `Payment.method`
-  incluye `OTHER` como valor extensible; el acoplamiento a un proveedor
-  real queda para FASE 16, siempre a través de `services.py`
-  (nunca desde las vistas ni desde `apps.sales.models`).
+  incluye `OTHER` como valor extensible, hoy usado únicamente para que
+  un tenant registre manualmente un pago recibido por un medio no
+  listado. **Corrección de sincronización**: la integración real de
+  PayPal de FASE 16 es exclusivamente para el Billing SaaS (FASE 17,
+  ver `docs/paypal.md`/`docs/billing.md`) — nunca se acopla a `Sale`/
+  `Payment` de este módulo. Una futura pasarela de cobro para que un
+  cliente le pague a un tenant sería una decisión nueva y explícita,
+  no anticipada aquí.
 - **Ledger contable completo de cuentas por cobrar**: `get_customer_credit_balance`/
   `get_customer_pending_sales` son agregaciones de solo lectura sobre
   `Payment`/`PaymentAllocation`/`Refund`, no una tabla ni un motor de

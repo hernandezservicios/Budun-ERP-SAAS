@@ -1,109 +1,668 @@
-# FASE 17 — Billing SaaS
+# FASE 17 — Billing SaaS Completo
 
-## Objetivo
-Planes, suscripciones, estados, límites y sincronización con PayPal. Ver `docs/billing.md` para el resumen arquitectónico.
+## 1. Objetivo
 
-## Regla incremental
-Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No implementar funcionalidades de fases futuras.
+Construir el sistema profesional de Billing de la plataforma SaaS.
 
-## Criterios de aceptación
-- [ ] tenant→plan→subscription
-- [ ] limits
-- [ ] status sync
-- [ ] cancel flow
+Billing SaaS administra lo que los tenants pagan al operador de la plataforma.
 
-## Verificación
-- [ ] `python manage.py check` o la validación equivalente está en verde.
-- [ ] Tests relevantes ejecutados.
-- [ ] Smoke test realizado cuando aplique.
-- [ ] Seguridad revisada para el alcance de la fase.
-- [ ] Documentación actualizada.
-- [ ] `docs/project-status/CURRENT_PHASE.md` y `PHASE_HISTORY.md` actualizados.
-- [ ] Git commit creado.
+Es independiente de:
 
-## Nota de FASE 10 — Revisado, sin cambios de diseño necesarios
+- ventas del tenant;
+- CxC del tenant;
+- CxP del tenant;
+- caja del tenant;
+- contabilidad tenant-scoped.
 
-FASE 10 agregó el motor comercial de los TENANTS (`apps/sales`, ventas
-de cada empresa cliente del SaaS) — conceptualmente distinto del
-Billing del propio SaaS (lo que Budun ERP le cobra a cada tenant por
-usar la plataforma). Revisado explícitamente: no hay ninguna relación
-directa; esta fase no necesita consumir `apps.sales`. Si en el futuro
-se quisiera facturar a un tenant basándose en su volumen de ventas
-(p. ej. un plan por transacción), sería una agregación de solo lectura
-sobre `Sale`/`Payment`, nunca una dependencia estructural.
+## 2. Componentes principales
 
-## Nota de sincronización — Cuentas por Cobrar del ERP vs. Billing del SaaS (separación obligatoria)
+Como mínimo, evaluar e implementar según necesidad real:
 
-Sincronización de doctrina previa a FASE 11, reafirmando explícitamente
-la nota anterior ahora que el ERP tiene un dominio de cuentas por
-cobrar más rico (`Payment`/`PaymentAllocation`/`CustomerCreditLedger`/
-`CreditNote`, ver `docs/accounts-receivable.md`): **estos dos dominios
-nunca deben mezclarse**, ni conceptual ni técnicamente:
+- SaaS Customer;
+- Plan;
+- Subscription;
+- SaaS Invoice;
+- SaaS Payment;
+- SaaS Payment Allocation;
+- Credit Balance;
+- Advance;
+- Credit Note;
+- Credit Note Application;
+- Refund;
+- Bank Account;
+- Bank Transfer;
+- Payment Proof;
+- Payment Verification;
+- Renewal;
+- Plan Change;
+- Suspension/Reactivation;
+- Notifications;
+- Billing Reports;
+- auditoría de Billing.
 
-| | ERP Accounts Receivable | SaaS Billing |
-|---|---|---|
-| Qué es | Lo que un CLIENTE le debe a un TENANT (una empresa usando el ERP) | Lo que un TENANT le debe a Budun ERP (el SaaS) por usar la plataforma |
-| Modelos | `Customer`, `Sale`, `Payment`, `PaymentAllocation`, `CreditNote`, `CreditNoteApplication` (FASE 10/11, construidos) | `Tenant`, `Plan`, `Subscription` (esta fase, no construidos) |
-| Saldo | Saldo a favor / pendiente de un `Customer` (`get_customer_credit_balance`/`get_sale_balance_due`) | Estado de la suscripción de un `Tenant` |
+No crear modelos duplicados si uno existente puede cumplir exactamente el mismo concepto.
 
-**Nunca** debe existir un campo, modelo o consulta que combine el
-"saldo de un cliente" de un tenant con la "suscripción del tenant" —
-son ejes ortogonales. Si en el futuro se quisiera un plan de Billing
-basado en el volumen de cuentas por cobrar de un tenant (métrica de
-uso, no un acoplamiento estructural), sería una agregación de solo
-lectura sobre `apps.sales`/`apps.accounts_receivable` (cuando exista),
-nunca una relación directa entre `Subscription` y `Customer`.
+## 3. Separación con el ERP del tenant
 
-## Nota de sincronización — Moneda del plan/suscripción
+`apps.customers.Customer` = cliente comercial de un tenant.
 
-Doctrina oficial agregada en `docs/currency.md`/`docs/billing.md`:
-`Plan.currency`/`Subscription.currency` (snapshot al momento de
-suscribirse, un cambio de precio/moneda del plan después nunca altera
-lo que ya paga un tenant suscrito) y `provider_currency` (PayPal
-Subscriptions) — ninguno existe hoy. Sigue sin mezclarse con la moneda
-de las ventas/cuentas por cobrar de cada tenant (`Sale.currency`/
-`Payment.currency`) — la separación ERP Accounts Receivable / SaaS
-Billing de la tabla de arriba aplica también a la moneda.
+`SaaS Customer` = cliente/comprador de la plataforma.
 
-## Nota de sincronización — Gastos/RRHH/Nómina vs. Billing del SaaS (separación obligatoria, FASE 13, ya construido)
+No mezclarlos.
 
-`apps.expenses`/`apps.hr`/`apps.payroll` (FASE 13) son operación
-INTERNA de un tenant (lo que un tenant gasta, a quién emplea, cuánto
-paga en nómina) — un eje completamente ortogonal a "lo que el TENANT le
-debe a Budun ERP por usar la plataforma" (`Plan`/`Subscription`, esta
-fase). Mismo principio que la tabla de la nota anterior: **nunca**
-debe existir un campo, modelo o consulta que combine el costo operativo
-de un tenant (gastos, nómina) con su suscripción de Billing — son ejes
-ortogonales, ni siquiera como métrica de uso salvo una agregación de
-solo lectura explícita, nunca una relación estructural directa entre
-`Subscription` y `Expense`/`Payroll`.
+Asimismo:
 
-## Nota de sincronización — Contabilidad General del ERP vs. Billing del SaaS (separación obligatoria, FASE 14, ya construida)
+```text
+ERP Accounts Receivable
+≠
+SaaS Billing
+```
 
-`apps.accounting` (FASE 14) contabiliza la operación INTERNA de cada
-tenant (sus propias ventas, pagos, gastos, nómina) — un eje
-completamente ortogonal a "lo que el TENANT le debe a Budun ERP por
-usar la plataforma" (`Plan`/`Subscription`, esta fase). Mismo
-principio que las notas anteriores: **nunca** debe existir un
-`JournalEntry`/`Account` que registre la suscripción de un tenant a
-Budun ERP dentro de SU PROPIA contabilidad tenant-scoped — son libros
-contables de dos entidades distintas (el tenant lleva su propia
-contabilidad; lo que el tenant paga a Budun ERP es un gasto operativo
-más para el tenant si acaso, nunca un asiento generado automáticamente
-por `apps.accounting` de este ERP). Si Billing necesitara su propia
-trazabilidad financiera (ingresos de Budun ERP por suscripciones), esa
-sería una contabilidad interna de Budun ERP como operador del SaaS —
-fuera del alcance de `apps.accounting`, que es exclusivamente
-tenant-scoped para la contabilidad de cada empresa cliente.
+El patrón de `Payment`/`PaymentAllocation` del ERP puede servir como referencia estructural, pero Billing SaaS debe mantener sus propios registros y reglas.
 
-**Actualización (ampliación de cierre de FASE 14)**: el mismo
-principio se extiende a las cuentas nuevas (`accounts_payable`,
-`inventory_asset`, `cost_of_goods_sold`, `cash_over`/`cash_short`,
-`TaxCode`) — todas tenant-scoped, ninguna registra ni puede registrar
-la relación Tenant↔Budun ERP.
+No utilizar el antiguo concepto `CustomerCreditLedger` como fuente de verdad separada si contradice la decisión vigente del ERP: los saldos deben derivarse de los ledgers reales y sus aplicaciones.
 
-## Dependencias
-Revisar fases anteriores y `docs/phases/PHASES.md`.
+## 4. Creación de tenants
 
-## Cierre
-No cerrar la fase sin evidencia. Al cerrarla, detenerse y esperar autorización para iniciar la siguiente, salvo instrucción explícita del usuario.
+El Super Admin debe poder crear tenants manualmente.
+
+Flujo:
+
+```text
+Super Admin
+→ Cliente SaaS
+→ Tenant
+→ Plan
+→ Suscripción
+```
+
+El tenant puede quedar en estado pendiente hasta que se cumpla la condición de activación.
+
+## 5. Venta SaaS desde Landing
+
+Debe existir:
+
+```text
+Landing
+→ Pricing
+→ Plan
+→ Periodicidad
+→ Método de pago
+```
+
+Métodos iniciales:
+
+- PayPal/pago online;
+- transferencia bancaria.
+
+El diseño debe permitir agregar métodos futuros.
+
+## 6. Transferencia bancaria — alta inicial
+
+Flujo recomendado:
+
+```text
+Cliente
+→ selecciona transferencia
+→ ve datos bancarios
+→ recibe referencia única
+→ Tenant = PENDING_PAYMENT
+→ sube comprobante
+→ Payment = PENDING_VERIFICATION
+→ Super Admin recibe notificación
+→ revisa
+→ APPROVED / REJECTED
+```
+
+La subida del comprobante nunca activa por sí sola el tenant.
+
+## 7. Venta manual desde Super Admin
+
+Debe existir:
+
+```text
+Super Admin
+→ crear/seleccionar cliente SaaS
+→ crear/seleccionar tenant
+→ plan
+→ periodicidad
+→ registrar venta/pago
+→ método manual
+→ comprobante
+→ verificar
+→ activar
+```
+
+Debe ser la misma base de Billing, no un sistema paralelo.
+
+## 8. Billing recurrente
+
+Soportar:
+
+- mensual;
+- anual;
+- fecha de inicio;
+- fecha de vencimiento;
+- fecha de renovación;
+- recordatorios;
+- período de gracia;
+- PAST_DUE;
+- suspensión;
+- reactivación.
+
+No asumir que la recurrencia depende exclusivamente de PayPal.
+
+## 9. Transferencias mensuales
+
+Dentro del Billing del tenant debe existir una sección como:
+
+```text
+Billing
+→ Transferencia bancaria
+```
+
+Debe permitir:
+
+- ver obligación/factura;
+- ver datos bancarios;
+- ver referencia;
+- subir comprobante;
+- ver estado;
+- consultar historial.
+
+## 10. Payment Proof
+
+El comprobante debe estar vinculado al pago.
+
+Registrar:
+
+- usuario que subió;
+- fecha;
+- referencia;
+- banco;
+- monto declarado;
+- moneda;
+- factura/período relacionado;
+- estado de verificación.
+
+Utilizar almacenamiento seguro.
+
+No hacer público un comprobante.
+
+## 11. Verificación manual
+
+Estados sugeridos:
+
+- PENDING;
+- SUBMITTED;
+- UNDER_REVIEW;
+- APPROVED;
+- REJECTED;
+- REVERSED;
+- REFUNDED.
+
+Guardar:
+
+- quién verificó;
+- cuándo;
+- resultado;
+- motivo.
+
+## 12. OCR futuro
+
+OCR se documenta como extensión futura, no como requisito de la primera entrega.
+
+Flujo futuro:
+
+```text
+Comprobante
+→ OCR
+→ banco/referencia/monto/fecha
+→ matching
+→ score de confianza
+→ aprobación automática o revisión humana
+```
+
+El OCR no debe aprobar por sí solo una transferencia.
+
+Debe existir protección contra comprobantes manipulados.
+
+## 13. SaaS Payment + Payment Allocation
+
+Un pago SaaS debe poder aplicarse:
+
+- a una factura;
+- a varias facturas;
+- parcialmente.
+
+Ejemplo:
+
+```text
+Pago 10,000
+→ Factura A 3,000
+→ Factura B 2,500
+→ Factura C 4,500
+```
+
+Controlar:
+
+- sobreaplicación;
+- idempotencia;
+- reversas;
+- trazabilidad.
+
+## 14. Anticipo vs saldo a favor
+
+### Anticipo
+
+Dinero recibido antes de aplicarse a una obligación concreta.
+
+### Saldo a favor
+
+Crédito disponible del cliente SaaS resultante, por ejemplo, de:
+
+- sobrepago;
+- nota de crédito;
+- refund convertido a crédito;
+- otro ajuste autorizado.
+
+El origen debe conservarse.
+
+No tratar ambos términos como sinónimos.
+
+## 15. Sobrepago
+
+Ejemplo:
+
+```text
+Factura = 3,500
+Pago = 5,000
+```
+
+Resultado:
+
+```text
+3,500 → factura
+1,500 → saldo a favor
+```
+
+Nunca perder el sobrante.
+
+## 16. Notas de crédito
+
+Permitir:
+
+- total;
+- parcial;
+- aplicación a factura;
+- aplicación futura según reglas.
+
+Nunca borrar una factura/pago histórico para corregirlo.
+
+## 17. Refunds
+
+Distinguir:
+
+- refund;
+- nota de crédito;
+- saldo a favor.
+
+Registrar reversas y estado.
+
+No deshacer allocations silenciosamente.
+
+## 18. Planes
+
+Soportar:
+
+- mensual;
+- anual;
+- renovación;
+- upgrade;
+- downgrade;
+- cambio de periodicidad;
+- prorrateo.
+
+La regla de prorrateo debe quedar explícita y auditable.
+
+## 19. Descuentos
+
+Billing debe reutilizar el sistema central de autorizaciones.
+
+Los límites deben contemplar:
+
+- porcentaje;
+- monto.
+
+Nunca depender solo de la UI.
+
+## 20. Multi-moneda
+
+Toda obligación y pago debe tener moneda.
+
+No mezclar monedas.
+
+No realizar conversión implícita.
+
+Si existe conversión, registrar:
+
+- moneda origen;
+- moneda destino;
+- tasa;
+- fecha;
+- origen de la tasa.
+
+## 21. Bank Accounts
+
+El Super Admin debe poder configurar cuentas bancarias de la plataforma:
+
+- banco;
+- país;
+- moneda;
+- titular;
+- número/IBAN cuando corresponda;
+- activa/inactiva.
+
+Las cuentas visibles al cliente deben depender de su moneda/región/política.
+
+## 22. Renovaciones
+
+Soportar:
+
+- renovación automática cuando corresponda;
+- renovación manual;
+- PayPal;
+- transferencia;
+- periodo de gracia;
+- suspensión;
+- reactivación.
+
+## 23. Cambio de plan
+
+Soportar:
+
+- upgrade;
+- downgrade;
+- cambio de periodicidad.
+
+El efecto económico debe quedar trazable.
+
+## 24. Estados del tenant y suscripción
+
+Como mínimo, cubrir estados equivalentes a:
+
+- PENDING_SETUP;
+- PENDING_PAYMENT;
+- ACTIVE;
+- PAST_DUE;
+- SUSPENDED;
+- CANCELLED;
+- EXPIRED.
+
+Mantener coherencia entre:
+
+```text
+Tenant
+Subscription
+Invoice
+Payment
+```
+
+Sin usar un único booleano `paid=true` como fuente de verdad.
+
+## 25. Idempotencia
+
+Obligatoria para:
+
+- PayPal webhooks;
+- recurrencia;
+- creación de facturas periódicas;
+- pagos;
+- allocations;
+- aprobación de transferencias;
+- refunds;
+- reintentos.
+
+Un evento externo repetido no debe duplicar dinero ni período.
+
+## 26. Notificaciones
+
+Como mínimo:
+
+- nueva solicitud de transferencia;
+- comprobante recibido;
+- pago aprobado;
+- pago rechazado;
+- factura próxima a vencer;
+- factura vencida;
+- PAST_DUE;
+- suspensión;
+- reactivación;
+- renovación;
+- fallo de pago.
+
+## 27. Seguridad
+
+Separar estrictamente:
+
+```text
+Platform Super Admin
+Tenant User
+```
+
+El tenant:
+
+- solo ve su Billing;
+- solo ve sus comprobantes;
+- solo ve sus facturas/pagos;
+- no puede aprobarse;
+- no puede cambiar su estado;
+- no puede ver otro tenant.
+
+## 28. Auditoría
+
+Auditar:
+
+- creación/modificación de planes;
+- cambios de precios;
+- suscripciones;
+- facturas;
+- pagos;
+- allocations;
+- reversas;
+- refunds;
+- notas de crédito;
+- verificaciones;
+- cuentas bancarias;
+- creación manual de tenant;
+- activación;
+- suspensión;
+- reactivación.
+
+Nunca registrar secretos.
+
+## 29. Billing y contabilidad
+
+No registrar automáticamente la suscripción SaaS en `apps.accounting` del tenant.
+
+La contabilidad del operador SaaS es un dominio separado si se decide implementarla.
+
+El Billing debe conservar trazabilidad financiera propia aunque no exista todavía un ledger contable completo del operador.
+
+## 30. Reportes
+
+Como mínimo:
+
+- ingresos por período;
+- ingresos por plan;
+- suscripciones activas;
+- nuevas altas;
+- renovaciones;
+- cancelaciones/churn;
+- PAST_DUE;
+- suspendidos;
+- facturas pendientes;
+- transferencias por verificar;
+- pagos PayPal;
+- pagos manuales;
+- anticipos;
+- saldo a favor;
+- notas de crédito;
+- refunds;
+- conciliación.
+
+Exportaciones deben respetar el sistema general de reportes.
+
+## 31. Internacionalización
+
+Billing debe estar preparado para:
+
+- múltiples monedas;
+- países;
+- datos bancarios regionales;
+- métodos de pago adicionales;
+- impuestos/reglas que posteriormente se definan explícitamente.
+
+No inventar reglas fiscales de países no especificados.
+
+## 32. OCR
+
+No es requisito de implementación inicial.
+
+Dejar interfaz/arquitectura documentada para integrar posteriormente un proveedor de OCR con:
+- extracción;
+- confidence score;
+- matching;
+- antifraude;
+- revisión humana.
+
+## 33. Testing
+
+Cubrir:
+
+### Core
+- plans;
+- subscriptions;
+- invoices;
+- payments;
+- allocations;
+- credit balance;
+- advance;
+- credit notes;
+- refunds.
+
+### Transfers
+- submission;
+- upload;
+- verification;
+- rejection;
+- duplicate proof;
+- isolation.
+
+### Lifecycle
+- activation;
+- renewal;
+- past due;
+- suspension;
+- reactivation;
+- cancellation.
+
+### Manual admin
+- create tenant;
+- sell plan;
+- register payment;
+- verify;
+- activate.
+
+### Security
+- tenant isolation;
+- platform authorization;
+- file access;
+- no secret leakage.
+
+### Concurrency / idempotency
+- duplicate payment;
+- duplicate webhook;
+- duplicate recurring generation;
+- concurrent allocation.
+
+## 34. Smoke tests
+
+Flujo Landing:
+
+```text
+plan
+→ transfer
+→ tenant pending
+→ proof
+→ admin approval
+→ active
+```
+
+Flujo PayPal:
+
+```text
+plan
+→ checkout
+→ provider
+→ webhook
+→ paid
+→ active
+```
+
+Flujo mensual por transferencia:
+
+```text
+invoice
+→ transfer
+→ proof
+→ verification
+→ paid
+```
+
+Flujo manual:
+
+```text
+Super Admin
+→ tenant
+→ plan
+→ payment
+→ verification
+→ active
+```
+
+## 35. Criterios de aceptación
+
+- [ ] Billing SaaS separado del ERP tenant-scoped.
+- [ ] Alta desde Landing.
+- [ ] Alta manual.
+- [ ] PayPal.
+- [ ] Transferencias.
+- [ ] Comprobantes.
+- [ ] Verificación.
+- [ ] Billing recurrente.
+- [ ] Multi-factura.
+- [ ] Anticipo.
+- [ ] Saldo a favor.
+- [ ] Notas de crédito.
+- [ ] Refunds.
+- [ ] Renovaciones.
+- [ ] Upgrade/downgrade.
+- [ ] Prorrateo.
+- [ ] Multi-moneda.
+- [ ] Auditoría.
+- [ ] Reportes.
+- [ ] Seguridad.
+- [ ] Idempotencia.
+- [ ] Concurrencia.
+- [ ] Regresión completa.
+- [ ] Smoke tests.
+- [ ] Documentación.
+
+## 36. Regla de parada
+
+FASE 17 no se considera PASS sin evidencia de todos los criterios aplicables.
+
+Al cerrar la fase:
+
+**DETENERSE.**

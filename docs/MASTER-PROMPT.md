@@ -179,6 +179,8 @@ Segunda capa de API (`/api/v1/catalog/`), comercial, deliberadamente separada de
 
 Implementar primero Sandbox. Consultar documentación oficial vigente para API y MCP. No inventar herramientas MCP ni endpoints. El frontend se comunica con Django; Django usa una capa de servicios de pago; MCP es herramienta del agente/desarrollo/operación.
 
+**Precisión de sincronización**: PayPal es un proveedor de pagos del **Billing SaaS** (FASE 17 — lo que un tenant paga a Budun ERP), integrado vía `Payment Provider Interface`, nunca del motor de pagos del ERP operativo de cada tenant (`apps.sales.Payment`/`PaymentAllocation`/`Refund`, FASE 10/11) — dos ejes ortogonales que nunca se mezclan. Ver `docs/paypal.md`/`docs/billing.md`.
+
 ## Integraciones: regla para usuario no técnico
 
 Claude debe intentar automatizar la configuración. Cuando una acción dependa de una contraseña, credencial, cuenta externa, interfaz gráfica o permiso que no tenga, debe explicar exactamente qué hacer, dónde hacerlo, qué valor usar y cómo verificarlo. No debe asumir que pgAdmin se configura mágicamente. Debe leer y seguir `docs/setup/windows-postgresql-pgadmin-step-by-step.md` antes de configurar la base local.

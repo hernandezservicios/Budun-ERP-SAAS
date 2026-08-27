@@ -240,15 +240,24 @@ en el cierre original ("no construir todavía el POS completo"), esa
 interfaz operacional le corresponde a quien la consuma (FASE 11, o una
 futura pantalla de "cuenta corriente de cliente").
 
-## Preparación para PayPal (FASE 16) sin acoplar `Sale`
+## PayPal (FASE 16) — corrección de sincronización: NO se acopla aquí
 
 `Payment.method` incluye `OTHER` como valor extensible (mismo patrón de
-`choices` extensible que `IdentificationType` en FASE 9). Toda la
-lógica de negocio pasa por `services.py` — cuando FASE 16 integre un
-proveedor real, el cambio se localiza ahí (o en un nuevo módulo de
-"Payment Service"/`PaymentProvider` que estas funciones invoquen),
-nunca en las vistas ni en `models.py`. No se construyó ninguna
-integración real todavía.
+`choices` extensible que `IdentificationType` en FASE 9) — sigue
+sirviendo únicamente para que un tenant registre MANUALMENTE que un
+cliente suyo pagó por un medio no listado (p. ej. PayPal fuera del
+sistema), nunca como punto de acoplamiento de una integración en vivo.
+
+**Decisión definitiva** (`docs/phases/PHASE-16-paypal-sandbox.md`,
+`docs/paypal.md`): la integración real de PayPal de FASE 16 es
+exclusivamente para el **Billing SaaS** (lo que un `Tenant` le paga a
+Budun ERP, FASE 17) — nunca para el motor de pagos de este documento.
+Ningún webhook de PayPal escribirá jamás un `Payment`/`PaymentAllocation`
+de `apps.sales`; termina siempre en los modelos propios de Billing
+SaaS. Si en el futuro se decidiera ofrecer PayPal como medio de cobro
+para que un CLIENTE le pague a un TENANT (un dominio distinto del
+Billing SaaS), sería una decisión nueva y explícita, documentada aquí
+cuando se apruebe — no anticipada por este documento.
 
 ## Concurrencia
 
