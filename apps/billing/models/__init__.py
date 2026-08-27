@@ -183,3 +183,28 @@ class PayPalWebhookEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type} ({self.event_id}) — {self.get_status_display()}"
+
+
+# ------------------------------------------------------------------
+# FASE 17 — Billing SaaS completo (ver docs/billing.md). Los modelos
+# arriba (PayPalGatewayStatus/PayPalTransaction/PayPalWebhookEvent) son
+# de FASE 16 y quedan sin cambios. Los de abajo se definieron en
+# archivos separados (`core.py`/`policy.py`/`invoicing.py`/
+# `transfers.py`/`coupons.py`) por volumen — Django los registra igual
+# sin importar el archivo, siempre que se importen aquí, en el módulo
+# canónico `apps.billing.models` que el registro de apps sí escanea.
+# ------------------------------------------------------------------
+
+from .policy import BillingPolicy  # noqa: E402,F401
+from .core import Plan, PlanVersion, SaaSCustomer, Subscription  # noqa: E402,F401
+from .coupons import Coupon  # noqa: E402,F401
+from .invoicing import (  # noqa: E402,F401
+    BillingRefund,
+    CreditNote,
+    CreditNoteApplication,
+    SaaSInvoice,
+    SaaSInvoiceLine,
+    SaaSPayment,
+    SaaSPaymentAllocation,
+)
+from .transfers import BankAccount, PaymentProof  # noqa: E402,F401

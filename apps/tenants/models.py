@@ -8,9 +8,44 @@ class Tenant(models.Model):
     """Una empresa/cliente del SaaS. Toda entidad de negocio futura
     (productos, ventas, POS, etc.) pertenecerá a exactamente un Tenant."""
 
+    class BillingStatus(models.TextChoices):
+        """Ciclo de vida de la SUSCRIPCIÓN de este tenant al SaaS (FASE 17,
+        ver `docs/billing.md`) — deliberadamente separado de `is_active`
+        (que conserva su significado histórico desde FASE 3, sin relación
+        con Billing). `default=ACTIVE` es intencional: preserva el
+        comportamiento de TODO tenant creado antes de FASE 17 (fixtures de
+        tests incluidos) sin ningún cambio — solo los tenants nuevos
+        creados a través del flujo de alta de Billing (`apps.billing`)
+        arrancan explícitamente en `PENDING_SETUP`. Este campo NUNCA se
+        expone en un formulario editable directamente: solo
+        `apps.billing.services` lo cambia, siempre como consecuencia de
+        un evento de negocio real (pago confirmado, factura vencida,
+        política de suspensión) — nunca a mano."""
+
+        PENDING_SETUP = "pending_setup", "Configuración pendiente"
+        PENDING_PAYMENT = "pending_payment", "Pago pendiente"
+        ACTIVE = "active", "Activo"
+        PAST_DUE = "past_due", "Pago vencido (en gracia)"
+        SUSPENDED = "suspended", "Suspendido"
+        CANCELLED = "cancelled", "Cancelado"
+        EXPIRED = "expired", "Expirado"
+
     name = models.CharField("nombre", max_length=150)
     slug = models.SlugField("slug", max_length=150, unique=True)
     is_active = models.BooleanField("activo", default=True)
+    # Referencia perezosa por "app_label.ModelName" (FASE 17,
+    # `apps.billing.models.SaaSCustomer`) — evita un import circular
+    # (`apps.tenants` es la app más fundacional del proyecto; `apps.billing`
+    # es mucho más tardía). Quién CONTRATÓ el plan para este tenant — un
+    # SaaSCustomer puede tener varios Tenants, nunca al revés. Nulo para
+    # todo tenant creado antes de FASE 17.
+    saas_customer = models.ForeignKey(
+        "billing.SaaSCustomer", verbose_name="cliente SaaS", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="tenants",
+    )
+    billing_status = models.CharField(
+        "estado de facturación", max_length=20, choices=BillingStatus.choices, default=BillingStatus.ACTIVE,
+    )
     created_at = models.DateTimeField("creado", auto_now_add=True)
 
     class Meta:
@@ -20,6 +55,13 @@ class Tenant(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def billing_status_blocks_operation(self):
+        """`True` cuando el estado de facturación no permite operación
+        completa del ERP (ver `apps.billing.middleware.BillingStatusMiddleware`)
+        — `ACTIVE`/`PAST_DUE` (en gracia) sí permiten operar con normalidad."""
+        return self.billing_status not in (self.BillingStatus.ACTIVE, self.BillingStatus.PAST_DUE)
 
 
 class Membership(models.Model):

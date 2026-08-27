@@ -162,6 +162,14 @@ class DocumentSequence(TenantScopedModel):
         # FASE 14 (Contabilidad General): mismo patrón — nunca un
         # segundo sistema de numeración por tenant.
         JOURNAL_ENTRY = "journal_entry", "Asiento contable"
+        # FASE 17 (Billing SaaS, apps.billing): mismo patrón — la
+        # numeración de documentos de Billing SaaS (lo que un TENANT paga
+        # a Budun ERP) reutiliza esta misma secuencia por tenant, nunca un
+        # generador paralelo — pese a ser conceptualmente un eje distinto
+        # de los documentos comerciales de arriba (ver docs/billing.md
+        # "Separación obligatoria de Cuentas por Cobrar del ERP").
+        SAAS_INVOICE = "saas_invoice", "Factura de Billing SaaS"
+        SAAS_CREDIT_NOTE = "saas_credit_note", "Nota de crédito de Billing SaaS"
 
     document_type = models.CharField("tipo de documento", max_length=20, choices=DocumentType.choices)
     prefix = models.CharField("prefijo", max_length=10)

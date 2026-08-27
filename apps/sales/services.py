@@ -93,6 +93,11 @@ _PREFIJOS_POR_DEFECTO = {
     # generate_document_number literalmente, nunca reimplementa su
     # propia numeración.
     DocumentSequence.DocumentType.JOURNAL_ENTRY: "AST",
+    # FASE 17 (Billing SaaS) — apps.billing.services llama a
+    # generate_document_number literalmente, nunca reimplementa su
+    # propia numeración.
+    DocumentSequence.DocumentType.SAAS_INVOICE: "INV-SAAS",
+    DocumentSequence.DocumentType.SAAS_CREDIT_NOTE: "NC-SAAS",
 }
 
 
