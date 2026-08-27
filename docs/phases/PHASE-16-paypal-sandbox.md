@@ -1,5 +1,11 @@
 # FASE 16 — PayPal Sandbox + Pagos Online + Integración con Billing SaaS
 
+> **Estado: CONSTRUIDO.** Ver `docs/paypal.md` para el detalle completo
+> de la implementación (`apps.billing`: modelos, provider, endpoints
+> oficiales, idempotencia, webhooks, refunds, permisos, auditoría). El
+> checklist de la sección 18 se marcó abajo con evidencia. FASE 17
+> (Billing SaaS completo) sigue sin implementarse.
+
 ## 1. Objetivo
 
 Implementar la integración profesional de PayPal como proveedor de pagos online de la plataforma SaaS, sin crear un segundo sistema de pagos, suscripciones o facturación.
@@ -272,19 +278,19 @@ Cuando la implementación lo requiera, consultar la documentación oficial vigen
 
 ## 18. Criterios de aceptación
 
-- [ ] Sandbox funcional.
-- [ ] Credenciales seguras.
-- [ ] Webhooks validados.
-- [ ] Idempotencia.
-- [ ] Reconciliación.
-- [ ] Refund cuando corresponda.
-- [ ] Multi-moneda.
-- [ ] Sin duplicar el Billing.
-- [ ] Seguridad revisada.
-- [ ] Suite completa verde.
-- [ ] Smoke test real.
-- [ ] Documentación actualizada.
-- [ ] Git commit.
+- [x] Sandbox funcional — Test Connection, crear orden, consultar orden y verify-webhook-signature ejecutados de verdad contra PayPal Sandbox (9/9 verificaciones, `smoke_paypal_fase16.py`).
+- [x] Credenciales seguras — `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET`/`PAYPAL_WEBHOOK_ID` en `.env` (nunca BD/Git); access token nunca persistido, solo cacheado en memoria.
+- [x] Webhooks validados — verificación oficial de firma (`/v1/notifications/verify-webhook-signature`), probada tanto mockeada (unit tests) como contra el endpoint REAL de Sandbox (smoke test).
+- [x] Idempotencia — `PayPal-Request-Id` hacia PayPal, `UniqueConstraint` en `event_id` hacia nosotros, verificada con hilos reales y con doble entrega real contra Sandbox.
+- [x] Reconciliación — `provider_amount`/`provider_currency` separados de `amount`/`currency` internos.
+- [x] Refund — ciclo completo `CONFIRMED → REFUND_PENDING/REFUNDED/REFUND_FAILED`, sin duplicar reembolsos.
+- [x] Multi-moneda — moneda interna y reportada por PayPal conservadas por separado, nunca mezcladas.
+- [x] Sin duplicar el Billing — ningún `Plan`/`Subscription`/`SaaS Invoice`/`SaaS Payment` creado; `apps.sales.Payment` nunca tocado.
+- [x] Seguridad revisada — credenciales inválidas, ambiente incorrecto, firma inválida/duplicada/manipulada, replay, refund duplicado, acceso no autorizado (403 sin `is_superuser`), sin fuga de secretos (verificado inspeccionando el contenido serializado de cada `AuditLog`).
+- [x] Suite completa verde — **988/988 tests OK** (941 previos + 47 nuevos de `apps.billing`, incluyendo el test de regresión del bug #107).
+- [x] Smoke test real — `smoke_paypal_fase16.py`, 9/9 verificaciones OK contra PayPal Sandbox real (credenciales del usuario).
+- [x] Documentación actualizada — `docs/paypal.md` (reescrito, CONSTRUIDO), `docs/billing.md`, `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md`, `docs/project-status/*`.
+- [x] Git commit.
 
 ## 19. Regla de parada
 

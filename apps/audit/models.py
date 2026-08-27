@@ -48,6 +48,19 @@ class AuditLog(models.Model):
         INTEGRATION_REVOKED = "integration_revoked", "Integración revocada"
         INTEGRATION_ENABLED = "integration_enabled", "Integración habilitada"
         INTEGRATION_DISABLED = "integration_disabled", "Integración deshabilitada"
+        # Billing SaaS / PayPal (FASE 16, ver docs/paypal.md) — dominio
+        # "billing_paypal", nunca mezclado con auditoría del ERP del
+        # tenant. `tenant` puede ser None aquí (prueba de conexión de la
+        # plataforma, webhook sin transacción asociada).
+        PAYPAL_CONFIG_TESTED = "paypal_config_tested", "Conexión de PayPal probada"
+        PAYPAL_CHECKOUT_CREATED = "paypal_checkout_created", "Checkout de PayPal creado"
+        PAYPAL_PAYMENT_CONFIRMED = "paypal_payment_confirmed", "Pago de PayPal confirmado"
+        PAYPAL_PAYMENT_FAILED = "paypal_payment_failed", "Pago de PayPal fallido"
+        PAYPAL_CHECKOUT_CANCELLED = "paypal_checkout_cancelled", "Checkout de PayPal cancelado"
+        PAYPAL_REFUND_REQUESTED = "paypal_refund_requested", "Reembolso de PayPal solicitado"
+        PAYPAL_REFUND_COMPLETED = "paypal_refund_completed", "Reembolso de PayPal completado"
+        PAYPAL_REFUND_FAILED = "paypal_refund_failed", "Reembolso de PayPal fallido"
+        PAYPAL_WEBHOOK_PROCESSED = "paypal_webhook_processed", "Webhook de PayPal procesado"
         SENSITIVE_DATA_VIEWED = "sensitive_data_viewed", "Datos sensibles vistos"
         EXPORT_PERFORMED = "export_performed", "Exportación realizada"
         GENERIC = "generic", "Evento genérico"

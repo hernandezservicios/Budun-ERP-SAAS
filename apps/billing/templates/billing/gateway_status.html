@@ -1,0 +1,74 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Plataforma — PayPal — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Plataforma — PayPal</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Billing SaaS — PayPal</h1>
+        <p class="encabezado-pagina__descripcion">Herramienta exclusiva del Super Admin de la plataforma (nunca visible a un tenant): estado del gateway, prueba de conexión, y transacciones de PayPal (Orders API v2) usadas para probar/operar el mecanismo de pago de la suscripción de un tenant al SaaS.</p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Estado del gateway</h3>
+        <p>
+            Ambiente configurado: <strong>{{ status.last_tested_environment|default:"—" }}</strong> ·
+            Checkout: {% if status.is_enabled %}<span class="badge badge--verde">Habilitado</span>{% else %}<span class="badge badge--advertencia">Deshabilitado</span>{% endif %}
+        </p>
+        {% if status.last_tested_at %}
+        <p>
+            Última prueba: {{ status.last_tested_at }} —
+            {% if status.last_test_ok %}<span class="badge badge--verde">Conectado</span>{% else %}<span class="badge badge--peligro">Falló: {{ status.last_test_error }}</span>{% endif %}
+        </p>
+        {% else %}
+        <p>Todavía no se ha probado la conexión.</p>
+        {% endif %}
+
+        <form method="post" style="display:inline-block; margin-right: var(--espacio-3);">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="probar_conexion">
+            <button type="submit" class="btn btn--primario">Probar conexión</button>
+        </form>
+        <form method="post" style="display:inline-block;">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="alternar_habilitado">
+            <button type="submit" class="btn btn--contorno">{% if status.is_enabled %}Deshabilitar checkout{% else %}Habilitar checkout{% endif %}</button>
+        </form>
+
+        <p style="margin-top: var(--espacio-4);"><a class="btn btn--contorno" href="{% url 'billing_platform:checkout_create' %}">Iniciar un cobro de prueba</a></p>
+    </div>
+</div>
+
+<div class="encabezado-pagina"><h2>Últimas transacciones</h2></div>
+{% if transacciones %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tenant</th><th>Plan</th><th>Propósito</th><th>Monto</th><th>Estado</th><th>Creada</th><th></th></tr></thead>
+        <tbody>
+            {% for t in transacciones %}
+            <tr>
+                <td>{{ t.tenant|default:"—" }}</td>
+                <td>{{ t.plan_id }}</td>
+                <td>{{ t.get_purpose_display }}</td>
+                <td>{{ t.amount }} {{ t.currency }}</td>
+                <td><span class="badge">{{ t.get_status_display }}</span></td>
+                <td>{{ t.created_at }}</td>
+                <td><a class="btn btn--contorno" href="{% url 'billing_platform:transaction_detail' t.pk %}">Ver</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💳</div><h3>Sin transacciones todavía</h3></div>
+{% endif %}
+{% endblock %}

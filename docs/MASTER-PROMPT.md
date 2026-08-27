@@ -181,6 +181,10 @@ Implementar primero Sandbox. Consultar documentación oficial vigente para API y
 
 **Precisión de sincronización**: PayPal es un proveedor de pagos del **Billing SaaS** (FASE 17 — lo que un tenant paga a Budun ERP), integrado vía `Payment Provider Interface`, nunca del motor de pagos del ERP operativo de cada tenant (`apps.sales.Payment`/`PaymentAllocation`/`Refund`, FASE 10/11) — dos ejes ortogonales que nunca se mezclan. Ver `docs/paypal.md`/`docs/billing.md`.
 
+### FASE 16 — construido (`apps.billing`)
+
+Orders API v2 (crear/capturar/reembolsar), nunca Subscriptions API (habría anticipado el `Plan` de FASE 17 del lado de PayPal). `PayPalTransaction`/`PayPalWebhookEvent`/`PayPalGatewayStatus` no heredan `TenantScopedModel` (actor de plataforma, no de tenant); credenciales por variable de entorno, access token nunca persistido. Idempotencia por `PayPal-Request-Id` (hacia PayPal) + `UniqueConstraint` en `event_id` (hacia nosotros); webhook público verificado por firma oficial, nunca ORM directo desde la vista. Administración exclusiva de `is_superuser` (`apps.tenants.permissions.require_superuser`) — el catálogo de `apps.permissions` es tenant-scoped y no aplica aquí. Ver `docs/paypal.md`.
+
 ## Integraciones: regla para usuario no técnico
 
 Claude debe intentar automatizar la configuración. Cuando una acción dependa de una contraseña, credencial, cuenta externa, interfaz gráfica o permiso que no tenga, debe explicar exactamente qué hacer, dónde hacerlo, qué valor usar y cómo verificarlo. No debe asumir que pgAdmin se configura mágicamente. Debe leer y seguir `docs/setup/windows-postgresql-pgadmin-step-by-step.md` antes de configurar la base local.

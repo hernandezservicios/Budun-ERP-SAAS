@@ -5,6 +5,15 @@
 > documento. Detalle completo (36 secciones: componentes, flujos,
 > transferencias, verificación, notas de crédito, refunds, renovaciones,
 > reportes, testing) en `docs/phases/PHASE-17-billing-saas.md`.
+>
+> **Actualización FASE 16**: el proveedor PayPal (Payment Provider
+> Interface → PayPal Provider, `apps.billing`) ya está **construido**
+> — ver `docs/paypal.md`. `Plan`/`Subscription`/`SaaS Invoice`/`SaaS
+> Payment` siguen sin existir como modelos: siguen siendo alcance de
+> esta fase (FASE 17). `apps.core.pricing.PLANS` (FASE 6) ganó
+> `price_amount`/`price_currency` — el mínimo necesario para que FASE
+> 16 pudiera crear una orden real de PayPal con un monto exacto, sin
+> convertirse en el `Plan` real que esta fase construirá.
 
 Billing de la **suscripción del tenant al SaaS** — lo que un `Tenant`
 le debe a Budun ERP por usar la plataforma. Administra planes,

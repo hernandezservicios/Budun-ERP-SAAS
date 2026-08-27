@@ -41,5 +41,11 @@ urlpatterns = [
     path("configuracion/integraciones/", include("apps.api.integration_urls")),
     path("api/v1/catalog/", include("apps.api.catalog_urls")),
     path("api/v1/", include("apps.api.urls")),
+    # Billing SaaS / PayPal (FASE 16, ver docs/paypal.md) — plataforma
+    # (exclusivo Super Admin, nunca dentro de /configuracion/, que es
+    # tenant-scoped) y webhook público, ambos fuera del árbol de rutas
+    # de un tenant.
+    path("plataforma/billing/paypal/", include("apps.billing.urls")),
+    path("webhooks/", include("apps.billing.webhook_urls")),
     path("", include("apps.core.urls")),
 ]

@@ -1,0 +1,23 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Resultado del cobro — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'billing_platform:status' %}">Plataforma — PayPal</a></li>
+        <li aria-current="page">Resultado</li>
+    </ol>
+</nav>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Transacción {{ transaccion.get_status_display }}</h3>
+        <p>Tenant: {{ transaccion.tenant|default:"—" }} · Plan: {{ transaccion.plan_id }}</p>
+        <p>Monto: {{ transaccion.amount }} {{ transaccion.currency }}</p>
+        {% if transaccion.failure_reason %}<p class="badge badge--peligro">{{ transaccion.failure_reason }}</p>{% endif %}
+        <p><a class="btn btn--contorno" href="{% url 'billing_platform:transaction_detail' transaccion.pk %}">Ver detalle</a></p>
+    </div>
+</div>
+{% endblock %}

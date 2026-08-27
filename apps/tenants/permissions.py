@@ -46,3 +46,32 @@ class TenantRequiredMixin:
     def dispatch(self, request, *args, **kwargs):
         require_tenant(request)
         return super().dispatch(request, *args, **kwargs)
+
+
+def require_superuser(request):
+    """Exige `request.user.is_superuser` — el gate de las vistas de
+    PLATAFORMA (`apps.billing`, FASE 16), que administran algo que no
+    pertenece a ningún tenant (la configuración/credenciales de PayPal
+    del propio operador del SaaS). Deliberadamente NO se usa
+    `apps.permissions.require_permission` aquí: ese motor resuelve
+    permisos POR TENANT (`RolePermission` es "qué puede hacer el rol
+    ADMIN en el tenant X"), lo cual no tiene sentido para un recurso que
+    no es de ningún tenant en particular. `is_superuser` ya es, en ese
+    mismo motor, el primer escalón de la jerarquía ("OWNER/superusuario
+    → siempre autorizado", ver `apps.permissions.services.has_permission`)
+    — aquí simplemente es la ÚNICA condición, porque no hay un tenant de
+    quien depender. Lanza `PermissionDenied` (HTTP 403) si no."""
+    user = getattr(request, "user", None)
+    if user is None or not getattr(user, "is_authenticated", False) or not getattr(user, "is_superuser", False):
+        raise PermissionDenied("Esta sección es exclusiva del Super Admin de la plataforma.")
+    return user
+
+
+class SuperuserRequiredMixin:
+    """Mixin para Class-Based Views de plataforma — ver `require_superuser`.
+    Se usa SOLO (nunca junto a `TenantRequiredMixin`): las vistas de
+    plataforma no tienen ni necesitan un tenant activo."""
+
+    def dispatch(self, request, *args, **kwargs):
+        require_superuser(request)
+        return super().dispatch(request, *args, **kwargs)

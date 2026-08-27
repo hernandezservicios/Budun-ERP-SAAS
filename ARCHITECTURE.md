@@ -117,5 +117,20 @@ Segunda capa de API (`/api/v1/catalog/`), comercial, deliberadamente separada de
 
 Reglas permanentes: una credencial de una capa (`ApiKey`/`Integration`) nunca autentica a la otra. `provider` (quién construyó el consumidor externo) nunca se confunde con una "tool" de agente IA (que vive en el consumidor, nunca en este proyecto — nunca se implementa `search_budun()` ni funciones acopladas a un consumidor concreto). Disponibilidad comercial siempre de la misma fuente de verdad que la Inventory API, nunca un contador paralelo.
 
+## PayPal (Payment Provider Interface): construido en FASE 16
+`apps.billing` — ver `docs/paypal.md`. Proveedor de pagos exclusivo del Billing SaaS (FASE 17), nunca del ERP operativo de cada tenant.
+
+| Concepto | Fuente de verdad | Estado |
+|---|---|---|
+| Abstracción de proveedor | `PaymentProvider` (`apps.billing.providers.base`) → `PayPalProvider` (`.paypal`), único hoy | Construido |
+| Transacción de pago | `PayPalTransaction` — no hereda `TenantScopedModel` (actor de plataforma); `amount`/`currency` internos separados de `provider_amount`/`provider_currency` | Construido |
+| Idempotencia de webhook | `PayPalWebhookEvent.event_id` (`UniqueConstraint`) | Construido |
+| Estado del gateway | `PayPalGatewayStatus` (fila única) — credenciales SIEMPRE en variables de entorno, nunca en esta tabla | Construido |
+| Webhook | `/webhooks/paypal/`, público, verificado por firma oficial (`/v1/notifications/verify-webhook-signature`), nunca ORM directo desde la vista | Construido |
+| Administración | `/plataforma/billing/paypal/`, exclusiva `is_superuser` (`apps.tenants.permissions.require_superuser`) | Construido |
+| `Plan`/`Subscription`/`SaaS Invoice`/`SaaS Payment` | — | FASE 17, no construido |
+
+Reglas permanentes: Orders API v2, nunca Subscriptions API (evita anticipar el `Plan` de FASE 17 del lado de PayPal). El access token OAuth2 nunca se persiste (solo cache en memoria del proceso); el client secret nunca se audita ni se expone. Señales de Django (`apps.billing.signals`) son el contrato estable que FASE 17 conectará — `SUBSCRIPTION_ACTIVATED`/`CANCELLED` no se modelan todavía porque no existe ningún `Subscription` al que asociarlos.
+
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

@@ -1,0 +1,63 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Transacción PayPal — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'billing_platform:status' %}">Plataforma — PayPal</a></li>
+        <li aria-current="page">Transacción #{{ transaccion.pk }}</li>
+    </ol>
+</nav>
+
+<div class="tarjeta" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Transacción #{{ transaccion.pk }} — <span class="badge">{{ transaccion.get_status_display }}</span></h3>
+        <p>Tenant: {{ transaccion.tenant|default:"—" }} · Plan: {{ transaccion.plan_id }} · Propósito: {{ transaccion.get_purpose_display }}</p>
+        <p>Ambiente: {{ transaccion.environment }}</p>
+        <p>Monto interno: {{ transaccion.amount }} {{ transaccion.currency }}</p>
+        {% if transaccion.provider_amount %}<p>Monto reportado por PayPal: {{ transaccion.provider_amount }} {{ transaccion.provider_currency }}</p>{% endif %}
+        <p>Orden: <code>{{ transaccion.external_order_id|default:"—" }}</code></p>
+        <p>Captura: <code>{{ transaccion.external_capture_id|default:"—" }}</code></p>
+        <p>Reembolso: <code>{{ transaccion.external_refund_id|default:"—" }}</code></p>
+        {% if transaccion.failure_reason %}<p class="badge badge--peligro">{{ transaccion.failure_reason }}</p>{% endif %}
+    </div>
+</div>
+
+{% if transaccion.status == "confirmed" %}
+<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Reembolsar</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in refund_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--peligro">Reembolsar</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="encabezado-pagina"><h2>Eventos de webhook</h2></div>
+{% if eventos %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tipo</th><th>Estado</th><th>Recibido</th><th>Procesado</th></tr></thead>
+        <tbody>
+            {% for e in eventos %}
+            <tr>
+                <td>{{ e.event_type }}</td>
+                <td><span class="badge">{{ e.get_status_display }}</span></td>
+                <td>{{ e.received_at }}</td>
+                <td>{{ e.processed_at|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📭</div><h3>Sin eventos de webhook todavía</h3></div>
+{% endif %}
+{% endblock %}

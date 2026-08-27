@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     "apps.audit",
     "rest_framework",
     "apps.api",
+    "apps.billing",
 ]
 
 # --- API de Inventario v1 + Catalog API (FASE 15 + ampliación final) -----
@@ -230,6 +231,19 @@ MEDIA_ROOT = BASE_DIR / "media-private"
 # nunca registradas con `static()` en `config/urls.py` (eso expondría el
 # árbol completo de la carpeta sin pasar por la vista/validación).
 CATALOG_MEDIA_ROOT = BASE_DIR / "catalog-media"
+
+# --- Billing SaaS / PayPal (FASE 16, ver docs/paypal.md) -------------------
+# Credenciales de PLATAFORMA (nunca de un tenant) — mismo criterio que
+# DJANGO_SECRET_KEY/DB_PASSWORD: variables de entorno, nunca en base de
+# datos ni en Git. `PAYPAL_CLIENT_SECRET` nunca se audita ni se expone
+# en ninguna vista/API. `PAYPAL_WEBHOOK_ID` es el ID que PayPal asigna
+# al registrar la URL de webhook en el dashboard del desarrollador —
+# necesario para la verificación oficial de firma
+# (`/v1/notifications/verify-webhook-signature`).
+PAYPAL_ENVIRONMENT = os.environ.get("PAYPAL_ENVIRONMENT", "SANDBOX").strip().upper()
+PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "")
+PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "")
+PAYPAL_WEBHOOK_ID = os.environ.get("PAYPAL_WEBHOOK_ID", "")
 
 # Límite duro a nivel de Django (además de la validación explícita en
 # `apps.customers.file_validation`, que corre antes y da un mensaje más

@@ -1,0 +1,32 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Iniciar cobro PayPal — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'billing_platform:status' %}">Plataforma — PayPal</a></li>
+        <li aria-current="page">Iniciar cobro</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Iniciar un cobro de PayPal</h1>
+        <p class="encabezado-pagina__descripcion">Crea una orden real en PayPal (Sandbox o Live, según <code>PAYPAL_ENVIRONMENT</code>) para un tenant y plan existentes. Al enviar, se te redirige a PayPal para aprobar el pago; al volver, el pago se captura automáticamente.</p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Continuar a PayPal</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
