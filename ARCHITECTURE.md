@@ -128,9 +128,28 @@ Reglas permanentes: una credencial de una capa (`ApiKey`/`Integration`) nunca au
 | Estado del gateway | `PayPalGatewayStatus` (fila única) — credenciales SIEMPRE en variables de entorno, nunca en esta tabla | Construido |
 | Webhook | `/webhooks/paypal/`, público, verificado por firma oficial (`/v1/notifications/verify-webhook-signature`), nunca ORM directo desde la vista | Construido |
 | Administración | `/plataforma/billing/paypal/`, exclusiva `is_superuser` (`apps.tenants.permissions.require_superuser`) | Construido |
-| `Plan`/`Subscription`/`SaaS Invoice`/`SaaS Payment` | — | FASE 17, no construido |
+| `Plan`/`Subscription`/`SaaS Invoice`/`SaaS Payment` | `apps.billing` (FASE 17) | Construido |
 
-Reglas permanentes: Orders API v2, nunca Subscriptions API (evita anticipar el `Plan` de FASE 17 del lado de PayPal). El access token OAuth2 nunca se persiste (solo cache en memoria del proceso); el client secret nunca se audita ni se expone. Señales de Django (`apps.billing.signals`) son el contrato estable que FASE 17 conectará — `SUBSCRIPTION_ACTIVATED`/`CANCELLED` no se modelan todavía porque no existe ningún `Subscription` al que asociarlos.
+Reglas permanentes: Orders API v2, nunca Subscriptions API (evita anticipar el `Plan` de FASE 17 del lado de PayPal). El access token OAuth2 nunca se persiste (solo cache en memoria del proceso); el client secret nunca se audita ni se expone. Señales de Django (`apps.billing.signals`) conectadas por `apps.billing.services.paypal_integration` (registrado en `BillingConfig.ready()`).
+
+## Billing SaaS completo: construido en FASE 17
+`apps.billing` — ver `docs/billing.md`. Conecta PayPal (arriba) con el núcleo real de facturación/suscripciones.
+
+| Concepto | Fuente de verdad | Tenant-scoped |
+|---|---|---|
+| Cliente SaaS | `SaaSCustomer` (puede tener varios `Tenant`) | No |
+| Catálogo de planes | `Plan`/`PlanVersion` (versionado real de precios, `UniqueConstraint` parcial: una vigente por plan+frecuencia) | No |
+| Suscripción | `Subscription` | Sí — a diferencia de los modelos de FASE 16 |
+| Factura | `SaaSInvoice`/`SaaSInvoiceLine` (`UniqueConstraint(subscription, period_start)`: idempotencia real de la facturación recurrente) | Sí |
+| Pago | `SaaSPayment`/`SaaSPaymentAllocation` (espejo de `apps.sales.Payment`/`PaymentAllocation`) | Sí |
+| Crédito | `CreditNote`/`CreditNoteApplication`; saldo a favor = suma de saldos sin aplicar (nunca tabla nueva) | Sí |
+| Reembolso | `BillingRefund` (nunca `Refund` a secas — evita confundirse con `apps.sales.Refund`) | Sí |
+| Transferencia | `BankAccount` (plataforma) + `PaymentProof` (tenant, archivo en `media-private/`) | Mixto |
+| Cupón | `Coupon` (sin tabla de redención separada) | No |
+| Política comercial | `BillingPolicy` (fila única: gracia/suspensión/anticipación de factura, nunca hardcodeada) | No |
+| Estado del tenant | `Tenant.billing_status` (default `ACTIVE`) + `BillingStatusMiddleware` | — |
+
+Reglas permanentes: `Tenant.billing_status` es deliberadamente distinto de `is_active` (significado histórico de FASE 3); nunca editable desde un formulario, solo por `apps.billing.services.tenants`. `BillingStatusMiddleware` (después de `TenantMiddleware`) es el único bloqueo de operación — nunca una modificación de `require_tenant`/`TenantRequiredMixin`. Prorrateo por cambio de plan: fórmula lineal por día, explícita (`DECISIONS.md`). Portal (`/facturacion/`) y Super Admin (`/plataforma/billing/admin/`) completamente separados, mismo criterio dual `ApiKey`/`Integration` de FASE 15. `all_objects` explícito en toda relación inversa sobre un modelo tenant-scoped dentro de `apps.billing.services` — nunca confiar en el manager tenant-scoped por defecto fuera de una request real.
 
 ## UI
 Dashboard custom; no Django Admin como UI principal. Dirección visual: SaaS moderno, empresarial, sobrio, legible, azul/verde con neutrales y sin colores estridentes.

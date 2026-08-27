@@ -1,5 +1,13 @@
 # FASE 17 — Billing SaaS Completo
 
+> **Estado: CONSTRUIDO.** Ver `docs/billing.md` para el detalle completo
+> de la implementación (`apps.billing`: modelos, servicios, Portal del
+> tenant, Super Admin, middleware de estado, comandos de
+> administración). El checklist de la sección 35 se marcó abajo con
+> evidencia. OCR real, contabilidad del operador SaaS, otro proveedor
+> de pagos y WACRM siguen sin implementarse (fuera del alcance de esta
+> fase).
+
 ## 1. Objetivo
 
 Construir el sistema profesional de Billing de la plataforma SaaS.
@@ -633,31 +641,31 @@ Super Admin
 
 ## 35. Criterios de aceptación
 
-- [ ] Billing SaaS separado del ERP tenant-scoped.
-- [ ] Alta desde Landing.
-- [ ] Alta manual.
-- [ ] PayPal.
-- [ ] Transferencias.
-- [ ] Comprobantes.
-- [ ] Verificación.
-- [ ] Billing recurrente.
-- [ ] Multi-factura.
-- [ ] Anticipo.
-- [ ] Saldo a favor.
-- [ ] Notas de crédito.
-- [ ] Refunds.
-- [ ] Renovaciones.
-- [ ] Upgrade/downgrade.
-- [ ] Prorrateo.
-- [ ] Multi-moneda.
-- [ ] Auditoría.
-- [ ] Reportes.
-- [ ] Seguridad.
-- [ ] Idempotencia.
-- [ ] Concurrencia.
-- [ ] Regresión completa.
-- [ ] Smoke tests.
-- [ ] Documentación.
+- [x] Billing SaaS separado del ERP tenant-scoped — `apps.billing` nunca toca `apps.sales.Payment`/CxC/CxP; tabla comparativa en `docs/billing.md`.
+- [x] Alta desde Landing — `OnboardingView` → `billing_portal:select_plan` (PENDING_SETUP hasta pagar).
+- [x] Alta manual — `ManualTenantSaleView`, mismo núcleo de `Subscription`.
+- [x] PayPal — conectado vía `apps.billing.services.paypal_integration` (señales de FASE 16), nunca duplicado.
+- [x] Transferencias — `submit_payment_proof`/`approve_payment_proof`/`reject_payment_proof`.
+- [x] Comprobantes — `PaymentProof`, `media-private/`, nunca público.
+- [x] Verificación — estados `PENDING`/`SUBMITTED`/`UNDER_REVIEW`/`APPROVED`/`REJECTED`/`REVERSED`.
+- [x] Billing recurrente — `generate_due_renewal_invoices` (comando `generate_saas_invoices`), idempotente por `UniqueConstraint`.
+- [x] Multi-factura — `apply_payment_to_invoices`/`auto_apply_payment` reparten un pago entre varias facturas.
+- [x] Anticipo — un `SaaSPayment` confirmado sin aplicar.
+- [x] Saldo a favor — `get_subscription_credit_balance`, nunca una tabla nueva.
+- [x] Notas de crédito — `CreditNote`/`CreditNoteApplication`.
+- [x] Refunds — `BillingRefund`, conectado a PayPal cuando aplica, manual cuando no.
+- [x] Renovaciones — `generate_due_renewal_invoices` avanza el período.
+- [x] Upgrade/downgrade — `change_plan`.
+- [x] Prorrateo — `calculate_proration`, fórmula lineal por día documentada.
+- [x] Multi-moneda — moneda propia en cada modelo, nunca mezclada con el ERP del tenant.
+- [x] Auditoría — dominio `"billing_saas"`, nunca secretos.
+- [x] Reportes — `apps.billing.services.reports` (dashboard/ingresos/suscripciones/aging).
+- [x] Seguridad — Super Admin vs. Tenant separados y verificados con tests (403 cruzado); `all_objects` explícito en toda relación inversa.
+- [x] Idempotencia — `UniqueConstraint` en `SaaSInvoice`/aprobación de comprobante vía `select_for_update`.
+- [x] Concurrencia — hilos reales: generación de factura duplicada, sobre-aplicación de pago, doble aprobación de comprobante — exactamente una gana en los tres casos.
+- [x] Regresión completa — ver reporte de cierre para el número exacto.
+- [x] Smoke tests — ver reporte de cierre.
+- [x] Documentación — `docs/billing.md` (reescrito a CONSTRUIDO), `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md`, `docs/project-status/*`.
 
 ## 36. Regla de parada
 
