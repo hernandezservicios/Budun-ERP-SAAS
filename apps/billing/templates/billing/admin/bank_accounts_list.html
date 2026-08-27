@@ -1,0 +1,30 @@
+{% extends "layout_app.html" %}
+{% block title %}Cuentas bancarias — Billing SaaS — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Cuentas bancarias</li></ol>
+</nav>
+<div class="encabezado-pagina"><h1>Cuentas bancarias de la plataforma</h1></div>
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Banco</th><th>País</th><th>Moneda</th><th>Titular</th><th>Cuenta</th><th>Activa</th></tr></thead>
+        <tbody>
+            {% for cuenta in bank_accounts %}
+            <tr><td>{{ cuenta.bank_name }}</td><td>{{ cuenta.country }}</td><td>{{ cuenta.currency }}</td><td>{{ cuenta.account_holder }}</td><td>{{ cuenta.account_number }}</td><td>{{ cuenta.is_active|yesno:"Sí,No" }}</td></tr>
+            {% empty %}<tr><td colspan="6">Sin cuentas configuradas.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Nueva cuenta</h3>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Crear</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

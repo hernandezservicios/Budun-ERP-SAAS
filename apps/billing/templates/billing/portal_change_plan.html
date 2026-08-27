@@ -1,0 +1,32 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Cambiar de plan — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'billing_portal:status' %}">Mi Facturación</a></li>
+        <li aria-current="page">Cambiar de plan</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Cambiar de plan</h1>
+        <p class="encabezado-pagina__descripcion">Plan actual: {{ subscription.plan_version.plan.name }} ({{ subscription.plan_version.get_frequency_display }}). El cambio se prorratea por los días restantes del período actual.</p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Confirmar cambio</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

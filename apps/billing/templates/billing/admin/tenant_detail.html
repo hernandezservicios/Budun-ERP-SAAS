@@ -1,0 +1,37 @@
+{% extends "layout_app.html" %}
+{% block title %}{{ tenant.name }} — Billing SaaS — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:tenants_list' %}">Tenants</a></li><li aria-current="page">{{ tenant.name }}</li></ol>
+</nav>
+<div class="encabezado-pagina"><h1>{{ tenant.name }}</h1><p class="encabezado-pagina__descripcion">Estado de facturación: <span class="badge">{{ tenant.get_billing_status_display }}</span></p></div>
+
+{% if subscription %}
+<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></h3>
+        <p>Período: {{ subscription.current_period_start|default:"—" }} — {{ subscription.current_period_end|default:"—" }}</p>
+    </div>
+</div>
+{% endif %}
+
+<form method="post" style="margin-bottom: var(--espacio-6);">
+    {% csrf_token %}
+    <button type="submit" class="btn btn--peligro" name="accion" value="suspender">Suspender</button>
+    <button type="submit" class="btn btn--contorno" name="accion" value="reactivar">Reactivar</button>
+    <button type="submit" class="btn btn--peligro" name="accion" value="cancelar">Cancelar</button>
+</form>
+
+<div class="encabezado-pagina"><h2>Facturas recientes</h2></div>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Número</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+            {% for invoice in invoices %}
+            <tr><td>{{ invoice.number }}</td><td>{{ invoice.total }} {{ invoice.currency }}</td><td><span class="badge">{{ invoice.get_status_display }}</span></td>
+                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td></tr>
+            {% empty %}<tr><td colspan="4">Sin facturas.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

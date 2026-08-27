@@ -83,7 +83,12 @@ class OnboardingView(LoginRequiredMixin, FormView):
 
     form_class = OnboardingForm
     template_name = "accounts/onboarding.html"
-    success_url = reverse_lazy("dashboard:panel")
+    # FASE 17 (Billing SaaS, ver docs/billing.md sección 15): un tenant
+    # nuevo ya no llega directo al Panel — queda PENDING_SETUP hasta
+    # elegir un plan y completar el pago. Cambio de comportamiento
+    # deliberado respecto a FASE 4/7 (ver `apps/accounts/tests.py`,
+    # actualizado en el mismo commit).
+    success_url = reverse_lazy("billing_portal:select_plan")
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and Membership.objects.filter(
@@ -102,7 +107,12 @@ class OnboardingView(LoginRequiredMixin, FormView):
             slug = f"{base_slug}-{suffix}"
 
         with transaction.atomic():
-            tenant = Tenant.objects.create(name=company_name, slug=slug)
+            # billing_status=PENDING_SETUP explícito (FASE 17): el
+            # default del campo es ACTIVE por compatibilidad con
+            # tenants preexistentes, pero un tenant NUEVO siempre debe
+            # pasar por Billing antes de operar por completo — ver
+            # `apps.billing.middleware.BillingStatusMiddleware`.
+            tenant = Tenant.objects.create(name=company_name, slug=slug, billing_status=Tenant.BillingStatus.PENDING_SETUP)
             Membership.objects.create(
                 user=self.request.user, tenant=tenant, role=Membership.Role.OWNER
             )

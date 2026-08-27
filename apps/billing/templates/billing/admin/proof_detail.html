@@ -1,0 +1,29 @@
+{% extends "layout_app.html" %}
+{% block title %}Comprobante {{ proof.reference }} — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:transfers_queue' %}">Transferencias</a></li><li aria-current="page">{{ proof.reference }}</li></ol>
+</nav>
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">{{ proof.reference }} — <span class="badge">{{ proof.get_status_display }}</span></h3>
+        <p>Tenant: {{ proof.tenant }} · Factura: {{ proof.invoice.number }}</p>
+        <p>Monto declarado: {{ proof.declared_amount }} {{ proof.declared_currency }}</p>
+        <p>Cuenta receptora: {{ proof.bank_account }}</p>
+        <p>Banco de origen declarado: {{ proof.declared_bank_name|default:"—" }}</p>
+        <p>Archivo: {{ proof.original_filename }}</p>
+
+        {% if proof.status == "submitted" or proof.status == "under_review" %}
+        <form method="post" style="display:inline-block; margin-right: var(--espacio-2);">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primario" name="accion" value="aprobar">Aprobar</button>
+        </form>
+        <form method="post" style="display:inline-block;">
+            {% csrf_token %}
+            <input type="text" name="reason" placeholder="Motivo del rechazo" required>
+            <button type="submit" class="btn btn--peligro" name="accion" value="rechazar">Rechazar</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

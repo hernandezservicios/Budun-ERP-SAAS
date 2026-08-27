@@ -1,0 +1,74 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Mi Facturación — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Mi Facturación</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Mi Facturación</h1>
+        <p class="encabezado-pagina__descripcion">Plan, suscripción, facturas y pagos de tu empresa con Budun ERP.</p>
+    </div>
+</div>
+
+{% if not subscription %}
+<div class="estado-vacio tarjeta">
+    <div class="estado-vacio__icono" aria-hidden="true">💳</div>
+    <h3>Todavía no tienes un plan activo</h3>
+    <p><a class="btn btn--primario" href="{% url 'billing_portal:select_plan' %}">Elegir un plan</a></p>
+</div>
+{% else %}
+<div class="tarjeta" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></h3>
+        <p>Frecuencia: {{ subscription.plan_version.get_frequency_display }} · Precio: {{ subscription.plan_version.price_amount }} {{ subscription.plan_version.price_currency }}</p>
+        {% if subscription.current_period_end %}<p>Período actual: {{ subscription.current_period_start }} — {{ subscription.current_period_end }}</p>{% endif %}
+        <p>Estado de facturación del tenant: <span class="badge">{{ tenant.get_billing_status_display }}</span></p>
+        <p>Saldo a favor: {{ credit_balance|default:"0" }}</p>
+
+        {% if subscription.is_effectively_operational %}
+        <p style="margin-top: var(--espacio-4);">
+            <a class="btn btn--contorno" href="{% url 'billing_portal:change_plan' %}">Cambiar de plan</a>
+            <form method="post" action="{% url 'billing_portal:cancel' %}" style="display:inline-block; margin-left: var(--espacio-2);">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--peligro">Cancelar al finalizar el período</button>
+            </form>
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="encabezado-pagina"><h2>Facturas recientes</h2></div>
+{% if invoices %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Número</th><th>Período</th><th>Vencimiento</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+            {% for invoice in invoices %}
+            <tr>
+                <td>{{ invoice.number }}</td>
+                <td>{{ invoice.period_start }} — {{ invoice.period_end }}</td>
+                <td>{{ invoice.due_date }}</td>
+                <td>{{ invoice.total }} {{ invoice.currency }}</td>
+                <td><span class="badge">{{ invoice.get_status_display }}</span></td>
+                <td>
+                    {% if invoice.status == "open" or invoice.status == "partially_paid" %}
+                    <a class="btn btn--contorno btn--sm" href="{% url 'billing_portal:transfer_instructions' invoice.pk %}">Pagar</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin facturas todavía</h3></div>
+{% endif %}
+{% endif %}
+{% endblock %}

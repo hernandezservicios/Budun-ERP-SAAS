@@ -1,0 +1,23 @@
+{% extends "layout_app.html" %}
+{% block title %}Clientes SaaS — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Clientes SaaS</li></ol>
+</nav>
+<div class="encabezado-pagina"><h1>Clientes SaaS</h1></div>
+{% if customers %}
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Nombre</th><th>Correo</th><th>País</th><th></th></tr></thead>
+        <tbody>
+            {% for customer in customers %}
+            <tr><td>{{ customer.name }}</td><td>{{ customer.email }}</td><td>{{ customer.country|default:"—" }}</td>
+                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:customer_detail' customer.pk %}">Ver</a></td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧑‍💼</div><h3>Sin clientes SaaS todavía</h3></div>
+{% endif %}
+{% endblock %}

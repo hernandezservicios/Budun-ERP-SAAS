@@ -136,6 +136,10 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Requiere que AuthenticationMiddleware ya haya resuelto request.user.
     "apps.tenants.middleware.TenantMiddleware",
+    # FASE 17 — requiere que TenantMiddleware ya haya resuelto
+    # request.tenant. default=ACTIVE en Tenant.billing_status garantiza
+    # que ningún tenant preexistente cambia de comportamiento.
+    "apps.billing.middleware.BillingStatusMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -244,6 +248,13 @@ PAYPAL_ENVIRONMENT = os.environ.get("PAYPAL_ENVIRONMENT", "SANDBOX").strip().upp
 PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "")
 PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_WEBHOOK_ID = os.environ.get("PAYPAL_WEBHOOK_ID", "")
+
+# --- Billing SaaS (FASE 17) -------------------------------------------------
+# Correo OPCIONAL del Super Admin de plataforma para notificaciones
+# administrativas (nueva transferencia recibida, etc.) — vacío por
+# defecto: el dashboard de Billing ya muestra los pendientes en vivo,
+# el correo es una conveniencia adicional, nunca el único canal.
+PLATFORM_ADMIN_EMAIL = os.environ.get("PLATFORM_ADMIN_EMAIL", "")
 
 # Límite duro a nivel de Django (además de la validación explícita en
 # `apps.customers.file_validation`, que corre antes y da un mensaje más

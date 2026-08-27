@@ -111,6 +111,12 @@ PERMISSION_CATALOG = [
     ("api.integration.revoke", "Revocar una integración", "api"),
     ("api.integration.test", "Probar conexión de una integración", "api"),
 
+    # Portal de Billing SaaS del propio tenant (FASE 17) — NUNCA la
+    # administración de plataforma (`/plataforma/billing/...`, exclusiva
+    # `is_superuser`, ver `apps.tenants.permissions.require_superuser`).
+    ("billing.saas.view", "Ver mi Billing (plan, facturas, pagos)", "billing"),
+    ("billing.saas.manage", "Gestionar mi Billing (cambiar plan, cancelar, subir comprobantes)", "billing"),
+
     ("audit.view", "Ver auditoría", "audit"),
     ("audit.export", "Exportar auditoría", "audit"),
     ("audit.sensitive.view", "Ver eventos de auditoría sensibles", "audit"),
@@ -145,6 +151,11 @@ _ADMIN_EXCLUYE = {
     "api.inventory.manage", "api.inventory.rotate", "api.inventory.revoke",
     "api.integration.create", "api.integration.update", "api.integration.rotate", "api.integration.revoke",
     "settings.manage",
+    # Billing SaaS del propio tenant (FASE 17) — igual de sensible que
+    # cerrar un período contable o administrar la API: solo el
+    # propietario ve/gestiona la suscripción de su empresa al SaaS por
+    # defecto (el tenant puede personalizarlo vía RolePermission).
+    "billing.saas.view", "billing.saas.manage",
 }
 
 _MANAGER_INCLUYE = {

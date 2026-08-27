@@ -1,19 +1,11 @@
-# SaaS Billing (especificación)
+# SaaS Billing (`apps.billing`)
 
-> **Estado: ESPECIFICACIÓN, no implementación.** Diseño aprobado para
-> FASE 17 — ningún modelo, campo ni migración se crea a partir de este
-> documento. Detalle completo (36 secciones: componentes, flujos,
-> transferencias, verificación, notas de crédito, refunds, renovaciones,
-> reportes, testing) en `docs/phases/PHASE-17-billing-saas.md`.
->
-> **Actualización FASE 16**: el proveedor PayPal (Payment Provider
-> Interface → PayPal Provider, `apps.billing`) ya está **construido**
-> — ver `docs/paypal.md`. `Plan`/`Subscription`/`SaaS Invoice`/`SaaS
-> Payment` siguen sin existir como modelos: siguen siendo alcance de
-> esta fase (FASE 17). `apps.core.pricing.PLANS` (FASE 6) ganó
-> `price_amount`/`price_currency` — el mínimo necesario para que FASE
-> 16 pudiera crear una orden real de PayPal con un monto exacto, sin
-> convertirse en el `Plan` real que esta fase construirá.
+> **Estado: CONSTRUIDO en FASE 17** (ver `docs/phases/PHASE-17-billing-saas.md`
+> para el checklist completo). Reemplaza la especificación anterior de
+> este documento — todo lo descrito aquí abajo ya existe en el código,
+> no es un plan. El proveedor PayPal (FASE 16) sigue documentado en
+> `docs/paypal.md`; esta fase lo CONECTA con el núcleo real de Billing
+> (`Subscription`/`SaaS Invoice`/`SaaS Payment`) en vez de duplicarlo.
 
 Billing de la **suscripción del tenant al SaaS** — lo que un `Tenant`
 le debe a Budun ERP por usar la plataforma. Administra planes,
@@ -32,122 +24,261 @@ Super Admin de la plataforma.
 |---|---|---|
 | Qué es | Lo que un CLIENTE le debe a un TENANT | Lo que un TENANT le debe a Budun ERP |
 | Quién administra | El propio tenant (dueño/empleados) | El Super Admin de la plataforma |
-| Modelos | `Customer`, `Sale`, `Payment`, `PaymentAllocation`, `CreditNote` (construidos) | `SaaS Customer`, `Plan`, `Subscription`, `SaaS Invoice`, `SaaS Payment` (esta fase) |
-| PayPal | No se integra en esta capa (ver `docs/paypal.md`) | Provider oficial de pagos (FASE 16) |
+| Modelos | `Customer`, `Sale`, `Payment`, `PaymentAllocation`, `CreditNote` | `SaaSCustomer`, `Plan`/`PlanVersion`, `Subscription`, `SaaSInvoice`, `SaaSPayment` |
+| PayPal | No se integra en esta capa (ver `docs/paypal.md`) | Provider oficial de pagos (FASE 16, conectado en esta fase) |
 
 `apps.customers.Customer` (cliente comercial de un tenant) **nunca**
-se confunde con "SaaS Customer" (el cliente/comprador de la
-plataforma, es decir, quien contrata el plan para un `Tenant`) — son
-conceptos distintos aunque ambos se llamen coloquialmente "cliente".
+se confunde con `SaaSCustomer` (quien contrata el plan para uno o
+varios `Tenant`) — son conceptos distintos aunque ambos se llamen
+coloquialmente "cliente". `CustomerCreditLedger` como tabla separada
+**no existe** — el saldo a favor de Billing SaaS se deriva SIEMPRE
+sumando el saldo sin aplicar de `SaaSPayment` + el saldo sin aplicar
+de `CreditNote` (`apps.billing.services.credits.
+get_subscription_credit_balance`), exactamente el mismo criterio que
+ya rigió Cuentas por Cobrar/Pagar del ERP — nunca una tercera fuente
+de verdad.
 
-`CustomerCreditLedger` como tabla separada **no existe ni se
-construirá** como fuente de verdad del ERP (decisión final ya
-documentada en `docs/accounts-receivable.md`) — si Billing SaaS
-necesita un concepto de saldo a favor propio, será una construcción
-NUEVA y propia de Billing (ver sección de Anticipo/saldo a favor más
-abajo), nunca una reutilización cruzada del ledger del ERP.
+## Modelos (`apps.billing.models`)
 
-Ver `docs/phases/PHASE-17-billing-saas.md` para el razonamiento
-completo. Si en el futuro se quisiera un plan de Billing basado en el
-volumen de ventas/cuentas por cobrar de un tenant (métrica de uso),
-sería una agregación de solo lectura sobre `apps.sales`, nunca una
-relación estructural directa entre `Subscription` y `Customer`.
+- **`SaaSCustomer`**: NO hereda `TenantScopedModel` — puede asociarse
+  a varios `Tenant` (`Tenant.saas_customer`, FK perezosa
+  `"billing.SaaSCustomer"` para no acoplar `apps.tenants`, la app más
+  fundacional, a una app mucho más tardía).
+- **`Plan`/`PlanVersion`**: catálogo global (NO tenant-scoped) con
+  versionado real de precios — `PlanVersion.UniqueConstraint(plan,
+  frequency, condition=is_current)` (índice único parcial de
+  PostgreSQL) garantiza a nivel de BASE DE DATOS que solo una versión
+  esté vigente por plan+frecuencia. Cambiar el precio nunca edita una
+  fila existente — crea una nueva `PlanVersion`; una `Subscription` ya
+  creada referencia la versión VIGENTE al momento de suscribirse
+  (snapshot histórico, mismo principio que `SaleItem`). Reemplaza a
+  `apps.core.pricing.PLANS` (FASE 6) como fuente de verdad real
+  (`apps.billing.services.subscriptions.resolve_plan_pricing` prueba
+  primero el `Plan` real, cae al estático solo si no existe) — `PLANS`
+  se conserva sin cambios como referencia histórica.
+- **`Subscription`**: a diferencia de los modelos de FASE 16, SÍ hereda
+  `TenantScopedModel` — el propio tenant la consulta en su Portal de
+  Billing dentro de una request normal (`request.tenant` ya resuelto);
+  el Super Admin cruza tenants vía `all_objects`, mismo patrón dual que
+  `ApiKey`/`Integration` (FASE 15). Estados: `PENDING`/`ACTIVE`/
+  `PAST_DUE`/`SUSPENDED`/`CANCELLED`/`EXPIRED`.
+- **`SaaSInvoice`/`SaaSInvoiceLine`**: `UniqueConstraint(subscription,
+  period_start)` es la garantía REAL (de base de datos) de que la
+  generación recurrente nunca duplica la factura de un período —
+  `apps.billing.services.invoicing.generate_invoice_for_subscription`
+  captura el `IntegrityError` y devuelve la fila existente, idéntico
+  patrón a `PayPalWebhookEvent.event_id` en FASE 16. Numeración vía la
+  MISMA `DocumentSequence` del proyecto (`SAAS_INVOICE`, prefijo
+  `INV-SAAS-`) — nunca un generador paralelo.
+- **`SaaSPayment`/`SaaSPaymentAllocation`**: espejo estructural de
+  `apps.sales.Payment`/`PaymentAllocation` (mismas reglas de
+  no-sobre-aplicación, `select_for_update` en pago Y factura, reverso
+  en vez de edición). `SaaSPayment.paypal_transaction` referencia el
+  detalle de PayPal (FASE 16) sin duplicar sus campos.
+- **`CreditNote`/`CreditNoteApplication`**: espejo de `apps.sales.
+  CreditNote`, numeración `NC-SAAS-` vía la misma `DocumentSequence`.
+- **`BillingRefund`**: registro de NEGOCIO "este pago SaaS fue
+  reembolsado" — nombre deliberado (no "Refund" a secas) para nunca
+  confundirse con `apps.sales.Refund` ni con el seguimiento interno de
+  refund de `PayPalTransaction` (FASE 16).
+- **`BankAccount`** (plataforma, NO tenant-scoped) / **`PaymentProof`**
+  (tenant-scoped, archivo en `media-private/`, mismo mecanismo que
+  `apps.customers` — nombre de archivo generado, nunca público, nunca
+  el original). Estados de verificación exactos de la especificación:
+  `PENDING`/`SUBMITTED`/`UNDER_REVIEW`/`APPROVED`/`REJECTED`/`REVERSED`.
+- **`Coupon`**: estructura simple (sin tabla de redención separada,
+  `times_redeemed` incrementado atómicamente) — "no crear un motor
+  innecesariamente complejo si el proyecto no lo necesita".
+- **`BillingPolicy`**: fila única — días de gracia, días para
+  suspender, días de anticipación de factura — NUNCA hardcodeados en
+  código (sección 31 de la fase).
 
-## PayPal como provider, nunca un segundo sistema de pagos
+## Estado del tenant: `Tenant.billing_status`
 
-Ver `docs/paypal.md` (reescrito tras esta sincronización): PayPal se
-integra exclusivamente vía `Payment Provider Interface → PayPal
-Provider`, terminando siempre en los modelos propios de Billing SaaS
-(`SaaS Payment`) — nunca en `apps.sales.Payment`.
+Campo nuevo en `Tenant` (`apps.tenants`), deliberadamente SEPARADO de
+`is_active` (que conserva su significado histórico de FASE 3, sin
+relación con Billing). `default=ACTIVE` — decisión crítica de
+compatibilidad: TODO tenant/fixture preexistente a esta fase conserva
+su comportamiento exacto; solo los tenants NUEVOS (creados vía
+`OnboardingView` o la venta manual de Super Admin) arrancan
+explícitamente en `PENDING_SETUP`. Nunca se edita desde un formulario
+directo — solo `apps.billing.services.tenants` (activar/marcar
+past_due/suspender/reactivar/cancelar), siempre como consecuencia de
+un evento de negocio real.
 
-## Alcance previsto (resumen — ver PHASE-17 para el detalle completo)
+`apps.billing.middleware.BillingStatusMiddleware` (registrado después
+de `TenantMiddleware`) es el ÚNICO punto que bloquea la operación
+completa del ERP cuando `billing_status` no es `ACTIVE`/`PAST_DUE`
+(en gracia) — redirige (nunca lanza una excepción) al Portal de
+Billing propio del tenant, salvo en una lista exenta (`/facturacion/`,
+`/cuentas/`, `/plataforma/`, `/webhooks/`, `/admin/`, `/static/`).
+Deliberadamente un middleware nuevo, NUNCA una modificación de
+`apps.tenants.permissions.require_tenant`/`TenantRequiredMixin` (el
+choke point ya usado por ~100 vistas existentes) — bajo riesgo, cero
+impacto en tests/fixtures preexistentes gracias al default `ACTIVE`.
 
-- **Creación de tenants y venta**: alta desde Landing (plan →
-  periodicidad → método de pago) y alta manual por el Super Admin
-  (mismo flujo de Billing subyacente, nunca un sistema paralelo) —
-  ambas terminan en el mismo `Tenant`/`Subscription`.
-- **Métodos de pago iniciales**: PayPal (online) y transferencia
-  bancaria — diseño abierto a métodos futuros.
-- **Transferencia bancaria**: referencia única por solicitud,
-  `Tenant`/`SaaS Invoice` quedan `PENDING_PAYMENT`/`PENDING_VERIFICATION`
-  hasta que el Super Admin revisa el comprobante (`Payment Proof`,
-  almacenamiento seguro, nunca público) y aprueba/rechaza
-  manualmente — subir un comprobante **nunca** activa el tenant por sí
-  solo. Estados de verificación: `PENDING`/`SUBMITTED`/`UNDER_REVIEW`/
-  `APPROVED`/`REJECTED`/`REVERSED`/`REFUNDED`.
-- **OCR**: documentado como extensión FUTURA (extracción + matching +
-  score de confianza + revisión humana) — no es requisito de la
-  primera entrega; el OCR nunca aprueba una transferencia por sí solo.
-- **`SaaS Payment`/`SaaS Payment Allocation`**: un pago puede aplicarse
-  a una o varias facturas, parcialmente — mismo patrón estructural que
-  `Payment`/`PaymentAllocation` del ERP (nunca la misma tabla, nunca
-  compartida entre dominios), con las mismas reglas de no-sobre-aplicación
-  e idempotencia.
-- **Anticipo vs. saldo a favor**: dos conceptos distintos con origen
-  propio (sobrepago, nota de crédito, refund convertido a crédito,
-  otro ajuste) — nunca sinónimos, nunca se pierde el sobrante de un
-  pago mayor a la factura.
-- **Notas de crédito y refunds**: total o parcial, aplicación a
-  factura o futura; refund/nota de crédito/saldo a favor se
-  distinguen siempre, nunca se deshacen allocations en silencio.
-- **Planes**: mensual/anual, renovación, upgrade/downgrade, cambio de
-  periodicidad, prorrateo (regla explícita y auditable, nunca
-  implícita).
-- **Descuentos**: reutilizan el sistema central de autorizaciones
-  (`apps.approvals`, ver `docs/approvals.md`) — nunca un segundo
-  sistema de límites/aprobación.
-- **Cuentas bancarias de la plataforma**: configurables por el Super
-  Admin (banco/país/moneda/titular/IBAN/activa), visibles al cliente
-  según su moneda/región.
-- **Estados de tenant/suscripción**: como mínimo
-  `PENDING_SETUP`/`PENDING_PAYMENT`/`ACTIVE`/`PAST_DUE`/`SUSPENDED`/
-  `CANCELLED`/`EXPIRED` — nunca un único booleano `paid=true` como
-  fuente de verdad; coherencia obligatoria entre
-  `Tenant`/`Subscription`/`Invoice`/`Payment`.
-- **Notificaciones**: nueva solicitud de transferencia, comprobante
-  recibido, pago aprobado/rechazado, factura próxima a vencer/vencida,
-  `PAST_DUE`, suspensión, reactivación, renovación, fallo de pago.
-- **Seguridad**: separación estricta Platform Super Admin / Tenant
-  User — un tenant nunca puede aprobarse a sí mismo, cambiar su propio
-  estado, ni ver el Billing de otro tenant.
-- **Auditoría**: ciclo de vida completo (planes, precios,
-  suscripciones, facturas, pagos, allocations, reversas, refunds,
-  notas de crédito, verificaciones, cuentas bancarias, creación/
-  activación/suspensión/reactivación de tenant) — nunca secretos.
-- **Reportes**: ingresos por período/plan, altas, renovaciones,
-  churn, `PAST_DUE`, suspendidos, facturas pendientes, transferencias
-  por verificar, pagos por método, anticipos, saldo a favor, notas de
-  crédito, refunds, conciliación — exportaciones vía el sistema
-  general de reportes (`apps.reports`), nunca un exportador paralelo.
-- **Contabilidad**: nunca se registra automáticamente en
-  `apps.accounting` tenant-scoped — un dominio contable separado del
-  operador SaaS, si se decide implementarlo, nunca mezclado con la
-  contabilidad de cada tenant.
-- **Idempotencia**: obligatoria para webhooks de PayPal, recurrencia,
-  facturación periódica, pagos, allocations, aprobación de
-  transferencias y refunds — un evento externo repetido nunca duplica
-  dinero ni período.
+## PayPal como provider, conectado (no un segundo sistema de pagos)
 
-## Moneda (sincronización posterior a FASE 12, especificación — ver `docs/currency.md`)
+`apps.billing.services.paypal_integration` conecta las señales de
+FASE 16 (`payment_confirmed`/`payment_failed`/`refund_completed`/
+`refund_failed`) con el núcleo real: al confirmarse un pago PayPal, se
+localiza el `SaaSPayment` asociado (`paypal_transaction` FK), se
+confirma, se aplica automáticamente a las facturas abiertas
+(`auto_apply_payment`) y se activa la suscripción/tenant si
+corresponde — conectado en `apps.billing.apps.BillingConfig.ready()`
+(patrón estándar de Django para receptores de señales). Ninguna lógica
+de OAuth/webhook/credenciales se reimplementa — se reutiliza
+literalmente `apps.billing.services.create_checkout`/`capture_checkout`/
+`request_refund` de FASE 16.
 
-`Plan.currency` (la moneda en la que se fija el precio del plan) y
-`Subscription.currency` (heredada del plan al momento de suscribirse,
-snapshot histórico — un cambio de precio/moneda del plan después nunca
-debe alterar lo que ya paga un tenant suscrito, mismo principio de
-snapshot que `SaleItem`/`PurchaseOrderItem`) — ninguno de los dos campos
-existe hoy. `provider_currency` (la moneda que PayPal Subscriptions
-reporta) se mantiene igual que en `docs/paypal.md`. Esto sigue sin
-mezclarse con la moneda de las ventas/cuentas por cobrar del ERP de
-cada tenant (`Sale.currency`/`Payment.currency`) — la separación
-ERP Accounts Receivable / SaaS Billing (ver arriba) aplica también a la
-moneda: cada eje tiene la suya, nunca una FK compartida entre ambos.
-Toda obligación/pago de Billing debe tener moneda propia; si existe
-conversión, se registra moneda origen/destino/tasa/fecha/origen de la
-tasa — nunca una conversión implícita.
+## Flujo de alta (Landing/Onboarding → Billing)
 
-## Qué NO se construye con este documento
+`apps.accounts.views.OnboardingView` (FASE 4/7) — cambio de
+comportamiento DELIBERADO: un tenant nuevo ya no llega directo al
+Panel; queda `PENDING_SETUP` y se redirige a
+`billing_portal:select_plan` (test actualizado en el mismo commit,
+`apps/accounts/tests.py`). El Portal (`/facturacion/`,
+`apps.billing.portal_views`) deja elegir un `PlanVersion` real + método
+de pago (PayPal o transferencia); ambos flujos generan la primera
+`SaaSInvoice` mediante el mismo servicio (`generate_invoice_for_subscription`).
+La venta manual por Super Admin (`/plataforma/billing/admin/venta-manual/`,
+`ManualTenantSaleView`) usa EXACTAMENTE el mismo núcleo (`Tenant` +
+`Membership` OWNER + `SaaSCustomer` + `Subscription` PENDING vía
+`create_subscription`) — nunca escribe `Tenant.billing_status=ACTIVE`
+directamente.
 
-Ningún modelo (`Plan`, `Subscription`, `SaaS Payment`, etc.), ninguna
-integración con PayPal, ningún límite de plan aplicado, ninguna
-implementación de OCR. Ver `docs/phases/PHASE-17-billing-saas.md`
-para el checklist completo de la fase.
+## Transferencia bancaria
+
+`apps.billing.services.transfers`: `submit_payment_proof` (valida el
+archivo con `apps.customers.file_validation`, genera una referencia
+única, marca el tenant `PENDING_PAYMENT` — nunca activa nada) →
+`approve_payment_proof` (Super Admin, crea el `SaaSPayment` CONFIRMED,
+lo aplica automáticamente, activa suscripción/tenant) o
+`reject_payment_proof` (nunca activa). Notificaciones por correo
+(`apps.billing.services.notifications`, reutiliza `EMAIL_BACKEND`
+existente desde FASE 4 — no existe todavía ningún centro de
+notificaciones in-app en el proyecto, construir uno sería un
+subsistema nuevo fuera del alcance de esta fase).
+
+## Anticipo, saldo a favor, sobrepago
+
+Generalizado exactamente como Cuentas por Cobrar del ERP — nunca una
+tabla nueva:
+- **Anticipo** = un `SaaSPayment` CONFIRMED sin aplicar todavía.
+- **Saldo a favor** = `get_subscription_credit_balance` = suma del
+  saldo sin aplicar de los pagos confirmados + el saldo sin aplicar de
+  las notas de crédito.
+- **Sobrepago**: `auto_apply_payment` aplica a las facturas abiertas
+  más antiguas en orden hasta agotar el pago o las facturas — el
+  sobrante queda simplemente SIN APLICAR, que es, por definición, el
+  saldo a favor (nunca se pierde, nunca requiere un campo nuevo).
+- **Refund convertido a crédito**: `convert_payment_to_credit` reversa
+  las asignaciones activas del pago — el monto vuelve a quedar sin
+  aplicar (saldo a favor), sin crear ningún modelo nuevo.
+
+## Cambio de plan y prorrateo
+
+`apps.billing.services.subscriptions.change_plan` — el período NO
+cambia, solo la `PlanVersion` referenciada. Prorrateo lineal por DÍA
+(`calculate_proration`, fórmula explícita y documentada, ver
+`DECISIONS.md`): `valor_diario = precio / días_del_período`; `crédito
+= valor_diario_actual × días_restantes`; `cargo = valor_diario_nuevo ×
+días_restantes`; `neto = cargo − crédito`. Un neto negativo (downgrade)
+emite una `CreditNote` automáticamente; un neto positivo (upgrade) se
+audita pero no genera cargo inmediato en esta fase (queda reflejado en
+la próxima factura recurrente, que ya usa el nuevo precio) — decisión
+explícita, ver `DECISIONS.md`.
+
+## PAST_DUE / Suspensión / Reactivación
+
+`BillingPolicy` (fila única) define `grace_period_days`/
+`past_due_to_suspend_days`/`invoice_advance_days` — nunca hardcodeados.
+Dos comandos de administración (pensados para cron real en producción;
+no hay Celery/Redis en este proyecto, ver CLAUDE.md):
+`manage.py generate_saas_invoices` (renovación recurrente, idempotente
+por el `UniqueConstraint` de `SaaSInvoice`) y
+`manage.py apply_billing_past_due_policy` (ACTIVE → PAST_DUE cuando una
+factura supera el período de gracia; PAST_DUE → SUSPENDED cuando además
+supera `past_due_to_suspend_days`). `manage.py seed_billing_plans`
+siembra los 3 planes reales a partir de `apps.core.pricing.PLANS`
+(idempotente).
+
+## Super Admin (`/plataforma/billing/admin/`) y Portal del tenant (`/facturacion/`)
+
+Dos superficies completamente separadas, mismo criterio que FASE 16:
+
+- **Super Admin** (`apps.billing.admin_views`, exclusivo
+  `is_superuser` — `apps.tenants.permissions.require_superuser`, el
+  catálogo tenant-scoped de `apps.permissions` no aplica a un recurso
+  de plataforma): Dashboard (MRR/ARR/altas/cancelaciones/transferencias
+  pendientes/ingresos/reembolsos), Clientes SaaS, Tenants (suspender/
+  reactivar/cancelar), Venta manual, Planes (crear plan + nueva versión
+  de precio), Suscripciones, Facturas (detalle con líneas/pagos
+  aplicados/notas de crédito aplicadas), Pagos (solicitar reembolso),
+  Transferencias (cola + aprobar/rechazar), Notas de crédito,
+  Reembolsos, Cuentas bancarias, Reportes.
+- **Portal del tenant** (`apps.billing.portal_views`, permisos
+  `billing.saas.view`/`billing.saas.manage` — nuevos en
+  `apps.permissions.catalog`, dominio "billing", excluidos de ADMIN por
+  defecto igual que `accounting.close_period`/`api.inventory.manage`:
+  solo el propietario ve/gestiona por defecto): estado de la
+  suscripción, elegir plan, pagar por PayPal o transferencia, subir
+  comprobante, cambiar de plan, cancelar. Enlazado desde la barra
+  lateral principal ("Mi Facturación").
+
+## Seguridad
+
+Separación estricta Platform Super Admin / Tenant User verificada con
+tests: un tenant normal recibe 403 en cualquier vista
+`/plataforma/billing/admin/...`; el Portal siempre filtra por
+`request.tenant` (nunca un ID enviado por el cliente); los archivos de
+comprobante nunca se sirven públicamente. `all_objects` explícito en
+TODO acceso a relación inversa sobre un modelo `TenantScopedModel`
+dentro de `apps.billing.services` — nunca `instancia.relacion_inversa`
+(que usa el manager tenant-scoped por defecto, dependiente de un
+`ContextVar` que no existe en un comando de administración, un
+receptor de señal de webhook, o un test) — ver `KNOWN_ISSUES.md`.
+
+## Auditoría
+
+Dominio `"billing_saas"` (distinto de `"billing_paypal"`, FASE 16) vía
+`apps.billing.services._saas_audit.audit_event` — mismo patrón
+resiliente de siempre (nunca rompe la operación de negocio). Nunca se
+audita ningún secreto.
+
+## Concurrencia e idempotencia
+
+Probado con hilos reales (`TransactionTestCase`): dos generaciones
+simultáneas de la factura del mismo período (una gana, nunca duplica),
+dos asignaciones simultáneas que exceden el saldo de un pago (una
+gana), dos aprobaciones simultáneas del mismo comprobante (un solo
+`SaaSPayment` creado). Idempotencia real (constraints de base de
+datos, nunca solo "el código no se llama dos veces") en: generación de
+factura por período, aprobación de comprobante (`select_for_update`
+sobre `PaymentProof`), renovación recurrente.
+
+## Reportes
+
+`apps.billing.services.reports` (nunca `apps.reports`, exclusivamente
+tenant-scoped) — dashboard (MRR/ARR/altas/cancelaciones/transferencias
+pendientes/ingresos/reembolsos/notas de crédito/facturas vencidas),
+ingresos por método/plan, suscripciones por estado, antigüedad de
+facturas pendientes (aging). `{"summary": ..., "rows": ...}`, mismo
+contrato que `apps.reports`.
+
+## Moneda
+
+`Plan`/`PlanVersion.price_currency`, `Subscription` (heredada de
+`plan_version`), `SaaSInvoice`/`SaaSPayment`/`CreditNote`/`BillingRefund.currency`
+— cada obligación/pago tiene su propia moneda, nunca mezclada con la
+del ERP del tenant (`Sale.currency`/`Payment.currency`, eje
+completamente distinto). Sin conversión automática en ningún punto.
+
+## Qué NO se construyó en FASE 17
+
+OCR real (documentado como extensión futura, arquitectura preparada
+conceptualmente, sin campos/dependencias nuevas); contabilidad del
+operador SaaS (`apps.accounting` tenant-scoped nunca se toca); un
+segundo proveedor de pagos; WACRM; exportaciones PDF/XLSX específicas
+de Billing (los reportes están listos para reutilizar
+`apps.reports.exports`, no se conectó en esta fase — ver `KNOWN_ISSUES.md`).

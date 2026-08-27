@@ -151,12 +151,15 @@ class OnboardingTests(TestCase):
         respuesta = self.client.post(
             reverse("accounts:onboarding"), {"company_name": "Mi Empresa"}
         )
-        # Desde FASE 7, el onboarding redirige al Panel (antes, en FASE 4,
-        # era el perfil).
-        self.assertRedirects(respuesta, reverse("dashboard:panel"))
+        # Desde FASE 17 (Billing SaaS), el onboarding redirige a elegir
+        # plan — un tenant nuevo queda PENDING_SETUP hasta completar el
+        # pago (antes, desde FASE 7, redirigía directo al Panel; antes
+        # de eso, en FASE 4, al perfil). Ver docs/billing.md sección 15.
+        self.assertRedirects(respuesta, reverse("billing_portal:select_plan"))
 
         tenant = Tenant.objects.get(slug="mi-empresa")
         self.assertEqual(tenant.name, "Mi Empresa")
+        self.assertEqual(tenant.billing_status, Tenant.BillingStatus.PENDING_SETUP)
 
         membership = Membership.objects.get(user=self.user, tenant=tenant)
         self.assertEqual(membership.role, Membership.Role.OWNER)

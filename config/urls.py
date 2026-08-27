@@ -47,5 +47,12 @@ urlpatterns = [
     # de un tenant.
     path("plataforma/billing/paypal/", include("apps.billing.urls")),
     path("webhooks/", include("apps.billing.webhook_urls")),
+    # Billing SaaS completo (FASE 17, ver docs/billing.md): Portal del
+    # tenant (`/facturacion/`, tenant-scoped, exactamente lo que
+    # `apps.billing.middleware.BillingStatusMiddleware` deja exento) y
+    # administración de plataforma (`/plataforma/billing/admin/`,
+    # exclusivo Super Admin, nunca dentro de /configuracion/).
+    path("facturacion/", include("apps.billing.portal_urls")),
+    path("plataforma/billing/admin/", include("apps.billing.admin_urls")),
     path("", include("apps.core.urls")),
 ]

@@ -1,0 +1,26 @@
+{% extends "layout_app.html" %}
+{% block title %}Reportes — Billing SaaS — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Reportes</li></ol>
+</nav>
+<div class="encabezado-pagina"><h1>Reportes de Billing SaaS</h1></div>
+
+<div class="encabezado-pagina"><h2>Ingresos</h2></div>
+<p>Total: {{ ingresos.summary.total }} · Pagos: {{ ingresos.summary.cantidad_pagos }}</p>
+<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+    <table class="tabla">
+        <thead><tr><th>Fecha</th><th>Tenant</th><th>Plan</th><th>Método</th><th>Monto</th></tr></thead>
+        <tbody>{% for fila in ingresos.rows %}<tr><td>{{ fila.fecha }}</td><td>{{ fila.tenant }}</td><td>{{ fila.plan }}</td><td>{{ fila.metodo }}</td><td>{{ fila.monto }} {{ fila.moneda }}</td></tr>{% empty %}<tr><td colspan="5">Sin pagos.</td></tr>{% endfor %}</tbody>
+    </table>
+</div>
+
+<div class="encabezado-pagina"><h2>Antigüedad de facturas pendientes (aging)</h2></div>
+<p>0-30 días: {{ aging.summary.d0_30 }} · 31-60 días: {{ aging.summary.d31_60 }} · 61-90 días: {{ aging.summary.d61_90 }} · 90+ días: {{ aging.summary.d90_plus }}</p>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Número</th><th>Tenant</th><th>Vencimiento</th><th>Total</th><th>Días vencido</th></tr></thead>
+        <tbody>{% for fila in aging.rows %}<tr><td>{{ fila.numero }}</td><td>{{ fila.tenant }}</td><td>{{ fila.vencimiento }}</td><td>{{ fila.total }}</td><td>{{ fila.dias_vencido }}</td></tr>{% empty %}<tr><td colspan="5">Sin facturas pendientes.</td></tr>{% endfor %}</tbody>
+    </table>
+</div>
+{% endblock %}

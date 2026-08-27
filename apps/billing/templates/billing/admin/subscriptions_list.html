@@ -1,0 +1,18 @@
+{% extends "layout_app.html" %}
+{% block title %}Suscripciones — Billing SaaS — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Suscripciones</li></ol>
+</nav>
+<div class="encabezado-pagina"><h1>Suscripciones</h1></div>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tenant</th><th>Plan</th><th>Frecuencia</th><th>Estado</th><th>Fin de período</th></tr></thead>
+        <tbody>
+            {% for fila in resumen.rows %}
+            <tr><td>{{ fila.tenant }}</td><td>{{ fila.plan }}</td><td>{{ fila.frecuencia }}</td><td><span class="badge">{{ fila.estado }}</span></td><td>{{ fila.periodo_fin|default:"—" }}</td></tr>
+            {% empty %}<tr><td colspan="5">Sin suscripciones.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

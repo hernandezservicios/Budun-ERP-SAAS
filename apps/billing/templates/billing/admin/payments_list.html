@@ -1,0 +1,28 @@
+{% extends "layout_app.html" %}
+{% block title %}Pagos — Billing SaaS — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Pagos</li></ol>
+</nav>
+<div class="encabezado-pagina"><h1>Pagos</h1></div>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tenant</th><th>Método</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+            {% for payment in payments %}
+            <tr>
+                <td>{{ payment.tenant|default:"—" }}</td><td>{{ payment.get_method_display }}</td><td>{{ payment.amount }} {{ payment.currency }}</td><td><span class="badge">{{ payment.get_status_display }}</span></td>
+                <td>
+                    {% if payment.status == "confirmed" or payment.status == "partially_refunded" %}
+                    <form method="post" action="{% url 'billing_admin:request_refund' payment.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--peligro btn--sm">Reembolsar total</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="5">Sin pagos.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

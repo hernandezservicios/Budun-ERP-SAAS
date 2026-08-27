@@ -1,0 +1,44 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Transferencia bancaria — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'billing_portal:status' %}">Mi Facturación</a></li>
+        <li aria-current="page">Transferencia bancaria</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Factura {{ invoice.number }}</h1>
+        <p class="encabezado-pagina__descripcion">Monto: {{ invoice.total }} {{ invoice.currency }} · Vence: {{ invoice.due_date }}</p>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Cuentas para transferir</h3>
+        {% for cuenta in bank_accounts %}
+        <p><strong>{{ cuenta.bank_name }}</strong> ({{ cuenta.currency }}) — {{ cuenta.account_holder }} — {{ cuenta.account_number }}</p>
+        {% empty %}
+        <p>No hay cuentas bancarias configuradas todavía.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 32rem;">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Subir comprobante</h3>
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Enviar comprobante</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

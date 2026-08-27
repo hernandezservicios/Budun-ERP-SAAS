@@ -30,11 +30,11 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
-from apps.core.pricing import get_plan
 
-from . import signals
-from .models import PayPalGatewayStatus, PayPalTransaction, PayPalWebhookEvent
-from .providers import PaymentProviderError, get_default_provider
+from .. import signals
+from ..models import PayPalGatewayStatus, PayPalTransaction, PayPalWebhookEvent
+from ..providers import PaymentProviderError, get_default_provider
+from .subscriptions import resolve_plan_pricing
 
 _GATEWAY_STATUS_PK = 1
 
@@ -108,11 +108,14 @@ def test_paypal_connection(*, user):
 def create_checkout(*, tenant, plan_id, purpose, user, return_url, cancel_url, description=""):
     from django.conf import settings
 
-    plan = get_plan(plan_id)
-    if plan is None:
-        raise InvalidBillingOperation(f"«{plan_id}» no es un plan reconocido.")
-    if plan.get("price_amount") is None:
-        raise InvalidBillingOperation(f"El plan «{plan['nombre']}» no tiene checkout de autoservicio (sin precio fijo).")
+    # Resuelve PRIMERO el `Plan`/`PlanVersion` real de FASE 17 (por
+    # `slug`); si no existe todavía, cae al fallback estático de
+    # `apps.core.pricing.PLANS` (FASE 6) — mismo criterio de
+    # compatibilidad que el resto del proyecto, ver `docs/paypal.md`
+    # sección 2 y `subscriptions.resolve_plan_pricing`.
+    nombre_plan, amount, currency, _version = resolve_plan_pricing(plan_id)
+    if amount is None:
+        raise InvalidBillingOperation(f"«{plan_id}» no es un plan reconocido o no tiene checkout de autoservicio (sin precio fijo).")
 
     status = get_gateway_status()
     if not status.is_enabled:
@@ -120,9 +123,6 @@ def create_checkout(*, tenant, plan_id, purpose, user, return_url, cancel_url, d
 
     if purpose not in PayPalTransaction.Purpose.values:
         raise InvalidBillingOperation(f"«{purpose}» no es un propósito de pago reconocido.")
-
-    amount = plan["price_amount"]
-    currency = plan.get("price_currency", "USD")
 
     txn = PayPalTransaction.objects.create(
         tenant=tenant, plan_id=plan_id, purpose=purpose, environment=settings.PAYPAL_ENVIRONMENT,
@@ -132,7 +132,7 @@ def create_checkout(*, tenant, plan_id, purpose, user, return_url, cancel_url, d
     try:
         orden = provider.create_order(
             amount=amount, currency=currency, reference_id=str(txn.pk),
-            description=description or f"Budun ERP — Plan {plan['nombre']}",
+            description=description or f"Budun ERP — Plan {nombre_plan}",
             return_url=return_url, cancel_url=cancel_url,
             idempotency_key=f"budun-order-create-{txn.client_reference}",
         )

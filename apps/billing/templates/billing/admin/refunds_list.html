@@ -1,0 +1,28 @@
+{% extends "layout_app.html" %}
+{% block title %}Reembolsos — Billing SaaS — ERP SaaS{% endblock %}
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Reembolsos</li></ol>
+</nav>
+<div class="encabezado-pagina"><h1>Reembolsos</h1></div>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Tenant</th><th>Pago</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+            {% for refund in refunds %}
+            <tr>
+                <td>{{ refund.tenant }}</td><td>{{ refund.payment }}</td><td>{{ refund.amount }} {{ refund.currency }}</td><td><span class="badge">{{ refund.get_status_display }}</span></td>
+                <td>
+                    {% if refund.status == "pending" and not refund.paypal_transaction_id %}
+                    <form method="post" action="{% url 'billing_admin:complete_refund' refund.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--contorno btn--sm">Marcar completado</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="5">Sin reembolsos.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

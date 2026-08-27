@@ -1,0 +1,53 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Billing SaaS — Dashboard — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li aria-current="page">Billing SaaS — Dashboard</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <div>
+        <h1>Billing SaaS</h1>
+        <p class="encabezado-pagina__descripcion">Administración de plataforma — exclusiva del Super Admin.</p>
+    </div>
+</div>
+
+<nav style="margin-bottom: var(--espacio-6);">
+    <a class="btn btn--contorno" href="{% url 'billing_admin:customers_list' %}">Clientes SaaS</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:tenants_list' %}">Tenants</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:plans_list' %}">Planes</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:subscriptions_list' %}">Suscripciones</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:invoices_list' %}">Facturas</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:payments_list' %}">Pagos</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:transfers_queue' %}">Transferencias</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:credit_notes_list' %}">Notas de crédito</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:refunds_list' %}">Reembolsos</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:bank_accounts_list' %}">Cuentas bancarias</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:reports' %}">Reportes</a>
+    <a class="btn btn--contorno" href="{% url 'billing_admin:manual_sale' %}">Venta manual</a>
+    <a class="btn btn--contorno" href="{% url 'billing_platform:status' %}">PayPal (FASE 16)</a>
+</nav>
+
+<section class="panel-seccion" aria-labelledby="titulo-kpis-billing">
+    <h2 class="panel-seccion__titulo" id="titulo-kpis-billing">Resumen</h2>
+    <div class="kpi-grid">
+        <div class="kpi"><p class="kpi__etiqueta">MRR</p><p class="kpi__valor">{{ resumen.mrr }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">ARR</p><p class="kpi__valor">{{ resumen.arr }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Suscripciones activas</p><p class="kpi__valor">{{ resumen.active_subscriptions }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">PAST_DUE</p><p class="kpi__valor">{{ resumen.past_due_subscriptions }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Suspendidas</p><p class="kpi__valor">{{ resumen.suspended_subscriptions }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Altas este mes</p><p class="kpi__valor">{{ resumen.new_signups_this_month }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Cancelaciones este mes</p><p class="kpi__valor">{{ resumen.cancellations_this_month }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Transferencias pendientes</p><p class="kpi__valor">{{ resumen.pending_transfers }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Ingresos del mes</p><p class="kpi__valor">{{ resumen.revenue_this_month }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Reembolsos del mes</p><p class="kpi__valor">{{ resumen.refunds_this_month }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Notas de crédito del mes</p><p class="kpi__valor">{{ resumen.credit_notes_this_month }}</p></div>
+        <div class="kpi"><p class="kpi__etiqueta">Facturas vencidas</p><p class="kpi__valor">{{ resumen.overdue_invoices }}</p></div>
+    </div>
+</section>
+{% endblock %}
