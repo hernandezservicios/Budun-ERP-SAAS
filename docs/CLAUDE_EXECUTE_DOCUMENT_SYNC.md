@@ -1,125 +1,60 @@
-# INSTRUCCIÓN — SINCRONIZAR FASE 16 + FASE 17
+# INSTRUCCIÓN — SINCRONIZAR FASE 18 SECURITY HARDENING
 
 ## IMPORTANTE
-
-Esto es SOLO sincronización documental.
-
-NO implementar FASE 16.
-NO implementar FASE 17.
-NO crear modelos, migraciones, servicios, endpoints ni código funcional.
+SOLO sincronización documental.
+NO implementar hardening todavía.
+NO crear modelos/migraciones/endpoints.
+NO iniciar FASE 19.
 
 ## PASO 1
-
-Leer:
-
-`docs/phases/PHASE-16-paypal-sandbox.md`
-
-`docs/phases/PHASE-17-billing-saas.md`
-
-y este paquete maestro si fue copiado:
-
-`FASES_16_17_DEFINITIVAS.md`
+Lee:
+`docs/phases/PHASE-18-security-hardening.md`
 
 ## PASO 2
-
-Comparar contra las fuentes de verdad actuales:
-
-- `CLAUDE.md`
-- `docs/MASTER-PROMPT.md`
-- `ARCHITECTURE.md`
-- `docs/paypal.md`
-- `docs/billing.md`
-- `docs/accounts-receivable.md`
-- `docs/currency.md`
-- `docs/approvals.md`
-- `docs/reports.md`
-- `FASES_OFICIALES_0_24_ACTUALIZADAS.md`
-- `docs/project-status/CURRENT_PHASE.md`
-- `docs/project-status/PHASE_HISTORY.md`
-- `docs/project-status/DECISIONS.md`
-- `docs/project-status/KNOWN_ISSUES.md`
+Audita:
+- CLAUDE.md
+- docs/MASTER-PROMPT.md
+- ARCHITECTURE.md
+- docs/security.md si existe
+- FASES 0–17
+- CURRENT_PHASE.md
+- PHASE_HISTORY.md
+- KNOWN_ISSUES.md
+- DECISIONS.md
 
 ## PASO 3
-
-Actualizar las fuentes existentes sin crear duplicados.
-
-IMPORTANTE:
-
-Si el repositorio ya usa:
-
-`docs/phases/PHASE-16-paypal-sandbox.md`
-
-y:
-
-`docs/phases/PHASE-17-billing-saas.md`
-
-mantener exactamente esos nombres.
-
-No crear otra FASE 17 paralela.
+Actualiza la FASE 18 existente manteniendo exactamente el nombre real del archivo del proyecto. Si ya existe `docs/phases/PHASE-18-security-hardening.md`, NO crear duplicado.
 
 ## PASO 4
-
-Integrar en la documentación las decisiones definitivas:
-
-- PayPal como provider, no como segundo Billing.
-- Billing SaaS separado del ERP de cada tenant.
-- Transferencias bancarias.
-- Comprobantes.
-- Verificación manual.
-- OCR como extensión futura.
-- Pagos a una o varias facturas.
-- Anticipo separado de saldo a favor.
-- Sobrepagos.
-- Notas de crédito.
-- Refunds.
-- Renovaciones.
-- Upgrade/downgrade.
-- Prorrateo.
-- Multi-moneda.
-- Cuentas bancarias de la plataforma.
-- Venta manual por Super Admin.
-- Creación manual de tenants.
-- Suspensión/reactivación.
-- Auditoría.
-- Reportes.
-- Idempotencia y concurrencia.
+Integra el alcance completo:
+auth, authz, roles/permisos, privilege escalation, Multi-Tenant, Super Admin, Inventory API, Catalog API, Integration/App Secret, PayPal/webhooks, Billing SaaS, transferencias/comprobantes, uploads/media, XSS/CSRF/injection, mass assignment, HTTP headers/CORS, secrets, logs/errores, rate limiting, reports/exports, audit, concurrency y negative testing.
 
 ## PASO 5
-
-Corregir cualquier documentación residual que:
-
-- mezcle CxC del tenant con Billing SaaS;
-- describa `CustomerCreditLedger` como fuente de verdad vigente si contradice la decisión actual;
-- diga que funcionalidades ya decididas son "no especificadas";
-- cree una segunda fuente de Billing;
-- indique que PayPal se conectará directamente a `apps.sales.Payment`.
+No crear documentación duplicada. Consolidar en las fuentes existentes.
 
 ## PASO 6
+Actualizar estados de proyecto y fuentes de verdad.
 
-Verificación:
-
-- `python manage.py check`
-- comprobar que `makemigrations --check --dry-run` no detecte cambios;
-- ejecutar la suite completa si el tiempo/entorno lo permite;
-- revisar `git diff`.
+## PASO 7
+Verificar que NO haya cambios funcionales:
+- python manage.py check
+- python manage.py makemigrations --check --dry-run
+- revisar git diff
+- ejecutar suite completa si el entorno lo permite
 
 El diff funcional debe quedar vacío.
 
 ## REPORTE
-
-Informar:
-
-- archivos modificados;
-- contradicciones encontradas;
-- decisiones aplicadas;
-- confirmación de que no hubo cambios funcionales;
-- checks/tests;
-- commit.
+Entrega:
+- archivos modificados
+- contradicciones encontradas
+- decisiones aplicadas
+- confirmación de cero cambios funcionales
+- checks/tests
+- commit
+- working tree
 
 ## REGLA DE PARADA
-
 DETENTE.
-
-No iniciar FASE 16.
-No iniciar FASE 17.
-No integrar WACRM.
+No implementar FASE 18.
+No iniciar FASE 19.

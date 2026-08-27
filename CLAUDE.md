@@ -137,7 +137,7 @@ Analizar → planificar → implementar → ejecutar → probar → corregir →
 Una fase solo pasa si está implementada, ejecutada y verificada con evidencia.
 
 ## Seguridad
-CSRF, XSS, SQL injection protection, auth/authz, secure cookies, rate limiting, tenant isolation, webhook verification, secrets fuera de Git, logs sin secretos, auditoría.
+CSRF, XSS, SQL injection protection, auth/authz, secure cookies, rate limiting, tenant isolation, webhook verification, secrets fuera de Git, logs sin secretos, auditoría. Ver `docs/security.md` para la referencia consolidada de qué está construido y qué queda pendiente de auditoría exhaustiva/hardening real en FASE 18 (`docs/phases/PHASE-18-security-hardening.md`).
 
 ## Datos y dinero
 PostgreSQL con constraints, índices y transacciones apropiadas. Usar Decimal para dinero. Operaciones de venta/pago/inventario deben ser atómicas.
