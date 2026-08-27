@@ -140,7 +140,7 @@ Una fase solo pasa si está implementada, ejecutada y verificada con evidencia.
 CSRF, XSS, SQL injection protection, auth/authz, secure cookies, rate limiting, tenant isolation, webhook verification, secrets fuera de Git, logs sin secretos, auditoría. Ver `docs/security.md` para la referencia consolidada de qué está construido y qué queda pendiente de auditoría exhaustiva/hardening real en FASE 18 (`docs/phases/PHASE-18-security-hardening.md`).
 
 ## Datos y dinero
-PostgreSQL con constraints, índices y transacciones apropiadas. Usar Decimal para dinero. Operaciones de venta/pago/inventario deben ser atómicas.
+PostgreSQL con constraints, índices y transacciones apropiadas. Usar Decimal para dinero. Operaciones de venta/pago/inventario deben ser atómicas. Ver `docs/performance.md` para la referencia consolidada de qué prácticas de rendimiento ya existen y qué queda pendiente de medición/optimización real en FASE 19 (`docs/phases/PHASE-19-performance.md`).
 
 ## Git
 Commit por fase. No hacer commits gigantes. No commitear .env, API keys, passwords, tokens, dumps ni claves privadas.

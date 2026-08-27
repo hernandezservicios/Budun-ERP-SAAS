@@ -1,60 +1,54 @@
-# INSTRUCCIÓN — SINCRONIZAR FASE 18 SECURITY HARDENING
+# INSTRUCCIÓN — SINCRONIZAR FASE 19 PERFORMANCE
 
 ## IMPORTANTE
-SOLO sincronización documental.
-NO implementar hardening todavía.
-NO crear modelos/migraciones/endpoints.
-NO iniciar FASE 19.
+Solo sincronización documental.
+NO implementar optimizaciones.
+NO crear índices, cache, código, migraciones ni modelos.
+NO iniciar FASE 20.
 
 ## PASO 1
 Lee:
-`docs/phases/PHASE-18-security-hardening.md`
+`docs/phases/PHASE-19-performance.md`
 
 ## PASO 2
 Audita:
 - CLAUDE.md
 - docs/MASTER-PROMPT.md
 - ARCHITECTURE.md
-- docs/security.md si existe
-- FASES 0–17
+- docs/performance.md si existe
+- FASES 0–18
 - CURRENT_PHASE.md
 - PHASE_HISTORY.md
 - KNOWN_ISSUES.md
 - DECISIONS.md
 
 ## PASO 3
-Actualiza la FASE 18 existente manteniendo exactamente el nombre real del archivo del proyecto. Si ya existe `docs/phases/PHASE-18-security-hardening.md`, NO crear duplicado.
+Actualiza el archivo existente manteniendo exactamente el nombre real del proyecto. Si existe `docs/phases/PHASE-19-performance.md`, no crear duplicado.
 
 ## PASO 4
-Integra el alcance completo:
-auth, authz, roles/permisos, privilege escalation, Multi-Tenant, Super Admin, Inventory API, Catalog API, Integration/App Secret, PayPal/webhooks, Billing SaaS, transferencias/comprobantes, uploads/media, XSS/CSRF/injection, mass assignment, HTTP headers/CORS, secrets, logs/errores, rate limiting, reports/exports, audit, concurrency y negative testing.
+Integrar el alcance completo de performance:
+PostgreSQL/query plans, índices justificados, N+1, ORM, paginación, Inventory, Catalog, Sales/POS, Purchases/CxP, Accounting, Reports, Exports, Billing SaaS, PayPal/webhooks, cache, concurrencia, memory/CPU, benchmarks y regression tests.
 
 ## PASO 5
-No crear documentación duplicada. Consolidar en las fuentes existentes.
+No crear documentación duplicada. Consolidar en las fuentes existentes y actualizar estado del proyecto.
 
 ## PASO 6
-Actualizar estados de proyecto y fuentes de verdad.
+Verificar:
+- `python manage.py check`
+- `python manage.py makemigrations --check --dry-run`
+- `git diff`
 
-## PASO 7
-Verificar que NO haya cambios funcionales:
-- python manage.py check
-- python manage.py makemigrations --check --dry-run
-- revisar git diff
-- ejecutar suite completa si el entorno lo permite
-
-El diff funcional debe quedar vacío.
+La sincronización debe producir cambios documentales únicamente.
 
 ## REPORTE
-Entrega:
-- archivos modificados
-- contradicciones encontradas
-- decisiones aplicadas
-- confirmación de cero cambios funcionales
-- checks/tests
-- commit
-- working tree
+Entregar:
+- archivos modificados;
+- contradicciones;
+- decisiones;
+- confirmación de cero cambios funcionales;
+- checks/tests;
+- commit;
+- working tree.
 
 ## REGLA DE PARADA
-DETENTE.
-No implementar FASE 18.
-No iniciar FASE 19.
+DETENTE. No implementar FASE 19. No iniciar FASE 20.
