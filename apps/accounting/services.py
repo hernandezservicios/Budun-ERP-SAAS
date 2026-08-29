@@ -24,7 +24,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Prefetch, Sum
 from django.utils import timezone
 
 from apps.purchases.models import SupplierInvoice, SupplierInvoiceItem, SupplierReturnItem
@@ -950,13 +950,30 @@ def get_general_ledger(tenant, account, *, date_from=None, date_to=None):
 def get_general_journal(tenant, *, date_from=None, date_to=None):
     """Libro diario: asientos POSTED en orden cronológico con sus
     líneas — nunca recalculado desde otra fuente que no sea
-    `JournalEntry`/`JournalEntryLine`."""
+    `JournalEntry`/`JournalEntryLine`.
+
+    FASE 19 (Performance): hasta esta fase llamaba a
+    `get_journal_entry_lines` una vez POR ASIENTO dentro del `for`
+    -- N+1 real, medido con un reporte de 300 asientos (301 queries,
+    18.7x más lento que con 10 asientos — ver `docs/performance.md`).
+    Corregido con `Prefetch` explícito sobre `all_objects` (mismo
+    criterio ya establecido para toda relación inversa sobre un
+    modelo `TenantScopedModel`, ver `KNOWN_ISSUES.md`
+    #90/#95/#97/#108): una sola consulta adicional trae TODAS las
+    líneas de TODOS los asientos de la página, agrupadas en Python
+    por Django — nunca N consultas."""
     queryset = JournalEntry.all_objects.filter(tenant=tenant, status=JournalEntry.Status.POSTED).order_by("entry_date", "id")
     if date_from:
         queryset = queryset.filter(entry_date__gte=date_from)
     if date_to:
         queryset = queryset.filter(entry_date__lte=date_to)
-    return [{"entry": entry, "lines": get_journal_entry_lines(entry)} for entry in queryset]
+    queryset = queryset.prefetch_related(
+        Prefetch(
+            "lines",
+            queryset=JournalEntryLine.all_objects.select_related("account", "customer", "supplier").order_by("line_order"),
+        )
+    )
+    return [{"entry": entry, "lines": list(entry.lines.all())} for entry in queryset]
 
 
 def get_balance_sheet(tenant, period):

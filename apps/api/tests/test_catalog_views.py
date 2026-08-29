@@ -227,3 +227,65 @@ class CatalogMultiTenantIsolationTests(IntegrationTestCase):
         cuerpo = respuesta.json()["data"]
         self.assertEqual(len(cuerpo), 1)
         self.assertEqual(cuerpo[0]["sku"], "CAT-B-1")
+
+
+class CatalogPaginationPerformanceTests(IntegrationTestCase):
+    """FASE 19 — Performance. Hallazgo real corregido:
+    `CatalogSearchView`/`CatalogProductListView.list` llamaban a
+    `_adjuntar_imagenes` sobre el queryset COMPLETO antes de paginar —
+    con miles de productos coincidentes, eso consultaba/cargaba
+    imágenes de TODOS ellos aunque `page_size` solo devuelva 20
+    (medido con `perf_catalog.py`, scratchpad de la sesión: 2000
+    productos → ~540ms/~5MB de pico, contra ~80ms/~140KB con 20 — ver
+    `docs/performance.md`). Este test fija el contrato correcto: solo
+    la PÁGINA realmente devuelta debe pasar por `_adjuntar_imagenes`,
+    nunca el total de coincidencias."""
+
+    def setUp(self):
+        super().setUp()
+        for i in range(30):
+            Product.objects.create(tenant=self.tenant, name=f"Producto Paginación {i}", sku=f"PAG-{i:03d}", sale_price=Decimal("10"))
+
+    def test_busqueda_solo_adjunta_imagenes_a_la_pagina_no_al_total(self):
+        from unittest.mock import patch
+
+        from apps.api import catalog_views
+
+        original = catalog_views._adjuntar_imagenes
+        tamanos_recibidos = []
+
+        def espia(productos):
+            productos = list(productos)
+            tamanos_recibidos.append(len(productos))
+            return original(productos)
+
+        with patch.object(catalog_views, "_adjuntar_imagenes", side_effect=espia):
+            respuesta = self.owner_client.get(reverse("catalog:search"), **self.auth_headers())
+
+        self.assertEqual(respuesta.status_code, 200)
+        # 31 productos coinciden en total (30 nuevos + el de
+        # `IntegrationTestCase`) — pero `_adjuntar_imagenes` solo debe
+        # recibir los de la página (page_size=20 por defecto), nunca
+        # el total de coincidencias.
+        self.assertEqual(len(tamanos_recibidos), 1)
+        self.assertEqual(tamanos_recibidos[0], 20)
+
+    def test_product_list_solo_adjunta_imagenes_a_la_pagina_no_al_total(self):
+        from unittest.mock import patch
+
+        from apps.api import catalog_views
+
+        original = catalog_views._adjuntar_imagenes
+        tamanos_recibidos = []
+
+        def espia(productos):
+            productos = list(productos)
+            tamanos_recibidos.append(len(productos))
+            return original(productos)
+
+        with patch.object(catalog_views, "_adjuntar_imagenes", side_effect=espia):
+            respuesta = self.owner_client.get(reverse("catalog:product_list"), **self.auth_headers())
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(tamanos_recibidos), 1)
+        self.assertEqual(tamanos_recibidos[0], 20)

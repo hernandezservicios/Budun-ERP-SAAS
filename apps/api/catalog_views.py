@@ -94,9 +94,18 @@ class CatalogSearchView(_CatalogListView):
         return queryset
 
     def list(self, request, *args, **kwargs):
-        queryset = _adjuntar_imagenes(self.get_queryset())
+        # FASE 19 (Performance): antes se llamaba `_adjuntar_imagenes`
+        # sobre el queryset COMPLETO, antes de paginar — con miles de
+        # productos coincidentes, esto cargaba y consultaba imágenes de
+        # TODOS ellos aunque `page_size` solo devuelva 20 (medido: 2000
+        # productos → ~540ms/~5MB pico, contra ~80ms/~140KB con 20 — el
+        # costo escalaba con el total de coincidencias, nunca con lo
+        # realmente devuelto — ver `docs/performance.md`). Corregido
+        # paginando PRIMERO y adjuntando imágenes solo a la página.
+        queryset = self.get_queryset()
         pagina = self.paginate_queryset(queryset)
-        serializer = self.get_serializer(pagina if pagina is not None else queryset, many=True, context={"request": request})
+        productos = _adjuntar_imagenes(pagina if pagina is not None else queryset)
+        serializer = self.get_serializer(productos, many=True, context={"request": request})
         meta = self.paginator.get_pagination_meta() if pagina is not None else {}
         return build_success_response(serializer.data, meta=meta)
 
@@ -109,9 +118,18 @@ class CatalogProductListView(_CatalogListView):
         return inv_services.list_products_with_stock(self.request.tenant, only_active=True)
 
     def list(self, request, *args, **kwargs):
-        queryset = _adjuntar_imagenes(self.get_queryset())
+        # FASE 19 (Performance): antes se llamaba `_adjuntar_imagenes`
+        # sobre el queryset COMPLETO, antes de paginar — con miles de
+        # productos coincidentes, esto cargaba y consultaba imágenes de
+        # TODOS ellos aunque `page_size` solo devuelva 20 (medido: 2000
+        # productos → ~540ms/~5MB pico, contra ~80ms/~140KB con 20 — el
+        # costo escalaba con el total de coincidencias, nunca con lo
+        # realmente devuelto — ver `docs/performance.md`). Corregido
+        # paginando PRIMERO y adjuntando imágenes solo a la página.
+        queryset = self.get_queryset()
         pagina = self.paginate_queryset(queryset)
-        serializer = self.get_serializer(pagina if pagina is not None else queryset, many=True, context={"request": request})
+        productos = _adjuntar_imagenes(pagina if pagina is not None else queryset)
+        serializer = self.get_serializer(productos, many=True, context={"request": request})
         meta = self.paginator.get_pagination_meta() if pagina is not None else {}
         return build_success_response(serializer.data, meta=meta)
 
