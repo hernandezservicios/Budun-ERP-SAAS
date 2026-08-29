@@ -1,10 +1,10 @@
 # Estado actual del proyecto
 
 ```text
-Fase actual: 18
-Estado: PASS (cerrada, pendiente de autorización para FASE 19)
-Última fase cerrada: FASE 18 — Security Hardening (auditoría real + hallazgos corregidos + regresión + negative testing, ver sección más abajo)
-Próxima acción: esperar autorización explícita del usuario para iniciar FASE 19
+Fase actual: 19
+Estado: PASS (cerrada, pendiente de autorización para FASE 20)
+Última fase cerrada: FASE 19 — Performance (baseline real + profiling + 2 hallazgos de N+1/orden de paginación corregidos con medición antes/después + regresión, ver sección más abajo)
+Próxima acción: esperar autorización explícita del usuario para iniciar FASE 20
 ```
 
 ## Regla
@@ -176,3 +176,18 @@ Ordenada explícitamente por el usuario vía `docs/CLAUDE_EXECUTE_DOCUMENT_SYNC.
 **Ninguna contradicción real encontrada** entre `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md`/`docs/phases/PHASES.md`/`FASES_OFICIALES_0_24_ACTUALIZADAS.md` (documentos de alcance, nunca editados) y el alcance de FASE 19 — todos ya listaban "19. Performance" consistentemente. `CLAUDE.md` ganó una línea de referencia cruzada a `docs/performance.md` en su sección "## Datos y dinero" (no existía una sección "## Performance" propia que extender, a diferencia de "## Seguridad"). `ARCHITECTURE.md` no se tocó — nada se implementó en esta sincronización, sin doctrina nueva que documentar ahí.
 
 `manage.py check` limpio, `makemigrations --check --dry-run` limpio, `git diff` revisado (solo archivos de documentación), suite completa ejecutada sin ningún cambio de comportamiento. Documentado en `KNOWN_ISSUES.md` #116, `DECISIONS.md` #89. FASE 19/20 siguen sin iniciarse.
+
+## Resumen de FASE 19
+Performance real (baseline → profiling → reproducir → optimizar → test → remedir → comparar → documentar), ejecutada por bloques sobre el código de FASE 0-18 — sin funcionalidad de negocio nueva, sin iniciar FASE 20. Metodología de medición sin dependencias nuevas: `django.test.utils.CaptureQueriesContext` (queries, ya usado en el proyecto desde FASE 8), `time.perf_counter()`/`time.process_time()` (tiempo/CPU) y `tracemalloc` (memoria pico) — los tres últimos de la librería estándar de Python. Scripts de medición (`perf_baseline.py`/`perf_catalog.py`/`perf_explain_audit.py`) en el scratchpad de la sesión, no commiteados, contra PostgreSQL de desarrollo real con datasets sintéticos de tamaño explícito (nunca inventado).
+
+**2 hallazgos reales de rendimiento encontrados y corregidos**, ambos con medición antes/después real (detalle completo en `KNOWN_ISSUES.md` #117-118):
+1. **N+1 real en el Libro Diario** (`apps.accounting.services.get_general_journal`): llamaba a `get_journal_entry_lines` una vez por asiento dentro de un `for` — 300 asientos → 301 queries/783ms. Corregido con `Prefetch` explícito sobre `all_objects` (mismo criterio que toda relación inversa sobre un `TenantScopedModel`, KNOWN_ISSUES #90/#95/#97/#108) → 2 queries/189ms (4.1x más rápido, constante). Test de regresión nuevo: `apps/accounting/tests/test_performance.py`.
+2. **Orden de paginación incorrecto en la Catalog API** (`CatalogSearchView`/`CatalogProductListView`): precargaban imágenes de TODOS los productos coincidentes antes de paginar, no solo de la página devuelta — 2000 productos coincidentes (misma página de 20 resultados) → 537ms/5035KB de pico. Corregido paginando primero: → 40ms/161KB (13.5x más rápido, 31x menos memoria). Test de regresión nuevo: `apps/api/tests/test_catalog_views.py::CatalogPaginationPerformanceTests`.
+
+**Verificado con `EXPLAIN ANALYZE` real, sin hallazgo**: la búsqueda federada de auditoría (`search_audit_events`, el UNION de 9 fuentes más arquitectónicamente novedoso del proyecto) usa `Index Scan Backward` sobre el índice compuesto `(tenant, created_at)` con 8000+2000 filas — nunca un sequential scan.
+
+**Medido sin hallazgo** (código y/o query count ya correctos, confirmado con evidencia real, no solo asumido): listado HTTP real de Purchases (10 vs. 200 órdenes → 5 queries constante); `get_trial_balance` (300 asientos → 1 query/33ms); `get_billing_dashboard_summary` (10 vs. 200 suscripciones/facturas → 10 queries constante); `ProductSerializer.get_category`/`list_products_with_stock` de la Inventory API (`select_related("category")` ya presente); `get_purchase_order_item_pending_quantity` (confirmado uso de un solo ítem a la vez, nunca en loop).
+
+**Diferido deliberadamente, con razón explícita** (nunca un descuido): ninguna cache nueva introducida — ninguna medición de esta pasada demostró una consulta lo bastante costosa para justificarla; Redis descartado de nuevo por falta de necesidad real; cursor/keyset pagination no considerado sin evidencia de que `COUNT`/`OFFSET` sea el cuello de botella real; medición de duración de locks/contención con más de 2 hilos no realizada en esta pasada (la cobertura de concurrencia ya extensa desde FASE 8/18 se mantiene intacta, verificada por la regresión completa); Expenses/HR/Payroll, la mayoría de Reports, exportaciones CSV/XLSX/PDF a volumen, generación masiva de facturas recurrentes de Billing, y tiempo real de procesamiento del webhook de PayPal quedan sin medición real en esta pasada — auditados por código (sin hallazgo evidente), no medidos con datos a escala.
+
+4 tests nuevos de regresión de performance (`apps/accounting/tests/test_performance.py`: 2, `apps/api/tests/test_catalog_views.py::CatalogPaginationPerformanceTests`: 2) — **1098/1098 tests OK en la regresión completa del proyecto** (1094 previos + 4 nuevos, cero fallas reales — mismos 2 tracebacks ya documentados como esperados/inofensivos: un `RuntimeError` mockeado en un test de FASE 7 y un `PermissionError` de Windows al borrar un adjunto recién creado en el mismo proceso). `manage.py check` limpio, `makemigrations --check --dry-run` limpio (ninguna migración nueva — ningún índice se creó, ninguno fue necesario). No se ejecutó un smoke test nuevo dedicado: la regresión completa ya corre íntegramente contra PostgreSQL real, cubriendo los flujos optimizados. Documentado en `docs/performance.md` (reescrito), `docs/phases/PHASE-19-performance.md` (reemplazado con la especificación definitiva de 40 secciones entregada por el usuario directamente en el chat — no pre-colocada en el archivo esta vez —, checklist marcado con evidencia), `KNOWN_ISSUES.md` #117-118, `DECISIONS.md` #90-93. FASE 20 sigue sin iniciarse; no se integró WACRM, no se implementó ninguna funcionalidad de negocio nueva.
