@@ -1,7 +1,13 @@
 # Inventory (FASE 8)
 
 Movimientos de stock, historial y alertas de `apps/inventory`. Ver
-`docs/products.md` para Productos/Categorías.
+`docs/products.md` para Productos/Categorías — incluyendo la
+especificación (no construida todavía) de importación/exportación
+masiva de productos vía Excel, ordenada en
+`ADENDUM_FASE_8_IMPORTACION_PRODUCTOS_EXCEL.md`: esa capacidad, cuando
+se implemente, solo podrá crear/actualizar el catálogo (`Product`) —
+nunca escribir `StockMovement`/`InventoryUnit` directamente, siempre a
+través de `apps.inventory.services`, mismo principio de esta página.
 
 > **Nota de transparencia**: el inventario serializado (IMEI/número de
 > serie) descrito en este documento fue incorporado a FASE 8 a partir de

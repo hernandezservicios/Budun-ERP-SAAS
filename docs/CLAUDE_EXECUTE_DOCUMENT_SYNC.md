@@ -1,44 +1,45 @@
-# INSTRUCCIÓN — SINCRONIZAR FASE 19 PERFORMANCE
+# INSTRUCCIÓN — SINCRONIZAR IMPORTACIÓN MASIVA DE PRODUCTOS EXCEL
 
 ## IMPORTANTE
-Solo sincronización documental.
-NO implementar optimizaciones.
-NO crear índices, cache, código, migraciones ni modelos.
-NO iniciar FASE 20.
+Solo documentación. NO implementar todavía.
 
 ## PASO 1
 Lee:
-`docs/phases/PHASE-19-performance.md`
+`ADENDUM_FASE_8_IMPORTACION_PRODUCTOS_EXCEL.md`
 
 ## PASO 2
 Audita:
 - CLAUDE.md
 - docs/MASTER-PROMPT.md
 - ARCHITECTURE.md
-- docs/performance.md si existe
-- FASES 0–18
+- docs/inventory.md si existe
+- docs/phases/PHASE-8*.md
+- docs/reports.md
+- FASES 9–19
 - CURRENT_PHASE.md
 - PHASE_HISTORY.md
 - KNOWN_ISSUES.md
 - DECISIONS.md
+- FASES_OFICIALES_0_24_ACTUALIZADAS.md
 
 ## PASO 3
-Actualiza el archivo existente manteniendo exactamente el nombre real del proyecto. Si existe `docs/phases/PHASE-19-performance.md`, no crear duplicado.
+Integra la especificación en la documentación existente de Productos/Inventario, manteniendo nombres reales y sin duplicados.
+
+La funcionalidad pertenece principalmente a FASE 8. Documenta su relación con FASE 14, FASE 19 y FASE 22.
 
 ## PASO 4
-Integrar el alcance completo de performance:
-PostgreSQL/query plans, índices justificados, N+1, ORM, paginación, Inventory, Catalog, Sales/POS, Purchases/CxP, Accounting, Reports, Exports, Billing SaaS, PayPal/webhooks, cache, concurrencia, memory/CPU, benchmarks y regression tests.
+No crear código, modelos, migraciones, endpoints ni plantillas reales durante esta sincronización.
 
 ## PASO 5
-No crear documentación duplicada. Consolidar en las fuentes existentes y actualizar estado del proyecto.
+La importación de productos NO puede crear una segunda fuente de stock ni modificar unidades/movimientos sin usar `apps.inventory.services`.
 
 ## PASO 6
-Verificar:
+Verifica:
 - `python manage.py check`
 - `python manage.py makemigrations --check --dry-run`
 - `git diff`
 
-La sincronización debe producir cambios documentales únicamente.
+Solo cambios documentales.
 
 ## REPORTE
 Entregar:
@@ -51,4 +52,4 @@ Entregar:
 - working tree.
 
 ## REGLA DE PARADA
-DETENTE. No implementar FASE 19. No iniciar FASE 20.
+DETENTE. No implementar la importación. No iniciar otra fase.

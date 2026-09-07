@@ -21,7 +21,14 @@ Crear únicamente lo necesario para esta fase y sus dependencias inmediatas. No 
 - [ ] Git commit creado.
 
 ## Dependencias
-Revisar fases anteriores y `docs/phases/PHASES.md`.
+Revisar fases anteriores y `docs/phases/PHASES.md`. Nota (documentación
+únicamente, ver `docs/products.md`): la futura importación/exportación
+de productos vía Excel (especificada en
+`ADENDUM_FASE_8_IMPORTACION_PRODUCTOS_EXCEL.md`, no construida) podrá
+reutilizarse para cargas iniciales de catálogo, pero la migración
+completa de datos de esta fase mantiene su propio procedimiento de
+reconciliación e integridad (`pg_dump`/`pg_restore` + verificación de
+conteos) — la importación de Excel nunca sustituye ese proceso.
 
 ## Cierre
 No cerrar la fase sin evidencia. Al cerrarla, detenerse y esperar autorización para iniciar la siguiente, salvo instrucción explícita del usuario.

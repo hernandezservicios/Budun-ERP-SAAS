@@ -32,6 +32,16 @@ También `TenantScopedModel`. El stock **no** vive aquí — ver
 | `tax_rate` | `DecimalField(5,2)` | porcentaje, p. ej. `16.00` = 16% |
 | `min_stock` | `DecimalField(12,3)` | umbral para "stock bajo" (solo aplica de forma directa a productos `QUANTITY`) |
 | `is_active` | `BooleanField` | "eliminar" un producto = desactivarlo (ver `docs/inventory.md`) |
+| `brand` | `CharField`, opcional | marca comercial — agregado en la ampliación final de FASE 15 (Catalog API), documentado aquí recién ahora: esta tabla había quedado desactualizada desde entonces |
+| `model_name` | `CharField`, opcional | modelo comercial — junto con `brand`, agrupa productos "variantes entre sí" cuando comparten `tenant`+`brand`+`model_name` (ver `docs/api-catalog.md`) |
+| `variant_attributes` | `JSONField`, opcional | atributos de variante libres (color, capacidad, talla, presentación, ...) — deliberadamente JSON flexible, nunca columnas fijas por atributo |
+
+`Product` **no tiene** un campo de moneda ni de unidad de medida — no
+existe todavía ningún concepto de "moneda por producto" (el motor de
+monedas real, `CurrencyConfiguration`, sigue especificado y no
+construido, ver `docs/currency.md`) ni de "unidad de medida" (unidad/
+caja/kg) en ningún modelo del proyecto. Relevante para la sección
+"Importación y exportación masiva" más abajo.
 
 Un producto SERIALIZADO no usa `StockMovement`: su disponibilidad viene
 de `InventoryUnit`, una unidad física por fila (IMEI/número de serie).
@@ -93,3 +103,126 @@ Usa exclusivamente los componentes de FASE 5 (`.tabla`, `.badge`,
 `.estado-vacio`, `.kpi-grid`, `.encabezado-pagina`, `.migas`, `.alerta`).
 Sin identidad visual nueva, sin exceso de tarjetas (los listados usan
 tablas, no grids de cards).
+
+## Importación y exportación masiva de productos (Excel) — ESPECIFICADO, NO CONSTRUIDO
+
+> **Estado: especificación integrada, sin ningún código/modelo/
+> migración/vista/servicio creado todavía.** Ordenada por el usuario en
+> `ADENDUM_FASE_8_IMPORTACION_PRODUCTOS_EXCEL.md` (raíz del repositorio,
+> preservado ahí tal cual, nunca copiado a `docs/`). Pertenece a FASE 8
+> (extiende Productos/Inventario) — implementación pendiente de
+> autorización explícita, no incluida en el cierre ya aprobado de FASE 8
+> (ver `docs/phases/PHASE-08-products-plus-inventory.md`).
+
+**Objetivo**: capacidad de carga/descarga masiva de productos vía
+`.xlsx` (nunca CSV como formato principal) desde Inventario → Productos:
+`Nuevo`/`Editar` (ya construidos) + `Importar Excel`/`Exportar Excel`/
+`Descargar plantilla` (especificados aquí, no construidos).
+
+**Columnas de la plantilla — evaluadas contra el modelo `Product` real**
+(regla explícita del adendo: "no inventar columnas que el modelo no
+soporte"):
+
+| Columna de la plantilla | Campo real de `Product` | Estado |
+|---|---|---|
+| SKU | `sku` | soportado |
+| Barcode | `barcode` | soportado |
+| Nombre | `name` | soportado |
+| Descripción | `description` | soportado |
+| Marca | `brand` | soportado (FASE 15) |
+| Modelo | `model_name` | soportado (FASE 15) |
+| Categoría | `category` (FK, por nombre) | soportado |
+| Tracking | `inventory_tracking_type` (`QUANTITY`/`SERIALIZED`) | soportado |
+| Precio | `sale_price` (venta) y/o `purchase_price` (costo) | soportado — **a decidir en la implementación** cuál(es) de los dos expone la plantilla, ver "Contradicción encontrada" abajo |
+| Impuesto | `tax_rate` | soportado |
+| Stock mínimo | `min_stock` | soportado |
+| Estado | `is_active` | soportado |
+| Atributos de variante | `variant_attributes` (JSON) | soportado |
+| Moneda | — | **NO soportado — ver "Contradicción encontrada"** |
+| Unidad de medida | — | **NO soportado — ver "Contradicción encontrada"** |
+
+**Contradicción real encontrada durante esta sincronización** (no
+oculta, ni resuelta unilateralmente): el adendo pide columnas "moneda"
+y "unidad de medida" como parte de la plantilla, pero `Product` no
+tiene ningún campo de moneda ni de unidad de medida hoy — no existe ese
+concepto en ningún modelo del proyecto (verificado por búsqueda
+exhaustiva). Tampoco "precio" es un campo único: `Product` tiene DOS
+precios (`sale_price`/`purchase_price`), y el adendo no especifica cuál
+expone la plantilla. Ninguna de las tres cosas se decide ni se inventa
+en esta sincronización documental — quedan como decisiones explícitas
+que la fase de IMPLEMENTACIÓN real deberá resolver con el usuario
+(¿agregar los campos al modelo primero, con su propia migración? ¿usar
+`sale_price` únicamente? ¿ambos precios en dos columnas separadas?),
+nunca asumidas en silencio.
+
+**Matching CREATE/UPDATE**: SKU es el único criterio principal
+(`UniqueConstraint(tenant, sku)` ya existente), respetando unicidad por
+tenant — nunca el nombre. Barcode puede ser un criterio secundario
+porque la arquitectura real ya lo soporta (`UniqueConstraint` parcial
+por tenant sobre `barcode`), documentado explícitamente como algo a
+decidir en el diseño de implementación (no ambiguo por el modelo, sí
+pendiente de decisión de producto).
+
+**Separación estricta con inventario/stock** (regla ya central del
+proyecto desde FASE 8, ver `docs/inventory.md`): la importación de
+catálogo NUNCA toca `StockMovement`, `InventoryUnit`, IMEI/serial,
+costos históricos, COGS ni contabilidad — solo campos del catálogo
+(`Product`). Cualquier carga de stock inicial futura deberá pasar por
+`apps.inventory.services` (`register_stock_in`/`register_serialized_unit`),
+nunca escribir esas tablas directamente desde el importador. Una
+plantilla separada (`Unidades-Serializadas.xlsx`, NO especificada en
+detalle todavía) queda para una fase de implementación futura si se
+necesita carga masiva de unidades ya existentes.
+
+**Flujo obligatorio**: `Subir .xlsx → validar → detectar CREATE/UPDATE
+→ preview (total/nuevos/actualizaciones/advertencias/errores) → corregir
+→ confirmar → guardar`. Nunca guardar directamente al subir. Modo
+`STRICT` por defecto (un error bloquea la confirmación completa
+—consistente con la disciplina de "todo o nada" ya usada en
+`apply_payment_to_sales`/reconciliaciones del proyecto); un modo
+tolerante queda para una extensión futura, nunca el comportamiento por
+defecto.
+
+**Seguridad y rendimiento** (a respetar en la implementación futura,
+sin decidir aquí cómo): autorización server-side + tenant isolation
+(mismo patrón que toda vista de negocio desde FASE 3); validación de
+archivo reutilizando `apps.customers.file_validation` en vez de un
+segundo validador (mismo criterio "no duplicar" ya aplicado a
+`PaymentProof` en FASE 17/18); reporte de errores descargable en Excel;
+auditoría (usuario, fecha, tenant, archivo, resultado) vía
+`apps.audit`, nunca un log paralelo; batch/bulk seguro y sin N+1 para
+catálogos grandes (mismo principio ya exigido por FASE 19, ver
+`docs/performance.md`); idempotencia real ante reintentos (referencia
+de importación única, mismo principio que `PayPal-Request-Id`/
+`SaaSInvoice.UniqueConstraint(subscription, period_start)`).
+
+**Integración con el catálogo único**: la importación actualiza el
+MISMO `Product` que ya consumen Ventas, POS, Compras, Reportes y la
+Catalog API — nunca un catálogo paralelo. Cambios de precio deben
+preservar historial/snapshots donde ya existen (`SaleItem`/
+`PurchaseOrderItem` ya snapshotean precio al momento de la operación,
+ver FASE 10/12) — la importación nunca reescribe una factura histórica
+ni un `SaleItem` ya emitido, solo el `Product` maestro vigente hacia
+adelante.
+
+**Relación con otras fases** (tal como las define el propio adendo):
+- **FASE 14 (Reportes)**: los reportes de Inventario (`apps.reports`,
+  CSV/XLSX ya construidos desde la ampliación de cierre de FASE 14)
+  siguen siendo exclusivamente de LECTURA/análisis — nunca el camino
+  para crear/actualizar productos. La importación/exportación operativa
+  de maestros de productos es de Productos/Inventario, un dominio
+  distinto aunque comparta el formato `.xlsx`.
+- **FASE 19 (Performance)**: cualquier implementación futura deberá
+  seguir la misma disciplina ya exigida y aplicada en esa fase —
+  medición antes de optimizar, batch/bulk seguro, evitar N+1, ver
+  `docs/performance.md`.
+- **FASE 22 (Data Migration)**: podrá reutilizar esta capacidad para
+  cargas iniciales de catálogo, pero la migración completa de datos
+  mantiene su propio procedimiento de reconciliación e integridad — la
+  importación de Excel nunca sustituye el proceso de FASE 22.
+
+**Explícitamente fuera de esta sincronización** (ninguna palabra de
+código): modelos, migraciones, vistas, servicios, endpoints, la
+plantilla `.xlsx` real, ni ninguna lógica de parsing/validación. Todo
+lo anterior es especificación integrada a la documentación, pendiente
+de una autorización de implementación explícita y separada.

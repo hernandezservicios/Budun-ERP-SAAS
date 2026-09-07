@@ -44,6 +44,14 @@ esos datos en una tabla de reporte.
 | Contables | Balance de Comprobación, Libro Mayor, Libro Diario, Balance General, Estado de Resultados | `apps.accounting` (construido, ver `docs/accounting.md` sección 8) — viven en `apps.accounting`, el panel de Reportes solo enlaza a ellos, nunca los duplica |
 | Panel gerencial | resumen ejecutivo (ventas, gastos, CXC/CXP pendientes, stock bajo, margen estimado) | `get_executive_summary` — reúne los totales YA calculados arriba, nunca una cifra nueva |
 
+> **Deslinde con la futura importación/exportación de Productos**
+> (especificada en `docs/products.md`, no construida): el reporte de
+> Inventario de la tabla de arriba es exclusivamente de LECTURA/
+> análisis — nunca el camino para crear o actualizar productos. La
+> importación/exportación operativa de maestros de productos
+> (CREATE/UPDATE por SKU vía Excel) pertenece a Productos/Inventario,
+> un dominio distinto aunque comparta el formato `.xlsx`.
+
 ## Aging (Cuentas por Cobrar/Pagar) — aproximación documentada
 
 Ni `Sale` ni el sistema de Cuentas por Cobrar tienen un campo

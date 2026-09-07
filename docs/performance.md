@@ -135,6 +135,12 @@ Catalog API en vez de reimplementarse cuatro veces.
 `inventory/movements` de la Inventory API con un catálogo de miles de
 productos (el dataset de prueba actual del proyecto es pequeño, nunca
 representativo de un tenant real grande).
+**Nota para una implementación futura** (especificada, no construida —
+ver `docs/products.md`, "Importación y exportación masiva de productos"):
+la importación/exportación de productos vía Excel deberá seguir la
+misma disciplina de esta fase — medir antes de optimizar, batch/bulk
+seguro, evitar N+1 al validar/crear/actualizar miles de filas — nunca
+asumida como automáticamente eficiente por usar `.xlsx`.
 
 ## Sales / POS
 **Construido**: confirmación de venta reutiliza literalmente
