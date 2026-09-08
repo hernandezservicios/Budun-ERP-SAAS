@@ -149,6 +149,21 @@ def get_active_categories(tenant):
     return Category.all_objects.filter(tenant=tenant, is_active=True).order_by("order", "name")
 
 
+def product_has_inventory_history(product):
+    """`True` si el producto ya tiene movimientos de stock o unidades
+    serializadas registradas — la única condición que impide cambiar
+    `inventory_tracking_type` (crearía dos fuentes de verdad
+    inconsistentes para el mismo producto). Extraída como función de
+    servicio reutilizable (antes vivía solo dentro de
+    `ProductForm.clean_inventory_tracking_type`) para que la
+    importación masiva de productos (extensión de FASE 8) aplique
+    EXACTAMENTE la misma regla, nunca una validación paralela."""
+    return (
+        StockMovement.all_objects.filter(product=product).exists()
+        or InventoryUnit.all_objects.filter(product=product).exists()
+    )
+
+
 # ------------------------------------------------------------------
 # Productos por CANTIDAD — StockMovement
 # ------------------------------------------------------------------

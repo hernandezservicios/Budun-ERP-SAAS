@@ -33,6 +33,13 @@ PERMISSION_CATALOG = [
     ("products.create", "Crear productos", "products"),
     ("products.update", "Editar productos", "products"),
     ("products.delete", "Desactivar productos", "products"),
+    # Importación/exportación masiva vía Excel (extensión de FASE 8, ver
+    # docs/products.md) — permisos propios, nunca reutilizan
+    # products.create/update: una importación afecta muchos productos a
+    # la vez, mismo criterio de mayor sensibilidad que separó
+    # accounting.close_period de accounting.post.
+    ("products.import", "Importar productos por Excel", "products"),
+    ("products.export", "Exportar productos por Excel", "products"),
 
     ("inventory.view", "Ver inventario", "inventory"),
     ("inventory.adjust", "Ajustar inventario", "inventory"),
@@ -162,7 +169,7 @@ _MANAGER_INCLUYE = {
     "dashboard.view",
     "customers.view", "customers.create", "customers.update", "customers.export",
     "suppliers.view", "suppliers.create", "suppliers.update",
-    "products.view", "products.create", "products.update",
+    "products.view", "products.create", "products.update", "products.import", "products.export",
     "inventory.view", "inventory.adjust", "inventory.stock_in", "inventory.stock_out", "inventory.serialized.view",
     "sales.view", "sales.create", "sales.update", "sales.cancel", "sales.refund",
     "quotations.view", "quotations.create", "quotations.convert",

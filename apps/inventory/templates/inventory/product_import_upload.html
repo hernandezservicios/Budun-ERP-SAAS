@@ -1,0 +1,58 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Importar productos — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'inventory:product_list' %}">Inventario</a></li>
+        <li aria-current="page">Importar Excel</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Importar productos desde Excel</h1>
+    <p class="encabezado-pagina__descripcion">
+        Sube un archivo <code>.xlsx</code> con tu catálogo. Antes de guardar nada te mostraremos
+        una vista previa (nuevos, actualizaciones, advertencias y errores) para que confirmes.
+    </p>
+</div>
+
+<div class="tarjeta" style="max-width: 640px;">
+    <div class="tarjeta__cuerpo">
+        <p>
+            ¿Primera vez? <a href="{% url 'inventory:product_import_template' %}">Descarga la plantilla</a>
+            y complétala respetando los encabezados oficiales.
+        </p>
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alerta alerta--peligro" role="alert">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% for field in form %}
+            <div class="campo">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <ul class="errores">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn--primario">Subir y validar</button>
+            <a class="btn btn--contorno" href="{% url 'inventory:product_list' %}">Cancelar</a>
+        </form>
+    </div>
+</div>
+
+<div class="tarjeta" style="max-width: 640px; margin-top: var(--espacio-6);">
+    <div class="tarjeta__cuerpo">
+        <h3>Qué NO hace esta importación</h3>
+        <ul>
+            <li>No modifica stock, movimientos de inventario ni unidades serializadas (IMEI/serie).</li>
+            <li>No crea ni cambia costos históricos, COGS ni asientos contables.</li>
+            <li>SKU es el único identificador de actualización — un SKU nuevo crea, uno existente actualiza.</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

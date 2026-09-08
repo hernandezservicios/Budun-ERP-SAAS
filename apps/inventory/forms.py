@@ -1,6 +1,7 @@
 from django import forms
 
-from .models import Category, InventoryUnit, Product, StockMovement
+from . import services
+from .models import Category, InventoryUnit, Product
 
 
 class CategoryForm(forms.ModelForm):
@@ -136,17 +137,23 @@ class ProductForm(forms.ModelForm):
             self.instance.inventory_tracking_type if self.instance.pk else Product.TrackingType.QUANTITY
         )
         if self.instance.pk and self.instance.inventory_tracking_type != nuevo_tipo:
-            tiene_historial = (
-                StockMovement.all_objects.filter(product=self.instance).exists()
-                or InventoryUnit.all_objects.filter(product=self.instance).exists()
-            )
-            if tiene_historial:
+            if services.product_has_inventory_history(self.instance):
                 raise forms.ValidationError(
                     "No se puede cambiar el tipo de seguimiento de un producto que ya tiene "
                     "movimientos de stock o unidades registradas: crearía dos fuentes de "
                     "verdad inconsistentes. Crea un producto nuevo con el otro tipo si lo necesitas."
                 )
         return nuevo_tipo
+
+
+class ProductImportUploadForm(forms.Form):
+    """Extensión de FASE 8 (ver `docs/products.md`,
+    `apps.inventory.product_import`). Deliberadamente sin `ModelForm`:
+    esta vista nunca guarda un `Product` directamente, solo recibe el
+    archivo — toda la validación real (estructura, filas, negocio) vive
+    en `product_import.build_preview`, nunca duplicada aquí."""
+
+    file = forms.FileField(label="Archivo Excel (.xlsx)")
 
 
 class StockInForm(forms.Form):

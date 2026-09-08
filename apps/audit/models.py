@@ -69,6 +69,12 @@ class AuditLog(models.Model):
         PAYPAL_WEBHOOK_PROCESSED = "paypal_webhook_processed", "Webhook de PayPal procesado"
         SENSITIVE_DATA_VIEWED = "sensitive_data_viewed", "Datos sensibles vistos"
         EXPORT_PERFORMED = "export_performed", "Exportación realizada"
+        # Importación masiva de productos vía Excel (extensión de
+        # FASE 8, ver docs/products.md) — dominio "products". La
+        # exportación de productos reutiliza EXPORT_PERFORMED de
+        # arriba (mismo patrón que apps.reports), nunca un código
+        # duplicado.
+        PRODUCT_IMPORT_CONFIRMED = "product_import_confirmed", "Importación de productos confirmada"
         GENERIC = "generic", "Evento genérico"
 
     tenant = models.ForeignKey(

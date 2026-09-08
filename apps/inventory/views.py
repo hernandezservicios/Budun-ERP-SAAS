@@ -22,20 +22,22 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
+from apps.permissions.services import PermissionRequiredMixin
 from apps.tenants.permissions import TenantRequiredMixin
 
-from . import services
+from . import product_import, services
 from .forms import (
     CategoryForm,
     InventoryUnitForm,
     InventoryUnitStatusForm,
     ProductForm,
     ProductImageForm,
+    ProductImportUploadForm,
     StockAdjustmentForm,
     StockInForm,
     StockOutForm,
 )
-from .models import Category, InventoryUnit, Product, ProductImage
+from .models import Category, InventoryUnit, Product, ProductImage, ProductImportBatch
 from .services import InvalidInventoryOperation
 
 
@@ -436,3 +438,114 @@ class ProductImageSetPrimaryView(LoginRequiredMixin, TenantRequiredMixin, View):
         services.set_primary_product_image(imagen)
         messages.success(request, "Imagen principal actualizada.")
         return redirect("inventory:product_detail", pk=product.pk)
+
+
+# ---------------------------------------------------------------------
+# Importación y exportación masiva de productos (Excel) — extensión de
+# FASE 8, ver `docs/products.md`/`apps.inventory.product_import`.
+# ---------------------------------------------------------------------
+
+
+class ProductImportTemplateView(LoginRequiredMixin, TenantRequiredMixin, PermissionRequiredMixin, View):
+    permission_code = "products.import"
+
+    def get(self, request):
+        return product_import.generar_plantilla_xlsx()
+
+
+class ProductExportView(LoginRequiredMixin, TenantRequiredMixin, PermissionRequiredMixin, View):
+    permission_code = "products.export"
+
+    def get(self, request):
+        respuesta = product_import.exportar_productos_xlsx(request.tenant)
+        _auditar_export(request)
+        return respuesta
+
+
+class ProductImportUploadView(LoginRequiredMixin, TenantRequiredMixin, PermissionRequiredMixin, View):
+    permission_code = "products.import"
+
+    def get(self, request):
+        return render(request, "inventory/product_import_upload.html", {"form": ProductImportUploadForm()})
+
+    def post(self, request):
+        form = ProductImportUploadForm(request.POST, request.FILES)
+        if not form.is_valid():
+            messages.error(request, "Selecciona un archivo.")
+            return render(request, "inventory/product_import_upload.html", {"form": form})
+        try:
+            lote = product_import.build_preview(request.tenant, form.cleaned_data["file"], user=request.user)
+        except product_import.ProductImportError as error:
+            messages.error(request, str(error))
+            return render(request, "inventory/product_import_upload.html", {"form": form})
+        return redirect("inventory:product_import_detail", pk=lote.pk)
+
+
+class ProductImportBatchDetailView(LoginRequiredMixin, TenantRequiredMixin, PermissionRequiredMixin, View):
+    permission_code = "products.import"
+
+    def get(self, request, pk):
+        lote = get_object_or_404(ProductImportBatch.all_objects, pk=pk, tenant=request.tenant)
+        return render(request, "inventory/product_import_preview.html", {"lote": lote})
+
+    def post(self, request, pk):
+        lote = get_object_or_404(ProductImportBatch.all_objects, pk=pk, tenant=request.tenant)
+        try:
+            lote = product_import.apply_import_batch(lote.pk, tenant=request.tenant, user=request.user)
+        except product_import.InvalidImportOperation as error:
+            messages.error(request, str(error))
+            return redirect("inventory:product_import_detail", pk=lote.pk)
+        _auditar_import_confirmado(request, lote)
+        messages.success(
+            request,
+            f"Importación {lote.reference} completada — Total {lote.total_rows} — "
+            f"Creados {lote.created_count} — Actualizados {lote.updated_count}.",
+        )
+        return redirect("inventory:product_import_detail", pk=lote.pk)
+
+
+class ProductImportErrorReportView(LoginRequiredMixin, TenantRequiredMixin, PermissionRequiredMixin, View):
+    permission_code = "products.import"
+
+    def get(self, request, pk):
+        lote = get_object_or_404(ProductImportBatch.all_objects, pk=pk, tenant=request.tenant)
+        return product_import.generar_reporte_errores_xlsx(lote)
+
+
+def _auditar_export(request):
+    # Import diferido + resiliente — mismo criterio que
+    # `apps.reports.views._audit_export` (la auditoría nunca debe poder
+    # romper la exportación que está auditando).
+    try:
+        from apps.audit.models import AuditLog
+        from apps.audit.services import log_event
+
+        from apps.core.utils import get_client_ip
+
+        log_event(
+            request.tenant, user=request.user, action=AuditLog.Action.EXPORT_PERFORMED, domain="products",
+            object_type="product_export", ip_address=get_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _auditar_import_confirmado(request, lote):
+    try:
+        from apps.audit.models import AuditLog
+        from apps.audit.services import log_event
+
+        from apps.core.utils import get_client_ip
+
+        log_event(
+            request.tenant, user=request.user, action=AuditLog.Action.PRODUCT_IMPORT_CONFIRMED, domain="products",
+            object_type="product_import_batch", object_id=lote.pk,
+            after={
+                "reference": lote.reference, "total_rows": lote.total_rows,
+                "created": lote.created_count, "updated": lote.updated_count,
+            },
+            ip_address=get_client_ip(request), user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+    except Exception:  # noqa: BLE001
+        pass

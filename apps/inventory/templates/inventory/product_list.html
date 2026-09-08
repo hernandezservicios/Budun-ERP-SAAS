@@ -17,6 +17,9 @@
     </div>
     <div class="encabezado-pagina__acciones">
         <a class="btn btn--contorno" href="{% url 'inventory:category_list' %}">Categorías</a>
+        <a class="btn btn--contorno" href="{% url 'inventory:product_import_template' %}">Descargar plantilla</a>
+        <a class="btn btn--contorno" href="{% url 'inventory:product_import_upload' %}">Importar Excel</a>
+        <a class="btn btn--contorno" href="{% url 'inventory:product_export' %}">Exportar Excel</a>
         <a class="btn btn--primario" href="{% url 'inventory:product_create' %}">Nuevo producto</a>
     </div>
 </div>

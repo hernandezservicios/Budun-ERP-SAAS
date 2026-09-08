@@ -379,6 +379,66 @@ class ProductImage(TenantScopedModel):
         return f"Imagen de {self.product.sku} ({'principal' if self.is_primary else 'secundaria'})"
 
 
+class ProductImportBatch(TenantScopedModel):
+    """Lote de importación masiva de productos vía Excel (extensión de
+    FASE 8 — ver `docs/products.md`, `apps.inventory.product_import`).
+
+    Deliberadamente NO persiste el archivo `.xlsx` subido: se parsea y
+    valida una sola vez al subir (`product_import.build_preview`), y el
+    resultado (`preview_data`) es lo único que `product_import.
+    apply_import_batch` necesita para aplicar el lote al confirmar —
+    evita el problema de gestionar/limpiar archivos temporales por
+    completo (nunca hay un archivo que limpiar después). `preview_data`/
+    `errors_data`/`warnings_data` guardan valores ya normalizados y
+    JSON-serializables (Decimal como string), nunca objetos Python
+    crudos."""
+
+    class Status(models.TextChoices):
+        PENDING_REVIEW = "pending_review", "Pendiente de confirmación"
+        CONFIRMED = "confirmed", "Confirmado"
+        FAILED = "failed", "Falló al confirmar"
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, verbose_name="subido por", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+    original_filename = models.CharField("archivo original", max_length=255)
+    status = models.CharField("estado", max_length=20, choices=Status.choices, default=Status.PENDING_REVIEW)
+    total_rows = models.PositiveIntegerField("total de filas", default=0)
+    created_count = models.PositiveIntegerField("creados", default=0)
+    updated_count = models.PositiveIntegerField("actualizados", default=0)
+    error_count = models.PositiveIntegerField("errores", default=0)
+    warning_count = models.PositiveIntegerField("advertencias", default=0)
+    preview_data = models.JSONField("datos validados", default=list, blank=True)
+    errors_data = models.JSONField("errores", default=list, blank=True)
+    warnings_data = models.JSONField("advertencias", default=list, blank=True)
+    failure_reason = models.CharField("motivo de falla", max_length=255, blank=True)
+    created_at = models.DateTimeField("subido", auto_now_add=True)
+    confirmed_at = models.DateTimeField("confirmado", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "lote de importación de productos"
+        verbose_name_plural = "lotes de importación de productos"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "created_at"], name="idx_pimport_tenant_fecha"),
+        ]
+
+    def __str__(self):
+        return self.reference
+
+    @property
+    def reference(self):
+        """Referencia legible (`IMP-000123`) — deliberadamente NO un
+        campo almacenado: se deriva siempre del `pk`, nunca puede
+        desincronizarse ni requiere un segundo `save()` al crear."""
+        return f"IMP-{self.pk:06d}" if self.pk else "IMP-(sin guardar)"
+
+    @property
+    def can_confirm(self):
+        return self.status == self.Status.PENDING_REVIEW and self.error_count == 0
+
+
 @receiver(post_delete, sender=ProductImage)
 def _eliminar_archivo_al_borrar_imagen(sender, instance, **kwargs):
     """Borra el archivo físico de `catalog-media/` cuando se elimina la

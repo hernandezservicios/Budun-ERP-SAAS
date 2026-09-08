@@ -1,0 +1,113 @@
+{% extends "layout_app.html" %}
+
+{% block title %}{{ lote.reference }} — Importar productos — ERP SaaS{% endblock %}
+
+{% block app_content %}
+<nav class="migas" aria-label="Ruta de navegación">
+    <ol>
+        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
+        <li><a href="{% url 'inventory:product_list' %}">Inventario</a></li>
+        <li><a href="{% url 'inventory:product_import_upload' %}">Importar Excel</a></li>
+        <li aria-current="page">{{ lote.reference }}</li>
+    </ol>
+</nav>
+
+<div class="encabezado-pagina">
+    <h1>Importación {{ lote.reference }}</h1>
+    <p class="encabezado-pagina__descripcion">
+        Archivo: {{ lote.original_filename }} — subido por {{ lote.uploaded_by|default:"—" }} el {{ lote.created_at|date:"d M Y H:i" }}
+    </p>
+</div>
+
+{% if lote.status == "confirmed" %}
+<div class="alerta alerta--exito" role="alert">
+    Importación confirmada — Total {{ lote.total_rows }} — Creados {{ lote.created_count }} —
+    Actualizados {{ lote.updated_count }} — {{ lote.confirmed_at|date:"d M Y H:i" }}.
+</div>
+{% elif lote.status == "failed" %}
+<div class="alerta alerta--peligro" role="alert">
+    La confirmación falló: {{ lote.failure_reason }}
+</div>
+{% endif %}
+
+<div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
+    <div class="kpi"><p class="kpi__etiqueta">Total filas</p><p class="kpi__valor">{{ lote.total_rows }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Nuevos</p><p class="kpi__valor">{{ lote.created_count }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Actualizaciones</p><p class="kpi__valor">{{ lote.updated_count }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Errores</p><p class="kpi__valor">{{ lote.error_count }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Advertencias</p><p class="kpi__valor">{{ lote.warning_count }}</p></div>
+</div>
+
+{% if lote.status == "pending_review" %}
+    {% if lote.can_confirm %}
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--primario">Confirmar importación</button>
+        <a class="btn btn--contorno" href="{% url 'inventory:product_import_upload' %}">Cancelar y subir otro archivo</a>
+    </form>
+    {% else %}
+    <div class="alerta alerta--advertencia" role="alert">
+        El archivo tiene errores — modo estricto: no se puede confirmar hasta corregirlos y volver a subir el archivo.
+    </div>
+    <a class="btn btn--contorno" href="{% url 'inventory:product_import_errors' lote.pk %}">Descargar reporte de errores (.xlsx)</a>
+    {% endif %}
+{% endif %}
+
+{% if lote.errors_data %}
+<h2 style="margin-top: var(--espacio-6);">Errores</h2>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Fila</th><th>Columna</th><th>Valor</th><th>Motivo</th></tr></thead>
+        <tbody>
+            {% for error in lote.errors_data|slice:":100" %}
+            <tr><td>{{ error.row }}</td><td>{{ error.column }}</td><td>{{ error.value }}</td><td>{{ error.reason }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if lote.errors_data|length > 100 %}
+<p>Mostrando los primeros 100 de {{ lote.error_count }} errores — descarga el reporte completo arriba.</p>
+{% endif %}
+{% endif %}
+
+{% if lote.warnings_data %}
+<h2 style="margin-top: var(--espacio-6);">Advertencias</h2>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Fila</th><th>SKU</th><th>Motivo</th></tr></thead>
+        <tbody>
+            {% for advertencia in lote.warnings_data|slice:":100" %}
+            <tr><td>{{ advertencia.row }}</td><td>{{ advertencia.value }}</td><td>{{ advertencia.reason }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if lote.preview_data %}
+<h2 style="margin-top: var(--espacio-6);">Vista previa</h2>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Fila</th><th>SKU</th><th>Acción</th></tr></thead>
+        <tbody>
+            {% for fila in lote.preview_data|slice:":100" %}
+            <tr>
+                <td>{{ fila.row }}</td>
+                <td>{{ fila.sku }}</td>
+                <td>
+                    {% if fila.action == "CREATE" %}
+                    <span class="badge badge--verde">Crear</span>
+                    {% else %}
+                    <span class="badge badge--azul">Actualizar</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if lote.preview_data|length > 100 %}
+<p>Mostrando las primeras 100 de {{ lote.preview_data|length }} filas válidas.</p>
+{% endif %}
+{% endif %}
+{% endblock %}
