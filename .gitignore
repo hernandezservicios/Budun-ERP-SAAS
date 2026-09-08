@@ -10,6 +10,7 @@ htmlcov/
 staticfiles/
 media-private/
 catalog-media/
+/backups/
 *.dump
 *.sql
 .DS_Store

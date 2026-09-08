@@ -94,6 +94,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.api",
     "apps.billing",
+    "apps.backups",
 ]
 
 # --- API de Inventario v1 + Catalog API (FASE 15 + ampliación final) -----
@@ -314,3 +315,38 @@ if not DEBUG:
 # pasada dedicada arriesga con romper la UI en producción, exactamente
 # lo que esta fase pide evitar ("no introducir una CSP incompatible
 # con la aplicación sin probarla").
+
+# --- Backups + Disaster Recovery (FASE 20, ver docs/backup-recovery.md) ---
+# `BACKUP_ROOT` vive FUERA de cualquier ruta servida por Django (nunca
+# bajo STATIC_ROOT ni MEDIA_ROOT/CATALOG_MEDIA_ROOT, nunca registrado en
+# config/urls.py) — mismo principio que "un backup nunca debe quedar
+# públicamente accesible" (sección 20 de la especificación de fase).
+# Configurable vía entorno para que producción (FASE 21) pueda apuntar a
+# un disco/punto de montaje distinto sin tocar código.
+BACKUP_ROOT = Path(os.environ.get("BACKUP_ROOT") or str(BASE_DIR / "backups"))
+
+# Retención: cuántos backups diarios recientes se conservan siempre,
+# más uno por semana/mes fuera de esa ventana — ver
+# `apps.backups.services.retention`. El último backup válido NUNCA se
+# borra, sin importar esta configuración (regla explícita de la fase).
+BACKUP_RETENTION_DAILY_DAYS = int(os.environ.get("BACKUP_RETENTION_DAILY_DAYS", "7"))
+BACKUP_RETENTION_WEEKLY_WEEKS = int(os.environ.get("BACKUP_RETENTION_WEEKLY_WEEKS", "4"))
+BACKUP_RETENTION_MONTHLY_MONTHS = int(os.environ.get("BACKUP_RETENTION_MONTHLY_MONTHS", "12"))
+
+# Espacio mínimo libre exigido antes de iniciar un backup (por defecto
+# 500 MB) — ver `apps.backups.services.disk.ensure_sufficient_disk_space`.
+BACKUP_MIN_FREE_BYTES = int(os.environ.get("BACKUP_MIN_FREE_BYTES", str(500 * 1024 * 1024)))
+
+# Cifrado OPCIONAL de los backups (ver `apps.backups.services.encryption`,
+# usa `openssl` — ya parte del stack vía Git/SSL, sin dependencia Python
+# nueva — nunca criptografía propia). Vacío por defecto = SIN cifrar,
+# documentado explícitamente como tal en cada backup (nunca "cifrado" en
+# silencio si no hay clave). La clave NUNCA vive dentro de BACKUP_ROOT.
+BACKUP_ENCRYPTION_KEY = os.environ.get("BACKUP_ENCRYPTION_KEY", "")
+
+# Copia off-site OPCIONAL — un segundo directorio (típicamente en otro
+# disco/punto de montaje) al que se copia el backup ya generado, nunca
+# un reemplazo del backup local. Vacío por defecto = solo local,
+# documentado como tal (ver DECISIONS.md) — ningún proveedor cloud no
+# aprobado se agrega aquí.
+BACKUP_OFFSITE_ROOT = os.environ.get("BACKUP_OFFSITE_ROOT", "")
