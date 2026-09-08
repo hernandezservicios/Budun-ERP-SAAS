@@ -104,29 +104,29 @@ Registrar versión de PostgreSQL y formato de backup. Documentar compatibilidad 
 No agregar cloud storage, Redis, S3, cron externo u otro componente solo para completar la fase. Cuando una pieza requiera infraestructura aún no disponible, documentar y probar el equivalente local/aislado.
 
 ## 29. Criterios de aceptación
-- [ ] backup PostgreSQL real
-- [ ] restore PostgreSQL real
-- [ ] restore verification real
-- [ ] checksum y detección de corrupción
-- [ ] retention
-- [ ] scheduling/documentación
-- [ ] off-site preparado/documentado
-- [ ] cifrado evaluado/implementado cuando corresponda
-- [ ] media/files recovery
-- [ ] configuration recovery
-- [ ] RPO/RTO documentados
-- [ ] disaster recovery runbook
-- [ ] restore drill
-- [ ] failure testing
-- [ ] monitoring/documentación
-- [ ] security review
-- [ ] Multi-Tenant/platform isolation
-- [ ] performance measurements
-- [ ] tests
-- [ ] smoke
-- [ ] documentación
-- [ ] Git commit
-- [ ] working tree limpio
+- [x] backup PostgreSQL real — `pg_dump -F c` real, 641 085 bytes/0.92 s en el restore drill de cierre (`docs/backup-recovery.md` sección 2)
+- [x] restore PostgreSQL real — base aislada real, 9.91 s, eliminada al terminar (sección 3)
+- [x] restore verification real — 73 migraciones + 15 tablas verificadas, 0 discrepancias (sección 4)
+- [x] checksum y detección de corrupción — SHA-256, corrupción real probada y detectada (sección 5)
+- [x] retention — diaria/semanal/mensual, último válido protegido incondicionalmente, probado con archivos reales (sección 6)
+- [x] scheduling/documentación — comando `backup_all` real; Task Scheduler/cron/systemd documentados, instalación real diferida a FASE 21 (sección 7)
+- [x] off-site preparado/documentado — `LocalOffsiteAdapter` real y probado; `CloudOffsiteAdapter` placeholder documentado (sección 8)
+- [x] cifrado evaluado/implementado cuando corresponda — `openssl` real, opcional, round-trip probado (sección 9)
+- [x] media/files recovery — `media-private/`/`catalog-media/` separados, backup+restore+verificación reales (secciones 10-11)
+- [x] configuration recovery — `.env.example` completo, `.env` nunca respaldado (verificado con test), runbook documentado (sección 12)
+- [x] RPO/RTO documentados — propuesta explícita, RTO respaldado por medición real del restore drill (sección 14)
+- [x] disaster recovery runbook — procedimiento reproducible de 12 pasos (sección 15)
+- [x] restore drill — ejecutado real de punta a punta, TODO OK (sección 16)
+- [x] failure testing — credenciales inválidas, disco insuficiente, corrupción, restore truncado, fallo de retención, todos con tests reales (sección 17)
+- [x] monitoring/documentación — `BackupRun` + `backup_health`, canal de alerta explícitamente diferido (sección 18)
+- [x] security review — fuera de web root, sin superficie HTTP, permisos POSIX, sin fuga de secretos (sección 19)
+- [x] Multi-Tenant/platform isolation — sin ninguna UI/endpoint de tenant ni de tenant Super Admin (sección 20)
+- [x] performance measurements — tiempos/tamaños reales medidos (sección 21)
+- [x] tests — 88 tests nuevos, reales contra PostgreSQL donde corresponde (sección 24)
+- [x] smoke — `disaster_recovery_drill` de cierre, TODO OK (sección 16)
+- [x] documentación — `docs/backup-recovery.md` reescrito a CONSTRUIDO, este checklist, `CURRENT_PHASE.md`/`PHASE_HISTORY.md`/`KNOWN_ISSUES.md`/`DECISIONS.md`
+- [x] Git commit — ver `PHASE_HISTORY.md` para el hash
+- [x] working tree limpio — confirmado antes de cerrar
 
 ## 30. Reporte final obligatorio
 Entregar: estrategia de backup, formato, compresión, tamaño, duración, entorno y duración del restore, verification, retention, scheduling, off-site, encryption, RPO/RTO, runbook, restore drill, security, tests, smoke, regression, documentación, Git y pendientes. No inventar resultados.
