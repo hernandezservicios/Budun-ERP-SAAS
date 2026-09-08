@@ -104,125 +104,169 @@ Usa exclusivamente los componentes de FASE 5 (`.tabla`, `.badge`,
 Sin identidad visual nueva, sin exceso de tarjetas (los listados usan
 tablas, no grids de cards).
 
-## Importación y exportación masiva de productos (Excel) — ESPECIFICADO, NO CONSTRUIDO
+## Importación y exportación masiva de productos (Excel) — CONSTRUIDO
 
-> **Estado: especificación integrada, sin ningún código/modelo/
-> migración/vista/servicio creado todavía.** Ordenada por el usuario en
-> `ADENDUM_FASE_8_IMPORTACION_PRODUCTOS_EXCEL.md` (raíz del repositorio,
-> preservado ahí tal cual, nunca copiado a `docs/`). Pertenece a FASE 8
-> (extiende Productos/Inventario) — implementación pendiente de
-> autorización explícita, no incluida en el cierre ya aprobado de FASE 8
-> (ver `docs/phases/PHASE-08-products-plus-inventory.md`).
+> **Estado: construido e implementado** (extensión de FASE 8, ordenada
+> en `ADENDUM_FASE_8_IMPORTACION_PRODUCTOS_EXCEL.md`, raíz del
+> repositorio, preservado ahí tal cual). `apps.inventory.product_import`
+> (nuevo módulo, ver también `apps.inventory.models.ProductImportBatch`,
+> `apps.inventory.views`/`urls.py`, `apps.inventory.forms.
+> ProductImportUploadForm`). Ver el reporte de cierre entregado al
+> usuario para arquitectura completa, tests y resultado del smoke test.
 
 **Objetivo**: capacidad de carga/descarga masiva de productos vía
-`.xlsx` (nunca CSV como formato principal) desde Inventario → Productos:
-`Nuevo`/`Editar` (ya construidos) + `Importar Excel`/`Exportar Excel`/
-`Descargar plantilla` (especificados aquí, no construidos).
+`.xlsx` (nunca CSV) desde Inventario → Productos: `Nuevo`/`Editar` (ya
+existentes) + `Importar Excel`/`Exportar Excel`/`Descargar plantilla`
+(construidos en esta extensión, botones en `product_list.html`).
 
-**Columnas de la plantilla — evaluadas contra el modelo `Product` real**
-(regla explícita del adendo: "no inventar columnas que el modelo no
-soporte"):
+**Columnas definitivas de la plantilla** (`product_import.COLUMNAS`,
+identificadas siempre por nombre de encabezado — nunca por posición
+física, así que reordenar columnas en Excel no rompe la importación):
 
-| Columna de la plantilla | Campo real de `Product` | Estado |
+| Columna | Campo real de `Product` | Obligatoria |
 |---|---|---|
-| SKU | `sku` | soportado |
-| Barcode | `barcode` | soportado |
-| Nombre | `name` | soportado |
-| Descripción | `description` | soportado |
-| Marca | `brand` | soportado (FASE 15) |
-| Modelo | `model_name` | soportado (FASE 15) |
-| Categoría | `category` (FK, por nombre) | soportado |
-| Tracking | `inventory_tracking_type` (`QUANTITY`/`SERIALIZED`) | soportado |
-| Precio | `sale_price` (venta) y/o `purchase_price` (costo) | soportado — **a decidir en la implementación** cuál(es) de los dos expone la plantilla, ver "Contradicción encontrada" abajo |
-| Impuesto | `tax_rate` | soportado |
-| Stock mínimo | `min_stock` | soportado |
-| Estado | `is_active` | soportado |
-| Atributos de variante | `variant_attributes` (JSON) | soportado |
-| Moneda | — | **NO soportado — ver "Contradicción encontrada"** |
-| Unidad de medida | — | **NO soportado — ver "Contradicción encontrada"** |
+| SKU * | `sku` | Sí |
+| Nombre * | `name` (solo en CREATE — ver "Semántica de blanco") | Sí en CREATE |
+| Código de barras | `barcode` | No |
+| Categoría | `category` (FK, por nombre, case-insensitive) | No |
+| Descripción | `description` | No |
+| Marca | `brand` | No |
+| Modelo | `model_name` | No |
+| Tipo de seguimiento | `inventory_tracking_type` ("Por cantidad"/"Serializado") | No (default: Por cantidad) |
+| Precio de venta * | `sale_price` | Sí en CREATE |
+| Precio de compra | `purchase_price` | No |
+| Impuesto (%) | `tax_rate` | No |
+| Stock mínimo | `min_stock` | No |
+| Activo | `is_active` ("Sí"/"No") | No (default: Sí) |
+| Atributos de variante | `variant_attributes` (JSON) — formato `clave:valor;clave:valor` en una sola celda | No |
 
-**Contradicción real encontrada durante esta sincronización** (no
-oculta, ni resuelta unilateralmente): el adendo pide columnas "moneda"
-y "unidad de medida" como parte de la plantilla, pero `Product` no
-tiene ningún campo de moneda ni de unidad de medida hoy — no existe ese
-concepto en ningún modelo del proyecto (verificado por búsqueda
-exhaustiva). Tampoco "precio" es un campo único: `Product` tiene DOS
-precios (`sale_price`/`purchase_price`), y el adendo no especifica cuál
-expone la plantilla. Ninguna de las tres cosas se decide ni se inventa
-en esta sincronización documental — quedan como decisiones explícitas
-que la fase de IMPLEMENTACIÓN real deberá resolver con el usuario
-(¿agregar los campos al modelo primero, con su propia migración? ¿usar
-`sale_price` únicamente? ¿ambos precios en dos columnas separadas?),
-nunca asumidas en silencio.
+**Decisión de las dos columnas sin campo real** (hallazgo de la
+sincronización documental previa, resuelto ahora en la implementación):
+"moneda" y "unidad de medida" NO se incluyeron en la plantilla — ningún
+modelo del proyecto tiene esos conceptos todavía (`docs/currency.md`
+sigue especificado, no construido); agregarlos habría exigido inventar
+campos nuevos en `Product` sin autorización explícita para ese cambio
+de modelo, algo fuera del alcance de esta extensión. "Precio" se separó
+en DOS columnas reales (`sale_price`/`purchase_price`, nunca una sola
+columna ambigua) — ver `DECISIONS.md`.
 
-**Matching CREATE/UPDATE**: SKU es el único criterio principal
-(`UniqueConstraint(tenant, sku)` ya existente), respetando unicidad por
-tenant — nunca el nombre. Barcode puede ser un criterio secundario
-porque la arquitectura real ya lo soporta (`UniqueConstraint` parcial
-por tenant sobre `barcode`), documentado explícitamente como algo a
-decidir en el diseño de implementación (no ambiguo por el modelo, sí
-pendiente de decisión de producto).
+**Matching CREATE/UPDATE**: SKU es el ÚNICO criterio principal
+(`UniqueConstraint(tenant, sku)` ya existente) — SKU inexistente crea,
+SKU existente actualiza; nunca el nombre. El código de barras se valida
+por unicidad (contra otros productos, y duplicados dentro del mismo
+archivo) pero nunca sustituye a SKU como identificador de actualización
+— exactamente como pide el adendo.
+
+**Semántica de una celda en blanco — decisión de diseño explícita**:
+en un **CREATE**, una columna opcional en blanco usa el mismo default
+que el modelo `Product` (`barcode=""`, `is_active=True`,
+`inventory_tracking_type=QUANTITY`, etc.). En un **UPDATE**, una
+columna en blanco significa **"no cambiar este campo"** — nunca
+"vaciarlo" — así una fila que no repite todas las columnas para un
+producto ya existente nunca borra sus datos actuales por accidente. Si
+un UPDATE no cambia ningún campo (todas las columnas opcionales en
+blanco, o los mismos valores ya guardados), se marca como
+**advertencia** ("Sin cambios respecto al producto actual"), nunca
+como error — no bloquea la confirmación.
 
 **Separación estricta con inventario/stock** (regla ya central del
 proyecto desde FASE 8, ver `docs/inventory.md`): la importación de
 catálogo NUNCA toca `StockMovement`, `InventoryUnit`, IMEI/serial,
-costos históricos, COGS ni contabilidad — solo campos del catálogo
-(`Product`). Cualquier carga de stock inicial futura deberá pasar por
-`apps.inventory.services` (`register_stock_in`/`register_serialized_unit`),
-nunca escribir esas tablas directamente desde el importador. Una
-plantilla separada (`Unidades-Serializadas.xlsx`, NO especificada en
-detalle todavía) queda para una fase de implementación futura si se
-necesita carga masiva de unidades ya existentes.
+costos históricos, COGS ni contabilidad — verificado con tests
+dedicados (`SerializedSeparationTests`). Cambiar
+`inventory_tracking_type` de un producto que ya tiene movimientos/
+unidades se rechaza con la MISMA regla que el formulario manual
+(`services.product_has_inventory_history`, extraída del formulario a
+un servicio reutilizable en esta misma extensión — nunca una
+validación paralela). Una plantilla separada de unidades serializadas
+(`Unidades-Serializadas.xlsx`) NO se construyó — fuera de alcance de
+esta extensión, queda para una fase futura si se prioriza.
 
-**Flujo obligatorio**: `Subir .xlsx → validar → detectar CREATE/UPDATE
-→ preview (total/nuevos/actualizaciones/advertencias/errores) → corregir
-→ confirmar → guardar`. Nunca guardar directamente al subir. Modo
-`STRICT` por defecto (un error bloquea la confirmación completa
-—consistente con la disciplina de "todo o nada" ya usada en
-`apply_payment_to_sales`/reconciliaciones del proyecto); un modo
-tolerante queda para una extensión futura, nunca el comportamiento por
-defecto.
+**Flujo real**: `Subir .xlsx → validar (apps.customers.file_validation
++ chequeo de macros) → parsear y validar filas en bloque (nunca N+1) →
+crear ProductImportBatch con el resultado completo → mostrar preview
+(total/nuevos/actualizaciones/advertencias/errores) → confirmar (POST
+separado) → aplicar todo o nada → auditar`. Nunca se guarda nada al
+subir — `build_preview` solo crea el `ProductImportBatch` con el
+resultado ya validado, ningún `Product` se toca hasta la confirmación
+explícita. Modo estricto real: `ProductImportBatch.can_confirm` es
+`False` si `error_count > 0`, y la vista de confirmación lo rechaza
+explícitamente — nunca una confirmación parcial.
 
-**Seguridad y rendimiento** (a respetar en la implementación futura,
-sin decidir aquí cómo): autorización server-side + tenant isolation
-(mismo patrón que toda vista de negocio desde FASE 3); validación de
-archivo reutilizando `apps.customers.file_validation` en vez de un
-segundo validador (mismo criterio "no duplicar" ya aplicado a
-`PaymentProof` en FASE 17/18); reporte de errores descargable en Excel;
-auditoría (usuario, fecha, tenant, archivo, resultado) vía
-`apps.audit`, nunca un log paralelo; batch/bulk seguro y sin N+1 para
-catálogos grandes (mismo principio ya exigido por FASE 19, ver
-`docs/performance.md`); idempotencia real ante reintentos (referencia
-de importación única, mismo principio que `PayPal-Request-Id`/
-`SaaSInvoice.UniqueConstraint(subscription, period_start)`).
+**Diseño clave: nunca se persiste el archivo `.xlsx` subido.** Se
+parsea y valida una sola vez al subir; el resultado ya normalizado
+(`ProductImportBatch.preview_data`/`errors_data`/`warnings_data`, tres
+`JSONField`) es lo único que usa la confirmación — evita por completo
+el problema de "almacenamiento temporal seguro / eliminación de
+temporales" que pedía el adendo revisar: no hay ningún archivo temporal
+que gestionar ni limpiar, nunca queda un archivo huérfano en disco.
+
+**Seguridad**: permisos propios `products.import`/`products.export`
+(`apps.permissions.catalog`, MANAGER en adelante por defecto, nunca
+ADMIN-excluido) — cada vista los exige vía `PermissionRequiredMixin`,
+nunca solo ocultos en la plantilla. Tenant isolation: cada
+`ProductImportBatch`/`Product` se filtra siempre por
+`tenant=request.tenant`, un lote de otro tenant da 404 (nunca se
+confirma cruzando tenant). Validación de archivo reutilizando
+`apps.customers.file_validation` (extensión + firma binaria + tamaño,
+mismo validador que `PaymentProof`, nunca un segundo) + un chequeo
+adicional propio de macros (`.xlsm` renombrado a `.xlsx` comparte la
+misma firma ZIP — se detecta por la presencia de `xl/vbaProject.bin`
+dentro del contenido, sin importar la extensión declarada). Valores con
+apariencia de fórmula (`=`/`@` al inicio) se RECHAZAN como error de
+validación en cualquier columna de texto — nunca se guardan ni se
+reexportan tal cual (la exportación además sanitiza cada celda vía
+`apps.core.utils.sanitize_cell_value`, FASE 18, heredado gratis de
+reutilizar `apps.reports.exports.xlsx_response`). Auditoría real vía
+`apps.audit` (`AuditLog.Action.PRODUCT_IMPORT_CONFIRMED` al confirmar,
+`EXPORT_PERFORMED`/dominio `"products"` al exportar — nunca un log
+paralelo), import diferido + resiliente (nunca rompe la operación que
+audita).
+
+**Concurrencia**: la confirmación de un lote bloquea la fila del
+propio `ProductImportBatch` (`select_for_update`) para que dos
+confirmaciones del mismo lote (doble clic, dos pestañas) nunca lo
+apliquen dos veces; cada `Product` existente se bloquea también
+(`select_for_update`, orden determinístico por SKU) antes de
+actualizarlo. Un `CREATE` que choca con un SKU/barcode creado por otra
+transacción concurrente entre el preview y la confirmación queda
+protegido por los `UniqueConstraint` ya existentes — se captura como
+conflicto real vía un SAVEPOINT interno (`transaction.atomic()`
+anidado): el lote completo se revierte y queda `FAILED`, nunca
+parcialmente aplicado (verificado con 4 tests de concurrencia reales,
+hilos + PostgreSQL real).
+
+**Rendimiento**: `build_preview` resuelve SKUs/barcodes/categorías
+existentes con consultas en BLOQUE (`filter(sku__in=...)`,
+`filter(barcode__in=...)`, categorías del tenant cargadas una sola vez)
+— nunca una consulta por fila, verificado con un test de conteo de
+queries (`PerformanceTests`, constante entre 5 y 50 filas). Límite duro
+de `MAX_FILAS_IMPORTACION = 5000` filas por archivo (constante, fácil
+de ajustar si una medición real lo justifica).
 
 **Integración con el catálogo único**: la importación actualiza el
 MISMO `Product` que ya consumen Ventas, POS, Compras, Reportes y la
-Catalog API — nunca un catálogo paralelo. Cambios de precio deben
-preservar historial/snapshots donde ya existen (`SaleItem`/
-`PurchaseOrderItem` ya snapshotean precio al momento de la operación,
-ver FASE 10/12) — la importación nunca reescribe una factura histórica
-ni un `SaleItem` ya emitido, solo el `Product` maestro vigente hacia
-adelante.
+Catalog API — nunca un catálogo paralelo. Nunca reescribe una factura
+histórica ni un `SaleItem`/`PurchaseOrderItem` ya emitido (esos ya
+snapshotean el precio al momento de la operación, FASE 10/12) — solo
+el `Product` maestro vigente hacia adelante.
 
-**Relación con otras fases** (tal como las define el propio adendo):
-- **FASE 14 (Reportes)**: los reportes de Inventario (`apps.reports`,
-  CSV/XLSX ya construidos desde la ampliación de cierre de FASE 14)
+**Relación con otras fases**:
+- **FASE 14 (Reportes)**: los reportes de Inventario (`apps.reports`)
   siguen siendo exclusivamente de LECTURA/análisis — nunca el camino
-  para crear/actualizar productos. La importación/exportación operativa
-  de maestros de productos es de Productos/Inventario, un dominio
-  distinto aunque comparta el formato `.xlsx`.
-- **FASE 19 (Performance)**: cualquier implementación futura deberá
-  seguir la misma disciplina ya exigida y aplicada en esa fase —
-  medición antes de optimizar, batch/bulk seguro, evitar N+1, ver
-  `docs/performance.md`.
+  para crear/actualizar productos, ver también la nota en
+  `docs/reports.md`.
+- **FASE 19 (Performance)**: misma disciplina aplicada (medir antes de
+  optimizar, batch/bulk seguro, sin N+1) — ver `docs/performance.md`.
 - **FASE 22 (Data Migration)**: podrá reutilizar esta capacidad para
-  cargas iniciales de catálogo, pero la migración completa de datos
-  mantiene su propio procedimiento de reconciliación e integridad — la
-  importación de Excel nunca sustituye el proceso de FASE 22.
+  cargas iniciales de catálogo; la migración completa de datos
+  mantiene su propio procedimiento de reconciliación e integridad —
+  la importación de Excel nunca sustituye ese proceso.
 
-**Explícitamente fuera de esta sincronización** (ninguna palabra de
-código): modelos, migraciones, vistas, servicios, endpoints, la
-plantilla `.xlsx` real, ni ninguna lógica de parsing/validación. Todo
-lo anterior es especificación integrada a la documentación, pendiente
-de una autorización de implementación explícita y separada.
+**Explícitamente NO construido en esta extensión**: plantilla dedicada
+de unidades serializadas (`Unidades-Serializadas.xlsx`); un modo
+tolerante (no estricto); moneda/unidad de medida como columnas (no
+existen en el modelo); actualización de precio con preservación
+automática de un historial de precios (no existe ese concepto en el
+proyecto — `Product` siempre representa el precio VIGENTE, igual que
+antes de esta extensión).

@@ -135,12 +135,13 @@ Catalog API en vez de reimplementarse cuatro veces.
 `inventory/movements` de la Inventory API con un catálogo de miles de
 productos (el dataset de prueba actual del proyecto es pequeño, nunca
 representativo de un tenant real grande).
-**Nota para una implementación futura** (especificada, no construida —
-ver `docs/products.md`, "Importación y exportación masiva de productos"):
-la importación/exportación de productos vía Excel deberá seguir la
-misma disciplina de esta fase — medir antes de optimizar, batch/bulk
-seguro, evitar N+1 al validar/crear/actualizar miles de filas — nunca
-asumida como automáticamente eficiente por usar `.xlsx`.
+**Construido** (extensión de FASE 8, ver `docs/products.md`,
+"Importación y exportación masiva de productos"): la
+importación/exportación de productos vía Excel sigue la misma
+disciplina de esta fase — `apps.inventory.product_import.build_preview`
+resuelve SKUs/barcodes/categorías con consultas en bloque, nunca una
+por fila, verificado con un test de conteo de queries constante entre
+5 y 50 filas.
 
 ## Sales / POS
 **Construido**: confirmación de venta reutiliza literalmente
