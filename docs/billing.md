@@ -86,6 +86,8 @@ de verdad.
   `apps.customers` — nombre de archivo generado, nunca público, nunca
   el original). Estados de verificación exactos de la especificación:
   `PENDING`/`SUBMITTED`/`UNDER_REVIEW`/`APPROVED`/`REJECTED`/`REVERSED`.
+  `PaymentProof.file` forma parte del backup de media pendiente de
+  implementación real en FASE 20 (ver `docs/backup-recovery.md`).
 - **`Coupon`**: estructura simple (sin tabla de redención separada,
   `times_redeemed` incrementado atómicamente) — "no crear un motor
   innecesariamente complejo si el proyecto no lo necesita".

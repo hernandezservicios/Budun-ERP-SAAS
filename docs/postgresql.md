@@ -10,7 +10,7 @@ Django usa variables de entorno. Puerto estándar: 5432 salvo que el entorno rea
 Constraints, foreign keys, índices selectivos, Decimal para dinero, transacciones, migraciones versionadas.
 
 ## Backup
-Preferir `pg_dump`/`pg_restore` y documentar también backup/restore desde pgAdmin 4.
+Preferir `pg_dump`/`pg_restore` y documentar también backup/restore desde pgAdmin 4. Ver `docs/backup-recovery.md` para la referencia consolidada de backup/disaster recovery de todo el proyecto (base de datos + media + configuración), pendiente de implementación real en FASE 20 (`docs/phases/PHASE-20-backups.md`).
 
 ## Configuración real de conexión (FASE 2 — PostgreSQL Foundation)
 

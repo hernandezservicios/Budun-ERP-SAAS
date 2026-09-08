@@ -139,6 +139,10 @@ URL).
   público se sirve sin credencial, protegido únicamente por lo
   no-adivinable del UUID.
 
+`CATALOG_MEDIA_ROOT` (igual que `media-private/`) forma parte del
+backup de media pendiente de implementación real en FASE 20 (ver
+`docs/backup-recovery.md`).
+
 Gestión desde `apps/inventory` (subir/eliminar/marcar principal,
 sección "Imágenes de catálogo" en el detalle de producto) — reutiliza
 la MISMA validación de archivos ya usada para documentos de Clientes/

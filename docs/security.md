@@ -245,6 +245,10 @@ real en el servicio), no una omisión.
 caracteres especiales en el nombre declarado, archivos enormes cerca
 del límite exacto — no se construyeron pruebas negativas nuevas para
 estos tres casos puntuales en esta pasada.
+**Relación con FASE 20**: `media-private/`/`catalog-media/` (además de
+la base de datos) son el segundo componente obligatorio de la
+estrategia de backup — ver `docs/backup-recovery.md` sección 10, sin
+backup real todavía.
 
 ## XSS / CSRF / Injection / mass assignment
 **Construido**: CSRF vía `CsrfViewMiddleware` (activo en todas las

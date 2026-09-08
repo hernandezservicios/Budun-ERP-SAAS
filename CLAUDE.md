@@ -8,6 +8,7 @@ Construir desde cero un SaaS ERP Multi-Tenant profesional con Django + PostgreSQ
 - Producción: Hostinger VPS + Linux + PostgreSQL + Django + Gunicorn + Nginx (o servidor web equivalente si la infraestructura real lo recomienda) + SSL.
 - Redis solo si una fase posterior demuestra necesidad real.
 - PayPal y PayPal MCP según documentación oficial vigente.
+- Ver `docs/backup-recovery.md` para la referencia consolidada de qué backup/recuperación ya existe hoy y qué queda pendiente de implementación real en FASE 20 (`docs/phases/PHASE-20-backups.md`).
 
 ## Prohibiciones
 - No crear Dockerfile.
