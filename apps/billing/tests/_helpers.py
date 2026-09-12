@@ -21,9 +21,13 @@ from django.contrib.auth import get_user_model
 
 from apps.billing.providers.base import (
     CaptureResult,
+    CreatedBillingPlan,
     CreatedOrder,
+    CreatedProduct,
+    CreatedRecurringSubscription,
     PaymentProvider,
     PaymentProviderError,
+    RecurringSubscriptionStatus,
     RefundResult,
     WebhookVerification,
 )
@@ -37,6 +41,9 @@ class FakePayPalProvider(PaymentProvider):
         self._order_ids = (f"ORDER-{i}" for i in itertools.count(1))
         self._capture_ids = (f"CAPTURE-{i}" for i in itertools.count(1))
         self._refund_ids = (f"REFUND-{i}" for i in itertools.count(1))
+        self._product_ids = (f"PROD-{i}" for i in itertools.count(1))
+        self._billing_plan_ids = (f"PLAN-{i}" for i in itertools.count(1))
+        self._recurring_subscription_ids = (f"SUB-{i}" for i in itertools.count(1))
         self.next_capture_status = "COMPLETED"
         self.next_refund_status = "COMPLETED"
         self.capture_amount = Decimal("29.00")
@@ -46,6 +53,12 @@ class FakePayPalProvider(PaymentProvider):
         self.should_fail_refund = False
         self.should_fail_test_connection = False
         self.next_verification = True
+        # Cobro recurrente (FASE DE CORRECCIÓN 2C).
+        self.should_fail_create_product = False
+        self.should_fail_create_billing_plan = False
+        self.should_fail_create_recurring_subscription = False
+        self.should_fail_cancel_recurring_subscription = False
+        self.next_recurring_subscription_status = "ACTIVE"
         self.calls = []
 
     def create_order(self, *, amount, currency, reference_id, description, return_url, cancel_url, idempotency_key):
@@ -78,6 +91,40 @@ class FakePayPalProvider(PaymentProvider):
     def verify_webhook_signature(self, *, headers, raw_body):
         estado = "SUCCESS" if self.next_verification else "FAILURE"
         return WebhookVerification(verified=self.next_verification, verification_status=estado)
+
+    # -- Cobro recurrente (FASE DE CORRECCIÓN 2C) ----------------------------
+
+    def create_product(self, *, name, description, idempotency_key):
+        self.calls.append(("create_product", idempotency_key))
+        if self.should_fail_create_product:
+            raise PaymentProviderError("fallo simulado de create_product")
+        return CreatedProduct(external_product_id=next(self._product_ids))
+
+    def create_billing_plan(self, *, product_id, name, amount, currency, frequency, payment_failure_threshold, idempotency_key):
+        self.calls.append(("create_billing_plan", idempotency_key))
+        if self.should_fail_create_billing_plan:
+            raise PaymentProviderError("fallo simulado de create_billing_plan")
+        return CreatedBillingPlan(external_plan_id=next(self._billing_plan_ids))
+
+    def create_recurring_subscription(self, *, plan_id, reference_id, return_url, cancel_url, idempotency_key):
+        self.calls.append(("create_recurring_subscription", idempotency_key))
+        if self.should_fail_create_recurring_subscription:
+            raise PaymentProviderError("fallo simulado de create_recurring_subscription")
+        sub_id = next(self._recurring_subscription_ids)
+        return CreatedRecurringSubscription(
+            external_subscription_id=sub_id, approve_url=f"https://sandbox.paypal.test/subscribe/{sub_id}", status="APPROVAL_PENDING",
+        )
+
+    def get_recurring_subscription(self, *, external_subscription_id):
+        self.calls.append(("get_recurring_subscription", None))
+        return RecurringSubscriptionStatus(
+            external_subscription_id=external_subscription_id, status=self.next_recurring_subscription_status, raw={},
+        )
+
+    def cancel_recurring_subscription(self, *, external_subscription_id, reason, idempotency_key):
+        self.calls.append(("cancel_recurring_subscription", idempotency_key))
+        if self.should_fail_cancel_recurring_subscription:
+            raise PaymentProviderError("fallo simulado de cancel_recurring_subscription")
 
     def test_connection(self):
         if self.should_fail_test_connection:

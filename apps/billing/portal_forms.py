@@ -24,11 +24,20 @@ class SelectPlanForm(forms.Form):
         renderizó el formulario y que el usuario lo envía, `ChoiceField`
         ya rechaza cualquier valor fuera de `choices` — el mismo
         `create_checkout` además vuelve a rechazar un checkout de
-        PayPal deshabilitado como segunda defensa real en el backend."""
+        PayPal deshabilitado como segunda defensa real en el backend.
+
+        FASE DE CORRECCIÓN 2C: "PayPal (cobro automático)" es una
+        TERCERA opción, deliberadamente distinta de "PayPal (pago
+        único)" — mismo interruptor de disponibilidad
+        (`is_paypal_available`, PayPal es PayPal para efectos de
+        habilitar/deshabilitar la plataforma), pero autoriza cobros
+        FUTUROS en vez de cobrar solo la factura actual (ver
+        `docs/billing.md` sección "Billing recurrente con PayPal")."""
         super().__init__(*args, **kwargs)
         opciones = []
         if paypal_services.is_paypal_available():
-            opciones.append(("paypal", "PayPal"))
+            opciones.append(("paypal", "PayPal (pago único)"))
+            opciones.append(("paypal_recurring", "PayPal (cobro automático mensual/anual)"))
         if transfer_services.is_bank_transfer_available():
             opciones.append(("bank_transfer", "Transferencia bancaria"))
         self.fields["payment_method"].choices = opciones

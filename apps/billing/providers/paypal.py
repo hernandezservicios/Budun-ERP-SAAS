@@ -41,9 +41,13 @@ from django.core.cache import cache
 
 from .base import (
     CaptureResult,
+    CreatedBillingPlan,
     CreatedOrder,
+    CreatedProduct,
+    CreatedRecurringSubscription,
     PaymentProvider,
     PaymentProviderError,
+    RecurringSubscriptionStatus,
     RefundResult,
     WebhookVerification,
 )
@@ -258,6 +262,108 @@ class PayPalProvider(PaymentProvider):
         payload = self._call_with_token_retry(_do)
         estado = payload.get("verification_status", "")
         return WebhookVerification(verified=(estado == "SUCCESS"), verification_status=estado)
+
+    # -- Cobro recurrente: Catalog Products + Billing Plans + Subscriptions
+    # (FASE DE CORRECCIÓN 2C) -------------------------------------------------
+    #
+    # Endpoints oficiales consultados en developer.paypal.com (septiembre
+    # 2026) para esta corrección:
+    # - `POST /v1/catalogs/products` — crear el producto (una vez por
+    #   `PlanVersion`, nunca por tenant).
+    # - `POST /v1/billing/plans` — crear el plan de facturación (precio +
+    #   frecuencia + `payment_failure_threshold`, también una vez por
+    #   `PlanVersion`).
+    # - `POST /v1/billing/subscriptions` — crear la suscripción real para
+    #   UN tenant (`application_context.return_url`/`cancel_url`, mismo
+    #   patrón de aprobación por redirect que Orders API v2).
+    # - `GET /v1/billing/subscriptions/{id}` — reconciliar el estado
+    #   síncronamente al volver del checkout (nunca depender solo del
+    #   webhook, que no puede llegar a localhost — ver docs/paypal.md).
+    # - `POST /v1/billing/subscriptions/{id}/cancel` — cancelar del lado
+    #   de PayPal cuando el tenant cancela en Budun.
+
+    def create_product(self, *, name, description, idempotency_key):
+        def _do(force_refresh_token):
+            headers = self._auth_headers(idempotency_key=idempotency_key, force_refresh_token=force_refresh_token)
+            body = {"name": name[:127], "description": (description or "")[:256], "type": "SERVICE", "category": "SOFTWARE"}
+            _status, payload = self._request("POST", "/v1/catalogs/products", body=body, headers=headers)
+            return payload
+
+        payload = self._call_with_token_retry(_do)
+        return CreatedProduct(external_product_id=payload.get("id", ""))
+
+    def create_billing_plan(self, *, product_id, name, amount, currency, frequency, payment_failure_threshold, idempotency_key):
+        interval_unit = "YEAR" if frequency == "annual" else "MONTH"
+
+        def _do(force_refresh_token):
+            headers = self._auth_headers(idempotency_key=idempotency_key, force_refresh_token=force_refresh_token)
+            body = {
+                "product_id": product_id,
+                "name": name[:127],
+                "billing_cycles": [{
+                    "frequency": {"interval_unit": interval_unit, "interval_count": 1},
+                    "tenure_type": "REGULAR",
+                    "sequence": 1,
+                    "total_cycles": 0,  # 0 = indefinido, hasta que se cancele.
+                    "pricing_scheme": {"fixed_price": {"value": f"{Decimal(amount):.2f}", "currency_code": currency}},
+                }],
+                "payment_preferences": {
+                    "auto_bill_outstanding": True,
+                    "payment_failure_threshold": int(payment_failure_threshold),
+                },
+            }
+            _status, payload = self._request("POST", "/v1/billing/plans", body=body, headers=headers)
+            return payload
+
+        payload = self._call_with_token_retry(_do)
+        return CreatedBillingPlan(external_plan_id=payload.get("id", ""))
+
+    def create_recurring_subscription(self, *, plan_id, reference_id, return_url, cancel_url, idempotency_key):
+        def _do(force_refresh_token):
+            headers = self._auth_headers(idempotency_key=idempotency_key, force_refresh_token=force_refresh_token)
+            body = {
+                "plan_id": plan_id,
+                "custom_id": str(reference_id)[:127],
+                "application_context": {
+                    "brand_name": "Budun ERP",
+                    "user_action": "SUBSCRIBE_NOW",
+                    "return_url": return_url,
+                    "cancel_url": cancel_url,
+                },
+            }
+            _status, payload = self._request("POST", "/v1/billing/subscriptions", body=body, headers=headers)
+            return payload
+
+        payload = self._call_with_token_retry(_do)
+        approve_url = ""
+        for link in payload.get("links", []):
+            if link.get("rel") == "approve":
+                approve_url = link.get("href", "")
+                break
+        return CreatedRecurringSubscription(
+            external_subscription_id=payload.get("id", ""), approve_url=approve_url, status=payload.get("status", ""),
+        )
+
+    def get_recurring_subscription(self, *, external_subscription_id):
+        def _do(force_refresh_token):
+            headers = self._auth_headers(force_refresh_token=force_refresh_token)
+            _status, payload = self._request("GET", f"/v1/billing/subscriptions/{external_subscription_id}", headers=headers)
+            return payload
+
+        payload = self._call_with_token_retry(_do)
+        return RecurringSubscriptionStatus(
+            external_subscription_id=payload.get("id", external_subscription_id), status=payload.get("status", ""), raw=payload,
+        )
+
+    def cancel_recurring_subscription(self, *, external_subscription_id, reason, idempotency_key):
+        def _do(force_refresh_token):
+            headers = self._auth_headers(idempotency_key=idempotency_key, force_refresh_token=force_refresh_token)
+            body = {"reason": (reason or "Cancelado por el tenant")[:128]}
+            self._request(
+                "POST", f"/v1/billing/subscriptions/{external_subscription_id}/cancel", body=body, headers=headers,
+            )
+
+        self._call_with_token_retry(_do)
 
     # -- Test Connection ------------------------------------------------------
 

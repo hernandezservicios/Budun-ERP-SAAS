@@ -12,5 +12,17 @@ urlpatterns = [
     path("cobrar/<int:invoice_id>/paypal/", views.CheckoutPayPalInitiateView.as_view(), name="checkout_paypal_initiate"),
     path("cobrar/<int:invoice_id>/paypal/retorno/", views.CheckoutPayPalReturnView.as_view(), name="checkout_paypal_return"),
     path("cobrar/<int:invoice_id>/paypal/cancelado/", views.CheckoutPayPalCancelView.as_view(), name="checkout_paypal_cancel"),
+    path(
+        "cobrar/<int:invoice_id>/paypal-recurrente/",
+        views.RecurringCheckoutInitiateView.as_view(), name="checkout_paypal_recurring_initiate",
+    ),
+    path(
+        "cobrar/<int:invoice_id>/paypal-recurrente/retorno/",
+        views.RecurringCheckoutReturnView.as_view(), name="checkout_paypal_recurring_return",
+    ),
+    path(
+        "cobrar/<int:invoice_id>/paypal-recurrente/cancelado/",
+        views.RecurringCheckoutCancelView.as_view(), name="checkout_paypal_recurring_cancel",
+    ),
     path("transferencia/<int:invoice_id>/", views.TransferInstructionsView.as_view(), name="transfer_instructions"),
 ]

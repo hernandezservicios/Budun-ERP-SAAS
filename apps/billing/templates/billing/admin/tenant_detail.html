@@ -11,10 +11,19 @@
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></h3>
         {% if subscription.current_period_start %}
-        <p>Período: {{ subscription.current_period_start }} — {{ subscription.current_period_end }}</p>
+        <p>Período: {{ subscription.current_period_start }} — {{ subscription.current_period_end }} (próxima cobranza/factura: {{ subscription.current_period_end }})</p>
         {% else %}
         <p>Período: <em>pendiente de activación</em></p>
         {% endif %}
+        <p>
+            Cobro recurrente PayPal:
+            {% if subscription.paypal_subscription_id %}
+            <span class="badge">{{ subscription.paypal_subscription_status|default:"desconocido" }}</span>
+            — referencia externa: <code>{{ subscription.paypal_subscription_id }}</code>
+            {% else %}
+            <span class="badge">Sin autorización de cobro automático (pago manual)</span>
+            {% endif %}
+        </p>
     </div>
 </div>
 {% endif %}

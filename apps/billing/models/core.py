@@ -88,6 +88,16 @@ class PlanVersion(models.Model):
     price_amount = models.DecimalField("precio", max_digits=12, decimal_places=2)
     price_currency = models.CharField("moneda", max_length=3, default="USD")
     is_current = models.BooleanField("vigente", default=True)
+    # FASE DE CORRECCIÓN 2C (Billing recurrente con PayPal): el mapeo
+    # PlanVersion -> Producto/Plan de PayPal es 1:1 y CENTRALIZADO — se
+    # crea una única vez la primera vez que algún tenant contrata esta
+    # versión con cobro recurrente (`services.recurring.
+    # ensure_paypal_billing_plan`), nunca un producto/plan de PayPal por
+    # tenant. Vacío hasta que eso ocurra; una vez creado, es inmutable
+    # (igual que la propia `PlanVersion`) — un cambio de precio siempre
+    # crea una `PlanVersion` NUEVA con sus propios IDs de PayPal.
+    paypal_product_id = models.CharField("ID de producto en PayPal", max_length=64, blank=True)
+    paypal_plan_id = models.CharField("ID de plan de facturación en PayPal", max_length=64, blank=True)
     created_at = models.DateTimeField("creado", auto_now_add=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, verbose_name="creado por", on_delete=models.SET_NULL,
@@ -137,6 +147,19 @@ class Subscription(TenantScopedModel):
     coupon = models.ForeignKey(
         "billing.Coupon", verbose_name="cupón", on_delete=models.SET_NULL, null=True, blank=True, related_name="subscriptions",
     )
+    # FASE DE CORRECCIÓN 2C (Billing recurrente con PayPal): la
+    # referencia externa que autoriza el cobro automático futuro — NUNCA
+    # un secreto/token de pago (eso PayPal nunca lo expone vía API,
+    # solo internamente); solo el identificador con el que se consulta/
+    # cancela la suscripción del lado de PayPal. Vacío mientras el
+    # método de pago sea transferencia, o mientras el tenant no haya
+    # autorizado todavía un cobro recurrente.
+    paypal_subscription_id = models.CharField("ID de suscripción en PayPal", max_length=64, blank=True, db_index=True)
+    # Último estado CONOCIDO del lado de PayPal (espejo informativo para
+    # el Super Admin, sección 18 — nunca la fuente de verdad: el estado
+    # real de negocio sigue siendo `status` de arriba, gobernado
+    # exclusivamente por `apps.billing.services.subscriptions`).
+    paypal_subscription_status = models.CharField("último estado conocido en PayPal", max_length=20, blank=True)
     started_at = models.DateTimeField("iniciada", null=True, blank=True)
     cancel_at_period_end = models.BooleanField("cancelar al finalizar el período", default=False)
     cancelled_at = models.DateTimeField("cancelada", null=True, blank=True)

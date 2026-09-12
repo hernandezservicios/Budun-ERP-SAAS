@@ -546,6 +546,35 @@ def process_webhook_event(*, headers, raw_body):
         # (que sí tendría una ventana de carrera).
         return PayPalWebhookEvent.objects.filter(event_id=event_id).first()
 
+    # FASE DE CORRECCIÓN 2C (cobro recurrente): los eventos de
+    # Subscriptions referencian una `Subscription` de Budun, nunca un
+    # `PayPalTransaction` — dispatch completamente separado, nunca
+    # forzado a pasar por `_resolve_transaction_from_resource`/
+    # `_apply_webhook_event` (que son, y siguen siendo, exclusivos de
+    # Orders API v2).
+    from . import recurring as recurring_services
+
+    if recurring_services.is_subscription_event(event_type):
+        subscription = recurring_services.resolve_subscription_from_resource(event_type, resource)
+        if subscription is None:
+            evento.status = PayPalWebhookEvent.Status.IGNORED
+            evento.processed_at = timezone.now()
+            evento.save(update_fields=["status", "processed_at"])
+            return evento
+        try:
+            recurring_services.apply_subscription_webhook_event(subscription.pk, event_type=event_type, resource=resource)
+            evento.status = PayPalWebhookEvent.Status.PROCESSED
+        except Exception as error:  # noqa: BLE001 — un evento con error nunca debe tumbar la respuesta al webhook.
+            evento.status = PayPalWebhookEvent.Status.ERROR
+            evento.error_message = str(error)[:255]
+        evento.processed_at = timezone.now()
+        evento.save(update_fields=["status", "error_message", "processed_at"])
+        _audit(
+            subscription.tenant, action=AuditLog.Action.PAYPAL_WEBHOOK_PROCESSED,
+            metadata={"event_type": event_type, "resultado": evento.status, "subscription_id": subscription.pk},
+        )
+        return evento
+
     txn = _resolve_transaction_from_resource(event_type, resource)
     if txn is None:
         evento.status = PayPalWebhookEvent.Status.IGNORED

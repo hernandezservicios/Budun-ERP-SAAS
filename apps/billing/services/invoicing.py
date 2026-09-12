@@ -112,6 +112,32 @@ def void_invoice(invoice, *, reason, user=None):
     return invoice
 
 
+def ensure_next_renewal_invoice(subscription):
+    """Genera (o recupera, idempotente) la factura del SIGUIENTE período
+    de una suscripción cuyo período vigente ya terminó, y avanza
+    `current_period_start/end`. Extraído de `generate_due_renewal_invoices`
+    (FASE DE CORRECCIÓN 2C) para que el mismo cálculo lo use tanto el
+    cron diario (abajo) como la reconciliación REACTIVA de un webhook de
+    cobro recurrente confirmado (`apps.billing.services.recurring`) —
+    cualquiera de los dos que se dispare primero genera la factura;
+    el otro encuentra que ya existe y no hace nada más (mismo
+    `UniqueConstraint` de siempre). Requiere `select_for_update()` ya
+    tomado por el llamador sobre `subscription` — no lo toma aquí para
+    poder componerse dentro de una transacción más grande."""
+    siguiente_inicio = subscription.current_period_end
+    dias = 365 if subscription.plan_version.frequency == "annual" else 30
+    siguiente_fin = siguiente_inicio + timedelta(days=dias)
+    invoice, creada = generate_invoice_for_subscription(
+        subscription, period_start=siguiente_inicio, period_end=siguiente_fin,
+        description=f"Renovación — {subscription.plan_version.plan.name}",
+    )
+    if creada:
+        subscription.current_period_start = siguiente_inicio
+        subscription.current_period_end = siguiente_fin
+        subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
+    return invoice, creada
+
+
 def generate_due_renewal_invoices(*, today=None):
     """Callable idempotente para renovación recurrente — pensada para
     invocarse desde un comando de administración programado por cron
@@ -119,7 +145,17 @@ def generate_due_renewal_invoices(*, today=None):
     una fase posterior demuestra necesidad real"). Para cada suscripción
     ACTIVE/PAST_DUE cuyo período vigente ya terminó, genera la factura
     del SIGUIENTE período y avanza `current_period_start/end` — nunca
-    duplica gracias al `UniqueConstraint` de `SaaSInvoice`."""
+    duplica gracias al `UniqueConstraint` de `SaaSInvoice`.
+
+    Sigue siendo el mecanismo real para suscripciones de transferencia
+    (que no se cobran solas — alguien debe ver la factura y pagarla). Para
+    una suscripción con cobro recurrente de PayPal ya autorizado
+    (`Subscription.paypal_subscription_id`), esta factura queda lista
+    para reconciliarse en cuanto llegue el webhook de cobro confirmado —
+    pero si el webhook llega ANTES de que este cron corra, la propia
+    reconciliación (`services.recurring`) genera la factura ella misma
+    vía `ensure_next_renewal_invoice` — nunca depende de que este cron
+    se ejecute primero."""
     from ..models import Subscription
 
     hoy = today or date.today()
@@ -131,16 +167,7 @@ def generate_due_renewal_invoices(*, today=None):
     for subscription in suscripciones:
         with transaction.atomic():
             subscription = Subscription.all_objects.select_for_update().get(pk=subscription.pk)
-            siguiente_inicio = subscription.current_period_end
-            dias = 365 if subscription.plan_version.frequency == "annual" else 30
-            siguiente_fin = siguiente_inicio + timedelta(days=dias)
-            invoice, creada = generate_invoice_for_subscription(
-                subscription, period_start=siguiente_inicio, period_end=siguiente_fin,
-                description=f"Renovación — {subscription.plan_version.plan.name}",
-            )
+            invoice, creada = ensure_next_renewal_invoice(subscription)
             if creada:
-                subscription.current_period_start = siguiente_inicio
-                subscription.current_period_end = siguiente_fin
-                subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
                 generadas.append(invoice)
     return generadas

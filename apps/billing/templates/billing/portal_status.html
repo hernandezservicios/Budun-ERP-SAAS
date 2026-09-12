@@ -28,9 +28,19 @@
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></h3>
         <p>Frecuencia: {{ subscription.plan_version.get_frequency_display }} · Precio: {{ subscription.plan_version.price_amount }} {{ subscription.plan_version.price_currency }}</p>
-        {% if subscription.current_period_end %}<p>Período actual: {{ subscription.current_period_start }} — {{ subscription.current_period_end }}</p>{% endif %}
+        {% if subscription.current_period_end %}<p>Período actual: {{ subscription.current_period_start }} — {{ subscription.current_period_end }} (próximo cobro/factura: {{ subscription.current_period_end }})</p>{% endif %}
         <p>Estado de facturación del tenant: <span class="badge">{{ tenant.get_billing_status_display }}</span></p>
         <p>Saldo a favor: {{ credit_balance|default:"0" }}</p>
+        <p>
+            Método de cobro:
+            {% if subscription.paypal_subscription_id and subscription.paypal_subscription_status == "ACTIVE" %}
+            <span class="badge badge--verde">PayPal — cobro automático activo</span>
+            {% elif subscription.paypal_subscription_id %}
+            <span class="badge">PayPal — autorización de cobro automático {{ subscription.paypal_subscription_status|default:"pendiente" }}</span>
+            {% else %}
+            <span class="badge">Sin cobro automático — pago manual (PayPal o transferencia) cada período</span>
+            {% endif %}
+        </p>
 
         {% if subscription.is_effectively_operational %}
         <p style="margin-top: var(--espacio-4);">
@@ -59,6 +69,9 @@
                 <td><span class="badge">{{ invoice.get_status_display }}</span></td>
                 <td>
                     {% if invoice.status == "open" or invoice.status == "partially_paid" %}
+                    {% if paypal_disponible and not subscription.paypal_subscription_id %}
+                    <a class="btn btn--contorno btn--sm" href="{% url 'billing_portal:checkout_paypal_recurring_initiate' invoice.pk %}">Autorizar cobro automático (PayPal)</a>
+                    {% endif %}
                     {% if paypal_disponible %}
                     <a class="btn btn--primario btn--sm" href="{% url 'billing_portal:checkout_paypal_initiate' invoice.pk %}">Pagar con PayPal</a>
                     {% endif %}

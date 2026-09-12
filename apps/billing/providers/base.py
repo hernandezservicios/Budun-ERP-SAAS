@@ -51,6 +51,38 @@ class WebhookVerification:
     verification_status: str = ""
 
 
+# ---------------------------------------------------------------------
+# Cobro recurrente (FASE DE CORRECCIÓN 2C, ver docs/paypal.md sección
+# "Recurring Billing"). Deliberadamente NUEVOS dataclasses/métodos, no
+# una reforma de los de arriba (Orders API v2, pago único) — ambos
+# mecanismos coexisten y siguen siendo necesarios (transferencia y "un
+# solo pago sin autorizar cobros futuros" no desaparecen).
+# ---------------------------------------------------------------------
+
+@dataclass
+class CreatedProduct:
+    external_product_id: str
+
+
+@dataclass
+class CreatedBillingPlan:
+    external_plan_id: str
+
+
+@dataclass
+class CreatedRecurringSubscription:
+    external_subscription_id: str
+    approve_url: str
+    status: str
+
+
+@dataclass
+class RecurringSubscriptionStatus:
+    external_subscription_id: str
+    status: str
+    raw: dict = field(default_factory=dict)
+
+
 class PaymentProvider:
     """Puerto abstracto. Cada método lanza `PaymentProviderError` en
     caso de fallo — nunca deja escapar una excepción de bajo nivel
@@ -72,6 +104,25 @@ class PaymentProvider:
         raise NotImplementedError
 
     def verify_webhook_signature(self, *, headers: dict, raw_body: bytes) -> WebhookVerification:
+        raise NotImplementedError
+
+    # -- Cobro recurrente (FASE DE CORRECCIÓN 2C) ----------------------------
+
+    def create_product(self, *, name: str, description: str, idempotency_key: str) -> CreatedProduct:
+        raise NotImplementedError
+
+    def create_billing_plan(self, *, product_id: str, name: str, amount: Decimal, currency: str,
+                             frequency: str, payment_failure_threshold: int, idempotency_key: str) -> CreatedBillingPlan:
+        raise NotImplementedError
+
+    def create_recurring_subscription(self, *, plan_id: str, reference_id: str, return_url: str,
+                                       cancel_url: str, idempotency_key: str) -> CreatedRecurringSubscription:
+        raise NotImplementedError
+
+    def get_recurring_subscription(self, *, external_subscription_id: str) -> RecurringSubscriptionStatus:
+        raise NotImplementedError
+
+    def cancel_recurring_subscription(self, *, external_subscription_id: str, reason: str, idempotency_key: str) -> None:
         raise NotImplementedError
 
     def test_connection(self) -> tuple[bool, str]:

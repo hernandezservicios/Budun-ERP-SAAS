@@ -21,6 +21,7 @@ from .portal_forms import CancelSubscriptionForm, ChangePlanForm, SelectPlanForm
 from .services import coupons as coupon_services
 from .services import credits as credit_services
 from .services import invoicing as invoicing_services
+from .services import recurring as recurring_services
 from .services import subscriptions as subscription_services
 from .services import transfers as transfer_services
 
@@ -101,6 +102,8 @@ class SelectPlanView(LoginRequiredMixin, TenantRequiredMixin, View):
 
         if metodo == "paypal":
             return redirect("billing_portal:checkout_paypal_initiate", invoice_id=invoice.pk)
+        if metodo == "paypal_recurring":
+            return redirect("billing_portal:checkout_paypal_recurring_initiate", invoice_id=invoice.pk)
         return redirect("billing_portal:transfer_instructions", invoice_id=invoice.pk)
 
 
@@ -140,6 +143,56 @@ class CheckoutPayPalCancelView(LoginRequiredMixin, TenantRequiredMixin, View):
         txn = get_object_or_404(PayPalTransaction, external_order_id=order_id, tenant=request.tenant)
         paypal_services.cancel_checkout(txn, user=request.user)
         messages.warning(request, "Pago cancelado.")
+        return redirect("billing_portal:status")
+
+
+# ----------------------------------------------------------------------
+# Cobro recurrente de PayPal (FASE DE CORRECCIÓN 2C) — mismo patrón
+# iniciar/retorno/cancelar que el checkout de pago único de arriba, pero
+# autorizando cobros FUTUROS (`recurring_services.create_recurring_
+# checkout`) en vez de cobrar solo la factura actual. `invoice_id` en la
+# URL identifica la factura inicial que originó el alta (para saber a
+# qué tenant/suscripción pertenece, mismo patrón que el resto del
+# Portal) — el propio servicio decide, mirando la suscripción, qué
+# factura reconciliar al confirmar el primer cobro.
+# ----------------------------------------------------------------------
+
+class RecurringCheckoutInitiateView(LoginRequiredMixin, TenantRequiredMixin, View):
+    def get(self, request, invoice_id):
+        require_permission(request, "billing.saas.manage")
+        invoice = get_object_or_404(SaaSInvoice, pk=invoice_id, tenant=request.tenant)
+        try:
+            _subscription, approve_url = recurring_services.create_recurring_checkout(
+                invoice.subscription, user=request.user,
+                return_url=request.build_absolute_uri(reverse("billing_portal:checkout_paypal_recurring_return", args=[invoice.pk])),
+                cancel_url=request.build_absolute_uri(reverse("billing_portal:checkout_paypal_recurring_cancel", args=[invoice.pk])),
+            )
+        except recurring_services.InvalidRecurringOperation as error:
+            messages.error(request, str(error))
+            return redirect("billing_portal:status")
+        return redirect(approve_url)
+
+
+class RecurringCheckoutReturnView(LoginRequiredMixin, TenantRequiredMixin, View):
+    def get(self, request, invoice_id):
+        invoice = get_object_or_404(SaaSInvoice, pk=invoice_id, tenant=request.tenant)
+        # Reconciliación SÍNCRONA al volver del checkout — nunca depende
+        # solo del webhook, que no puede llegar a localhost (ver
+        # docs/paypal.md). Las renovaciones posteriores sí dependen
+        # exclusivamente del webhook: no hay ningún "retorno" del
+        # navegador para un cobro que PayPal ejecuta en segundo plano.
+        try:
+            recurring_services.reconcile_recurring_subscription(invoice.subscription, user=request.user)
+        except recurring_services.InvalidRecurringOperation as error:
+            messages.error(request, str(error))
+            return redirect("billing_portal:status")
+        messages.info(request, "Procesando tu autorización de cobro automático — si ya fue aprobada, se reflejará en unos segundos.")
+        return redirect("billing_portal:status")
+
+
+class RecurringCheckoutCancelView(LoginRequiredMixin, TenantRequiredMixin, View):
+    def get(self, request, invoice_id):
+        messages.warning(request, "Autorización de cobro automático cancelada.")
         return redirect("billing_portal:status")
 
 
