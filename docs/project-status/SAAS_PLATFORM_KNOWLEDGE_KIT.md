@@ -134,6 +134,21 @@ Tenant + PayPal + Transferencia" (ver `KNOWN_ISSUES.md` #130,
   transferencia vía `approve_payment_proof`) convergen en el MISMO par
   de funciones — nunca dos implementaciones paralelas de "aplicar un
   pago".
+- **Patrón reusable — una factura emitida es un snapshot contractual**
+  (agregado en "FASE DE CORRECCIÓN 2B", ver `KNOWN_ISSUES.md` #131,
+  `DECISIONS.md` #111): *"Una factura SaaS emitida es un snapshot
+  contractual del importe y moneda. Los pagos posteriores deben cobrar
+  exactamente ese snapshot y nunca recalcular el precio vigente del
+  plan."* Ningún proveedor de pago (PayPal hoy; cualquiera futuro) debe
+  recibir jamás un monto derivado de "cuánto cuesta el plan ahora" para
+  cobrar una factura YA EMITIDA — siempre `invoice.total`/
+  `invoice.currency`, nunca `resolve_plan_pricing`/equivalente. La
+  única excepción legítima es un flujo que genuinamente NO tiene
+  factura todavía (alta nueva vía "elegir plan", o la herramienta de
+  prueba de plataforma) — ahí SÍ corresponde resolver el precio
+  vigente, porque no hay ningún snapshot que respetar todavía.
+  `apps.billing.services.create_checkout_for_invoice` es la
+  implementación de referencia de este patrón para PayPal.
 - **Subscription lifecycle**: un pago confirmado (por cualquier
   método) dispara `activate_subscription` — el mismo primitivo de bajo
   nivel que usan tanto la activación inicial
@@ -197,6 +212,21 @@ las decisiones de esta familia de correcciones:
   abstracción prematura sin un tercer método real que la necesite
   todavía — mismo criterio de "no generalizar sin un segundo caso real"
   ya aplicado repetidas veces en este proyecto.
+- **#111**: `create_checkout_for_invoice` como función NUEVA en vez de
+  modificar el comportamiento por defecto de `create_checkout` — su
+  único otro llamador real (la herramienta de prueba de plataforma, sin
+  ninguna factura) sigue necesitando resolver el precio vigente del
+  plan, así que cambiarle el comportamiento por defecto para arreglar
+  el Portal habría sido tocar un llamador que funciona correctamente
+  hoy. La concurrencia se cerró bloqueando SOLO la `SaaSInvoice` en
+  cuestión (`select_for_update()`), no la `Subscription` entera —
+  suficiente para el escenario real (dos clics sobre la MISMA factura)
+  sin ampliar el lock a operaciones administrativas no relacionadas
+  sobre la misma suscripción. Se descartó explícitamente inventar una
+  lista de monedas soportadas por PayPal sin poder verificarla contra
+  documentación oficial — la validación de moneda se limitó a una
+  comprobación de buena formación, y la lista real queda como pendiente
+  documentado, nunca como una suposición.
 
 ## LESSONS LEARNED
 
@@ -233,6 +263,13 @@ las decisiones de esta familia de correcciones:
   específico — la transferencia nunca necesitó un interruptor propio
   porque su señal real ya existía (`BankAccount.objects.filter(
   is_active=True)`).
+- Un identificador de negocio (`plan_id`/slug) que sirve para "resolver
+  cuánto cuesta esto" en un contexto (alta nueva, sin factura) puede
+  dejar de ser la fuente de verdad correcta en otro contexto (pagar una
+  factura YA EMITIDA) — antes de reutilizar una función que resuelve un
+  monto a partir de un identificador, preguntar explícitamente "¿ya
+  existe un snapshot congelado del monto real, o esta operación
+  necesita calcularlo desde cero?".
 
 ## COMMON FAILURES
 
@@ -285,3 +322,22 @@ las decisiones de esta familia de correcciones:
   comprobante pendiente previo, el monto ni la moneda declarados. →
   **Corrección**: cuatro validaciones nuevas en el servicio (único
   punto de entrada real del dominio), nunca duplicadas en la vista.
+- **Síntoma**: si el precio de un plan cambia DESPUÉS de que una
+  factura ya fue emitida, PayPal podría terminar cobrando un monto
+  distinto del que la propia factura dice deber. → **Causa real**:
+  `CheckoutPayPalInitiateView` pasaba `plan_id` a `create_checkout`,
+  que recalculaba el monto/moneda desde el precio VIGENTE del plan
+  (`resolve_plan_pricing`) en vez de usar el snapshot ya congelado en
+  `invoice.total`/`invoice.currency`. → **Corrección**:
+  `create_checkout_for_invoice` exige el monto/moneda de la factura
+  explícitamente; `create_checkout` gana parámetros opcionales que,
+  cuando se pasan, desactivan el recálculo — su otro llamador (la
+  herramienta de plataforma, sin factura) sigue igual.
+- **Síntoma**: dos clics rápidos en "Pagar con PayPal" (o dos pestañas)
+  sobre la misma factura podrían crear dos órdenes de PayPal en
+  paralelo. → **Causa real**: nada bloqueaba un segundo intento de
+  checkout mientras el primero seguía sin resolverse. → **Corrección**:
+  `select_for_update()` sobre la `SaaSInvoice` + comprobación de que no
+  exista ya un `PayPalTransaction` `CREATED`/`PENDING_CAPTURE` para la
+  misma suscripción antes de crear uno nuevo — verificado con un test
+  de concurrencia real (`TransactionTestCase` + hilos).

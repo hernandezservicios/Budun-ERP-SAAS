@@ -174,6 +174,43 @@ ofrecía PayPal, aunque el checkout ya funcionaba perfectamente si se
 llegaba a él por otra vía, como probó el hallazgo que originó esta
 corrección). Ver `KNOWN_ISSUES.md` #130 para el hallazgo completo.
 
+## Integridad del monto de factura en PayPal (Corrección de Gate Local — "FASE DE CORRECCIÓN 2B")
+
+**Una `SaaSInvoice` emitida es un snapshot contractual del importe y la
+moneda a pagar** — `invoice.total`/`invoice.currency`, congelados al
+generarse (`generate_invoice_for_subscription`). Cualquier cobro
+posterior de esa factura debe cobrar EXACTAMENTE ese monto/moneda,
+nunca recalcular el precio VIGENTE del plan (que pudo cambiar después
+de emitirse la factura). Regla permanente, reusable para cualquier
+proveedor de pago futuro.
+
+`apps.billing.services.create_checkout_for_invoice(invoice, ...)` es
+ahora la ÚNICA vía real del Portal del tenant para pagar una factura
+por PayPal (`CheckoutPayPalInitiateView`) — reemplaza la lógica que
+antes vivía inline en la vista y que pasaba `plan_id` a
+`create_checkout`, dejando que ésta recalculara el monto vía
+`resolve_plan_pricing` (el hallazgo real, ver `KNOWN_ISSUES.md` #131).
+Hace, en orden, dentro de un único `transaction.atomic()` con
+`select_for_update()` sobre la propia `SaaSInvoice`:
+
+1. Rechaza si la factura no está `OPEN`/`PARTIALLY_PAID` (una ya
+   `PAID`/`VOID`/`DRAFT` nunca admite un nuevo cobro).
+2. Rechaza un monto no positivo o una moneda mal formada.
+3. Rechaza si ya existe un `PayPalTransaction` sin resolver
+   (`CREATED`/`PENDING_CAPTURE`) para la misma suscripción — cierra la
+   ventana de carrera de dos clics simultáneos/dos pestañas.
+4. Registra el `SaaSPayment` y llama a `create_checkout(..., amount=
+   invoice.total, currency=invoice.currency, ...)` — los nuevos
+   parámetros opcionales de `create_checkout` que, cuando se pasan
+   explícitamente, DESACTIVAN el recálculo desde `resolve_plan_pricing`.
+
+`create_checkout` (la función genérica basada en `plan_id`) sigue
+siendo, sin ningún cambio de comportamiento, la única vía de la
+herramienta de prueba de plataforma (`CheckoutCreateView`, FASE 16,
+sin ninguna factura real de por medio) — esa herramienta SÍ debe seguir
+resolviendo el precio vigente del plan, porque no existe ninguna
+factura de la cual tomar un snapshot.
+
 ## Transferencia bancaria
 
 `apps.billing.services.transfers`: `submit_payment_proof` (valida el
