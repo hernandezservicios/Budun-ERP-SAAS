@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from apps.billing.models import BankAccount, PaymentProof, Plan, PlanVersion, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation, Subscription, Tenant
@@ -160,9 +160,16 @@ class OwnerActivationFlowTests(TestCase):
         # qué tan reciente, queda fuera de ventana — misma mecánica que
         # Django usa internamente (segundos transcurridos > TIMEOUT),
         # sin necesitar viajar en el tiempo de verdad.
+        #
+        # FASE DE CORRECCIÓN 1B: desde esta corrección, un token expirado
+        # muestra una pantalla ESPECÍFICA ("...ha expirado") en vez del
+        # genérico "no es válido" que sigue cubriendo el resto de los
+        # casos (adulterado, de otro usuario, ya usado) — ver
+        # `apps.accounts.services.classify_activation_token`.
         with override_settings(PASSWORD_RESET_TIMEOUT=-1):
             respuesta = self.client.get(self.activation_url, follow=True)
-        self.assertContains(respuesta, "no es válido")
+        self.assertContains(respuesta, "ha expirado")
+        self.assertContains(respuesta, reverse("accounts:activacion_reenviar"))
         self.owner.refresh_from_db()
         self.assertFalse(self.owner.has_usable_password())
 
@@ -205,6 +212,99 @@ class OwnerActivationFlowTests(TestCase):
         # nunca le puso una contraseña utilizable a escondidas.
         self.owner.refresh_from_db()
         self.assertFalse(self.owner.has_usable_password())
+
+
+class OwnerRegistroLoginResendUxTests(TestCase):
+    """FASE DE CORRECCIÓN 1B — Activación desde Registro/Login: los
+    mismos escenarios de `OwnerActivationFlowTests`, pero llegando por
+    las pantallas normales de Registro/Login en vez del correo original
+    de Venta Manual, y con DOS tenants/Owners reales para probar
+    aislamiento (Escenario 6)."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(
+            email="super.registro.login@example.com", password="clave-de-prueba-987"
+        )
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+        mail.outbox.clear()
+        self.client.post(reverse("billing_admin:manual_sale"), {
+            "customer_name": "Cliente Uno", "customer_email": "cliente.uno.rlu@example.com",
+            "tenant_name": "Empresa RLU Uno", "plan_version": self.version.pk,
+            "owner_email": "owner.uno.rlu@example.com",
+        })
+        self.client.post(reverse("billing_admin:manual_sale"), {
+            "customer_name": "Cliente Dos", "customer_email": "cliente.dos.rlu@example.com",
+            "tenant_name": "Empresa RLU Dos", "plan_version": self.version.pk,
+            "owner_email": "owner.dos.rlu@example.com",
+        })
+        self.tenant_uno = Tenant.objects.get(slug="empresa-rlu-uno")
+        self.tenant_dos = Tenant.objects.get(slug="empresa-rlu-dos")
+        self.owner_uno = User.objects.get(email="owner.uno.rlu@example.com")
+        self.owner_dos = User.objects.get(email="owner.dos.rlu@example.com")
+        self.client.logout()
+        mail.outbox.clear()
+
+    def _activar(self, client, email, password):
+        client.post(reverse("accounts:activacion_reenviar"), {"email": email})
+        url = re.search(r"https?://\S+/cuentas/activacion/\S+/\S+/", mail.outbox[-1].body).group(0)
+        respuesta_inicial = client.get(url)
+        client.post(respuesta_inicial.url, {"new_password1": password, "new_password2": password})
+
+    def test_registro_con_email_de_owner_de_venta_manual_ofrece_activar_sin_duplicar_user(self):
+        respuesta = self.client.post(reverse("accounts:registro"), {
+            "email": "owner.uno.rlu@example.com", "first_name": "Owner", "last_name": "Duplicado",
+            "password1": "otra-clave-cualquiera-1!", "password2": "otra-clave-cualquiera-1!",
+        })
+        self.assertFalse(respuesta.context["form"].is_valid())
+        self.assertContains(respuesta, "Activa tu cuenta")
+        self.assertContains(respuesta, reverse("accounts:activacion_reenviar"))
+        self.assertEqual(User.objects.filter(email="owner.uno.rlu@example.com").count(), 1)
+
+    def test_login_con_email_de_owner_de_venta_manual_ofrece_reenviar_activacion(self):
+        respuesta = self.client.post(reverse("accounts:login"), {
+            "username": "owner.uno.rlu@example.com", "password": "lo-que-sea",
+        })
+        self.assertContains(respuesta, "todavía no activó")
+        self.assertContains(respuesta, "Reenviar enlace de activación")
+
+    def test_reenvio_tras_venta_manual_permite_activar_y_acceder_solo_a_su_propio_tenant(self):
+        respuesta_reenvio = self.client.post(
+            reverse("accounts:activacion_reenviar"), {"email": "owner.uno.rlu@example.com"}
+        )
+        self.assertRedirects(respuesta_reenvio, reverse("accounts:activacion_reenviada"))
+        self.assertEqual(len(mail.outbox), 1)
+
+        match = re.search(r"https?://\S+/cuentas/activacion/\S+/\S+/", mail.outbox[0].body)
+        respuesta_inicial = self.client.get(match.group(0))
+        self.client.post(respuesta_inicial.url, {
+            "new_password1": "clave-rlu-uno-987!", "new_password2": "clave-rlu-uno-987!",
+        })
+
+        self.assertTrue(self.client.login(username="owner.uno.rlu@example.com", password="clave-rlu-uno-987!"))
+        respuesta_perfil = self.client.get(reverse("accounts:perfil"))
+        self.assertEqual(respuesta_perfil.context["tenant"], self.tenant_uno)
+        self.assertEqual(respuesta_perfil.context["membership"].role, Membership.Role.OWNER)
+
+    def test_dos_owners_de_venta_manual_activados_quedan_completamente_aislados_entre_si(self):
+        cliente_uno = Client()
+        cliente_dos = Client()
+        self._activar(cliente_uno, "owner.uno.rlu@example.com", "clave-rlu-uno-987!")
+        self._activar(cliente_dos, "owner.dos.rlu@example.com", "clave-rlu-dos-987!")
+
+        self.assertTrue(cliente_uno.login(username="owner.uno.rlu@example.com", password="clave-rlu-uno-987!"))
+        self.assertTrue(cliente_dos.login(username="owner.dos.rlu@example.com", password="clave-rlu-dos-987!"))
+
+        perfil_uno = cliente_uno.get(reverse("accounts:perfil"))
+        perfil_dos = cliente_dos.get(reverse("accounts:perfil"))
+        self.assertEqual(perfil_uno.context["tenant"], self.tenant_uno)
+        self.assertEqual(perfil_dos.context["tenant"], self.tenant_dos)
+        self.assertNotEqual(perfil_uno.context["tenant"], perfil_dos.context["tenant"])
+
+        # Ningún Membership cruzó de un Owner al otro.
+        self.assertEqual(Membership.objects.filter(user=self.owner_uno, tenant=self.tenant_dos).count(), 0)
+        self.assertEqual(Membership.objects.filter(user=self.owner_dos, tenant=self.tenant_uno).count(), 0)
 
 
 class TenantLifecycleAdminViewTests(TestCase):

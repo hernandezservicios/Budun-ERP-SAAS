@@ -25,8 +25,13 @@
         {% endfor %}
         <button type="submit" class="btn btn--primario btn--bloque">Activar cuenta</button>
     </form>
+    {% elif token_expired %}
+    <p>Este enlace de activación ha expirado.</p>
+    <a class="btn btn--primario btn--bloque" href="{% url 'accounts:activacion_reenviar' %}?email={{ expired_email|urlencode }}">Solicitar nuevo enlace</a>
+    <a class="enlace-secundario" href="{% url 'accounts:login' %}">Ir a iniciar sesión</a>
     {% else %}
-    <p>El enlace de activación no es válido, ya fue usado, o venció. Pide a tu administrador que te envíe uno nuevo.</p>
+    <p>El enlace de activación no es válido o ya fue usado.</p>
+    <a class="btn btn--primario btn--bloque" href="{% url 'accounts:activacion_reenviar' %}">Solicitar nuevo enlace</a>
     <a class="enlace-secundario" href="{% url 'accounts:login' %}">Ir a iniciar sesión</a>
     {% endif %}
 </main>

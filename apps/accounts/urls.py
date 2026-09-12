@@ -50,4 +50,14 @@ urlpatterns = [
         views.AccountActivationCompleteView.as_view(),
         name="activacion_completada",
     ),
+    path(
+        "activacion/reenviar/",
+        views.AccountActivationResendView.as_view(),
+        name="activacion_reenviar",
+    ),
+    path(
+        "activacion/reenviar/enviado/",
+        views.AccountActivationResendDoneView.as_view(),
+        name="activacion_reenviada",
+    ),
 ]

@@ -23,6 +23,12 @@
         {% endfor %}
         <button type="submit" class="btn btn--primario btn--bloque">Iniciar sesión</button>
     </form>
+    {% if pending_activation_email %}
+    <div class="alerta alerta--info" role="status">
+        ¿No has activado tu cuenta?
+        <a class="enlace-secundario" href="{% url 'accounts:activacion_reenviar' %}?email={{ pending_activation_email|urlencode }}">Reenviar enlace de activación</a>
+    </div>
+    {% endif %}
     <a class="enlace-secundario" href="{% url 'accounts:password_reset' %}">¿Olvidaste tu contraseña?</a>
     <a class="enlace-secundario" href="{% url 'accounts:registro' %}">¿No tienes cuenta? Regístrate</a>
 </main>

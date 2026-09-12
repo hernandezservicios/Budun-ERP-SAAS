@@ -10,17 +10,25 @@ from django.contrib.auth.views import (
     PasswordResetDoneView,
     PasswordResetView,
 )
+from django.core.exceptions import NON_FIELD_ERRORS
 from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.text import slugify
-from django.views.generic import CreateView, FormView, UpdateView
+from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 
 from apps.core.utils import get_client_ip
 from apps.tenants.models import Membership, Tenant
 
 from . import rate_limit
-from .forms import EmailAuthenticationForm, OnboardingForm, ProfileForm, RegistrationForm
+from . import services as account_services
+from .forms import (
+    ActivationResendForm,
+    EmailAuthenticationForm,
+    OnboardingForm,
+    ProfileForm,
+    RegistrationForm,
+)
 
 # Throttling de recuperación de contraseña (FASE 18 — Security
 # Hardening): límites independientes de los de login
@@ -33,6 +41,15 @@ from .forms import EmailAuthenticationForm, OnboardingForm, ProfileForm, Registr
 PASSWORD_RESET_MAX_ATTEMPTS_PER_EMAIL = 5
 PASSWORD_RESET_MAX_ATTEMPTS_PER_IP = 10
 PASSWORD_RESET_THROTTLE_WINDOW_SECONDS = 60 * 60
+
+# Throttling del reenvío de activación (FASE DE CORRECCIÓN 1B): mismos
+# valores y mismo eje doble (email/IP) que la recuperación de
+# contraseña de arriba — es exactamente la misma clase de endpoint
+# (envía un correo a partir de un email no autenticado), con su propio
+# scope de `rate_limit` para que agotar uno nunca agote el otro.
+ACTIVATION_RESEND_MAX_ATTEMPTS_PER_EMAIL = 5
+ACTIVATION_RESEND_MAX_ATTEMPTS_PER_IP = 10
+ACTIVATION_RESEND_THROTTLE_WINDOW_SECONDS = 60 * 60
 
 
 class RegisterView(CreateView):
@@ -51,6 +68,22 @@ class RegisterView(CreateView):
         # Login explícito con el backend por defecto (evita ambigüedad si
         # en el futuro se agregan varios backends de autenticación).
         auth_login(self.request, self.object, backend="django.contrib.auth.backends.ModelBackend")
+        return response
+
+    def form_invalid(self, form):
+        """FASE DE CORRECCIÓN 1B (Escenarios 1 y 5): cuando el correo ya
+        existe, `RegistrationForm.clean_email` distingue el caso
+        "pendiente de activación" (código `pending_activation`) del de
+        una cuenta ya completamente activa (código `account_exists`).
+        Aquí se expone ese correo a la plantilla para que pueda ofrecer
+        la acción correcta — "Activar mi cuenta" o "Iniciar sesión" —
+        en vez de dejar solo el mensaje de error genérico del campo."""
+        response = super().form_invalid(form)
+        email_intentado = (form.data.get("email") or "").strip().lower()
+        if form.has_error("email", code="pending_activation"):
+            response.context_data["pending_activation_email"] = email_intentado
+        elif form.has_error("email", code="account_exists"):
+            response.context_data["account_exists_email"] = email_intentado
         return response
 
 
@@ -88,6 +121,20 @@ class EmailLoginView(LoginView):
             # sesión (antes, en FASE 4, era el perfil).
             return str(reverse_lazy("dashboard:panel"))
         return str(reverse_lazy("accounts:onboarding"))
+
+    def form_invalid(self, form):
+        """FASE DE CORRECCIÓN 1B (Escenario 2): cuando
+        `EmailAuthenticationForm.clean` distingue el caso "Owner
+        pendiente de activación" (código `pending_activation`), se
+        expone el correo intentado a la plantilla para poder ofrecer
+        "Reenviar enlace de activación" en vez de dejar solo el mensaje
+        de error genérico."""
+        response = super().form_invalid(form)
+        if form.has_error(NON_FIELD_ERRORS, code="pending_activation"):
+            response.context_data["pending_activation_email"] = (
+                form.data.get("username") or ""
+            ).strip().lower()
+        return response
 
 
 class AccountLogoutView(LogoutView):
@@ -289,6 +336,83 @@ class AccountActivationConfirmView(PasswordResetConfirmView):
     template_name = "accounts/activation_confirm.html"
     success_url = reverse_lazy("accounts:activacion_completada")
 
+    def get_context_data(self, **kwargs):
+        """FASE DE CORRECCIÓN 1B (Escenario 4): cuando el enlace no es
+        válido, distingue "expiró" (`token_expired=True`, con el correo
+        del propio Owner para ofrecerle directamente "Solicitar nuevo
+        enlace") del resto de motivos (adulterado, de otro usuario, ya
+        usado) — que siguen mostrando el mensaje genérico existente sin
+        ningún cambio. Ver `apps.accounts.services.
+        classify_activation_token` para el porqué de no depender de un
+        booleano nuevo en el modelo: Django no lo distingue por sí
+        solo."""
+        context = super().get_context_data(**kwargs)
+        context["token_expired"] = False
+        context["expired_email"] = ""
+        if not self.validlink and self.user is not None:
+            # `self.kwargs` (no el `token` de la URL "canjeada" por el
+            # marcador `reset_url_token` en la segunda visita) es el
+            # único momento en que hay un token REAL que clasificar —
+            # ver `PasswordResetConfirmView.dispatch`.
+            token = self.kwargs.get("token")
+            if token and token != self.reset_url_token:
+                clasificacion = account_services.classify_activation_token(self.user, token)
+                if clasificacion == "expired":
+                    context["token_expired"] = True
+                    context["expired_email"] = self.user.email
+        return context
+
 
 class AccountActivationCompleteView(PasswordResetCompleteView):
     template_name = "accounts/activation_complete.html"
+
+
+class AccountActivationResendView(FormView):
+    """Reenvío de activación (FASE DE CORRECCIÓN 1B, Escenario 3):
+    accesible sin sesión, desde el Login ("¿No has activado tu
+    cuenta?"), el Registro ("Activar mi cuenta") o la pantalla de
+    enlace expirado ("Solicitar nuevo enlace"). Mismo criterio de
+    seguridad que `AccountPasswordResetView`: la respuesta es SIEMPRE
+    la misma exista o no la cuenta, y esté o no ya activada — nunca
+    revela más de lo que el formulario de origen ya reveló."""
+
+    form_class = ActivationResendForm
+    template_name = "accounts/activation_resend_form.html"
+    success_url = reverse_lazy("accounts:activacion_reenviada")
+
+    def get_initial(self):
+        # Solo conveniencia de UI (precompletar el campo): el valor real
+        # siempre se vuelve a validar/usar desde el POST, nunca se
+        # confía en la querystring para nada más que esto.
+        initial = super().get_initial()
+        email = self.request.GET.get("email", "").strip()
+        if email:
+            initial["email"] = email
+        return initial
+
+    def form_valid(self, form):
+        email = form.cleaned_data["email"]
+        ip = get_client_ip(self.request)
+
+        if rate_limit.is_blocked(
+            "activation_resend_email", email, max_attempts=ACTIVATION_RESEND_MAX_ATTEMPTS_PER_EMAIL
+        ) or rate_limit.is_blocked(
+            "activation_resend_ip", ip, max_attempts=ACTIVATION_RESEND_MAX_ATTEMPTS_PER_IP
+        ):
+            # Misma página de "listo" que un envío real — igual criterio
+            # que `AccountPasswordResetView`: nunca revela, con una
+            # respuesta distinta, que la causa fue el límite de tasa.
+            return redirect(self.get_success_url())
+
+        rate_limit.register_attempt(
+            "activation_resend_email", email, window_seconds=ACTIVATION_RESEND_THROTTLE_WINDOW_SECONDS
+        )
+        rate_limit.register_attempt(
+            "activation_resend_ip", ip, window_seconds=ACTIVATION_RESEND_THROTTLE_WINDOW_SECONDS
+        )
+        account_services.resend_activation_email(email, request=self.request)
+        return super().form_valid(form)
+
+
+class AccountActivationResendDoneView(TemplateView):
+    template_name = "accounts/activation_resend_done.html"

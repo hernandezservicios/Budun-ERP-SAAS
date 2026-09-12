@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Reenviar activación — ERP SaaS{% endblock %}
+
+{% block content %}
+<main class="auth-card" id="contenido-principal">
+    <h1>Reenviar enlace de activación</h1>
+    <p>Escribe el correo con el que se creó tu cuenta. Si tiene una activación pendiente, te enviaremos un nuevo enlace.</p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <div class="alerta alerta--peligro" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in form %}
+        <div class="campo">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+            <ul class="errores">
+                {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn--primario btn--bloque">Reenviar enlace</button>
+    </form>
+    <a class="enlace-secundario" href="{% url 'accounts:login' %}">Volver a iniciar sesión</a>
+</main>
+{% endblock %}

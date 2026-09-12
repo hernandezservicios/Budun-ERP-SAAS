@@ -8,11 +8,13 @@ construye los objetos directamente) — ver
 `test_regresion_dos_usuarios_registrados_quedan_aislados`.
 """
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -23,6 +25,7 @@ from apps.tenants.services import create_isolation_sample
 from apps.tenants.scoping import tenant_context
 
 from . import forms as accounts_forms
+from . import services as account_services
 from . import views as accounts_views
 
 User = get_user_model()
@@ -566,3 +569,220 @@ class PasswordResetThrottlingTests(TestCase):
         # Bloqueado por IP: ningún correo nuevo, ni siquiera para una
         # cuenta real que nunca había solicitado un reset antes.
         self.assertEqual(len(mail.outbox), correos_antes)
+
+
+# ----------------------------------------------------------------------
+# FASE DE CORRECCIÓN 1B — Activación de cuenta desde Registro/Login.
+#
+# Completa la FASE DE CORRECCIÓN 1 (creación del Owner + activación por
+# token, ver arriba) para el caso en el que el cliente llega por las
+# pantallas normales de Registro/Login en vez del correo de Alta
+# Manual: debe reconocer el estado "pendiente de activación" del
+# correo, ofrecer una salida clara (nunca un segundo `User`), y
+# permitir reenviar el enlace.
+# ----------------------------------------------------------------------
+
+
+class RegistrationPendingActivationUxTests(TestCase):
+    """Escenarios 1 y 5: Registro con un correo que ya pertenece a un
+    Owner creado automáticamente (pendiente o ya activado)."""
+
+    def setUp(self):
+        self.pendiente = User.objects.create(email="owner.pendiente@example.com", first_name="Ana")
+        self.pendiente.set_unusable_password()
+        self.pendiente.save()
+        self.activo = User.objects.create_user(email="owner.activo@example.com", password="clave-real-987")
+
+    def _post_registro(self, email):
+        return self.client.post(reverse("accounts:registro"), {
+            "email": email, "first_name": "Cliente", "last_name": "Nuevo",
+            "password1": "otra-clave-cualquiera-1!", "password2": "otra-clave-cualquiera-1!",
+        })
+
+    def test_registro_detecta_owner_pendiente_y_ofrece_activar_en_vez_del_mensaje_generico(self):
+        respuesta = self._post_registro("owner.pendiente@example.com")
+        self.assertFalse(respuesta.context["form"].is_valid())
+        self.assertContains(respuesta, "Activa tu cuenta")
+        self.assertContains(respuesta, reverse("accounts:activacion_reenviar"))
+        self.assertContains(respuesta, "owner.pendiente%40example.com")
+        # Nunca un segundo User.
+        self.assertEqual(User.objects.filter(email="owner.pendiente@example.com").count(), 1)
+
+    def test_registro_con_cuenta_ya_activa_muestra_mensaje_apropiado_y_no_duplica(self):
+        respuesta = self._post_registro("owner.activo@example.com")
+        self.assertFalse(respuesta.context["form"].is_valid())
+        self.assertContains(respuesta, "Ya existe una cuenta")
+        self.assertContains(respuesta, reverse("accounts:login"))
+        self.assertNotContains(respuesta, "Activa tu cuenta")
+        self.assertEqual(User.objects.filter(email="owner.activo@example.com").count(), 1)
+
+
+class LoginPendingActivationUxTests(TestCase):
+    """Escenario 2: Login con un Owner que todavía no activó su
+    cuenta."""
+
+    def setUp(self):
+        cache.clear()
+        self.pendiente = User.objects.create(email="login.pendiente@example.com", first_name="Ana")
+        self.pendiente.set_unusable_password()
+        self.pendiente.save()
+        self.activo = User.objects.create_user(email="login.activo@example.com", password="clave-real-987")
+
+    def _post_login(self, email, password="cualquier-cosa"):
+        return self.client.post(reverse("accounts:login"), {"username": email, "password": password})
+
+    def test_login_owner_pendiente_muestra_mensaje_y_opcion_de_reenviar(self):
+        respuesta = self._post_login("login.pendiente@example.com")
+        self.assertContains(respuesta, "todavía no activó")
+        self.assertContains(respuesta, "Reenviar enlace de activación")
+        self.assertContains(respuesta, reverse("accounts:activacion_reenviar"))
+        self.assertContains(respuesta, "login.pendiente%40example.com")
+
+    def test_login_cuenta_activa_con_password_incorrecta_mantiene_el_mensaje_generico(self):
+        respuesta = self._post_login("login.activo@example.com", password="clave-incorrecta")
+        self.assertContains(respuesta, "incorrectos")
+        self.assertNotContains(respuesta, "Reenviar enlace de activación")
+
+    def test_login_email_inexistente_mantiene_el_mensaje_generico(self):
+        respuesta = self._post_login("no-existe-para-nada@example.com")
+        self.assertContains(respuesta, "incorrectos")
+        self.assertNotContains(respuesta, "Reenviar enlace de activación")
+
+
+class ActivationResendTests(TestCase):
+    """Escenario 3: reenviar el enlace de activación."""
+
+    def setUp(self):
+        cache.clear()
+        mail.outbox.clear()
+        self.pendiente = User.objects.create(email="reenvio@example.com", first_name="Ana")
+        self.pendiente.set_unusable_password()
+        self.pendiente.save()
+        self.token_original = default_token_generator.make_token(self.pendiente)
+        self.activo = User.objects.create_user(email="reenvio.activo@example.com", password="clave-real-987")
+
+    def _post_reenvio(self, email):
+        return self.client.post(reverse("accounts:activacion_reenviar"), {"email": email})
+
+    def test_reenvio_envia_un_nuevo_correo_e_invalida_el_token_anterior(self):
+        respuesta = self._post_reenvio("reenvio@example.com")
+        self.assertRedirects(respuesta, reverse("accounts:activacion_reenviada"))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("reenvio@example.com", mail.outbox[0].to)
+
+        self.pendiente.refresh_from_db()
+        # El token emitido en el alta original ya no sirve: cambió el
+        # hash del que depende (`set_unusable_password` genera un valor
+        # aleatorio nuevo), sin volver la cuenta utilizable.
+        self.assertFalse(default_token_generator.check_token(self.pendiente, self.token_original))
+        self.assertFalse(self.pendiente.has_usable_password())
+
+    def test_el_nuevo_enlace_reenviado_funciona_para_activar_y_luego_iniciar_sesion(self):
+        self._post_reenvio("reenvio@example.com")
+        match = re.search(r"https?://\S+/cuentas/activacion/\S+/\S+/", mail.outbox[0].body)
+        self.assertIsNotNone(match)
+        nueva_url = match.group(0)
+
+        respuesta_inicial = self.client.get(nueva_url)
+        self.assertEqual(respuesta_inicial.status_code, 302)
+        respuesta_post = self.client.post(respuesta_inicial.url, {
+            "new_password1": "clave-reenviada-987!", "new_password2": "clave-reenviada-987!",
+        })
+        self.assertRedirects(respuesta_post, reverse("accounts:activacion_completada"))
+        self.assertTrue(self.client.login(username="reenvio@example.com", password="clave-reenviada-987!"))
+
+    def test_reenvio_no_revela_si_el_correo_no_existe(self):
+        respuesta = self._post_reenvio("no-existe-en-absoluto@example.com")
+        self.assertRedirects(respuesta, reverse("accounts:activacion_reenviada"))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_reenvio_no_revela_ni_reenvia_si_la_cuenta_ya_esta_activa(self):
+        respuesta = self._post_reenvio("reenvio.activo@example.com")
+        self.assertRedirects(respuesta, reverse("accounts:activacion_reenviada"))
+        self.assertEqual(len(mail.outbox), 0)
+        self.activo.refresh_from_db()
+        self.assertTrue(self.activo.has_usable_password())
+
+    def test_reenvio_nunca_crea_un_user_nuevo(self):
+        total_antes = User.objects.count()
+        self._post_reenvio("reenvio@example.com")
+        self._post_reenvio("no-existe-en-absoluto@example.com")
+        self.assertEqual(User.objects.count(), total_antes)
+
+
+class ActivationTokenExpirationUxTests(TestCase):
+    """Escenario 4: enlace de activación expirado."""
+
+    def setUp(self):
+        cache.clear()
+        mail.outbox.clear()
+        self.pendiente = User.objects.create(email="expirado@example.com", first_name="Ana")
+        self.pendiente.set_unusable_password()
+        self.pendiente.save()
+        self.url = account_services.build_activation_url(self.pendiente)
+
+    def test_token_expirado_muestra_pantalla_especifica_con_boton_de_solicitar_nuevo_enlace(self):
+        with override_settings(PASSWORD_RESET_TIMEOUT=-1):
+            respuesta = self.client.get(self.url)
+        self.assertContains(respuesta, "ha expirado")
+        self.assertContains(respuesta, reverse("accounts:activacion_reenviar"))
+        self.assertContains(respuesta, "expirado%40example.com")
+
+    def test_solicitar_nuevo_enlace_tras_expirar_permite_activar_normalmente(self):
+        with override_settings(PASSWORD_RESET_TIMEOUT=-1):
+            self.client.get(self.url)
+        respuesta_reenvio = self.client.post(reverse("accounts:activacion_reenviar"), {"email": "expirado@example.com"})
+        self.assertRedirects(respuesta_reenvio, reverse("accounts:activacion_reenviada"))
+        self.assertEqual(len(mail.outbox), 1)
+
+        match = re.search(r"https?://\S+/cuentas/activacion/\S+/\S+/", mail.outbox[0].body)
+        nueva_url = match.group(0)
+        respuesta_inicial = self.client.get(nueva_url)
+        self.assertEqual(respuesta_inicial.status_code, 302)
+        respuesta_post = self.client.post(respuesta_inicial.url, {
+            "new_password1": "clave-tras-expirar-987!", "new_password2": "clave-tras-expirar-987!",
+        })
+        self.assertRedirects(respuesta_post, reverse("accounts:activacion_completada"))
+
+
+class ActivationTokenSecurityTests(TestCase):
+    """Escenario 6: el token sigue siendo seguro — inválido, adulterado,
+    o emitido para otro usuario nunca activa una cuenta ajena."""
+
+    def setUp(self):
+        self.propietario = User.objects.create(email="dueno.real@example.com", first_name="Dueño")
+        self.propietario.set_unusable_password()
+        self.propietario.save()
+        self.otro = User.objects.create(email="otro.usuario@example.com", first_name="Otro")
+        self.otro.set_unusable_password()
+        self.otro.save()
+
+    def test_token_con_formato_invalido_no_permite_activar(self):
+        url_sin_barra = account_services.build_activation_url(self.propietario).rstrip("/")
+        base_sin_token, _token_real = url_sin_barra.rsplit("/", 1)
+        respuesta = self.client.get(f"{base_sin_token}/token-claramente-invalido-000/", follow=True)
+        self.assertContains(respuesta, "no es válido")
+
+    def test_token_adulterado_no_permite_activar(self):
+        url = account_services.build_activation_url(self.propietario)
+        url_adulterada = url[:-2] + ("0" if url[-2] != "0" else "1") + url[-1]
+        respuesta = self.client.get(url_adulterada, follow=True)
+        self.assertContains(respuesta, "no es válido")
+        self.propietario.refresh_from_db()
+        self.assertFalse(self.propietario.has_usable_password())
+
+    def test_token_de_otro_usuario_nunca_activa_la_cuenta_ajena(self):
+        token_del_propietario = default_token_generator.make_token(self.propietario)
+        uid_del_otro = urlsafe_base64_encode(force_bytes(self.otro.pk))
+        url_cruzada = reverse(
+            "accounts:activacion_confirmar", kwargs={"uidb64": uid_del_otro, "token": token_del_propietario}
+        )
+        respuesta = self.client.get(url_cruzada, follow=True)
+        self.assertContains(respuesta, "no es válido")
+
+        # Ninguno de los dos quedó afectado: el ataque no activó ni la
+        # cuenta atacada ni, de rebote, la del propietario legítimo.
+        self.propietario.refresh_from_db()
+        self.otro.refresh_from_db()
+        self.assertFalse(self.propietario.has_usable_password())
+        self.assertFalse(self.otro.has_usable_password())

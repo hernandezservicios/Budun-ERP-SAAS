@@ -24,6 +24,17 @@
         {% endfor %}
         <button type="submit" class="btn btn--primario btn--bloque">Crear cuenta</button>
     </form>
+    {% if pending_activation_email %}
+    <div class="alerta alerta--info" role="status">
+        Esta cuenta ya fue creada para tu empresa. Activa tu cuenta para establecer tu contraseña.
+        <a class="enlace-secundario" href="{% url 'accounts:activacion_reenviar' %}?email={{ pending_activation_email|urlencode }}">Activar mi cuenta</a>
+    </div>
+    {% elif account_exists_email %}
+    <div class="alerta alerta--info" role="status">
+        Ya existe una cuenta con este correo electrónico.
+        <a class="enlace-secundario" href="{% url 'accounts:login' %}">Iniciar sesión</a>
+    </div>
+    {% endif %}
     <a class="enlace-secundario" href="{% url 'accounts:login' %}">¿Ya tienes una cuenta? Inicia sesión</a>
 </main>
 {% endblock %}

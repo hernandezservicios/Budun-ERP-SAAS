@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Enlace enviado — ERP SaaS{% endblock %}
+
+{% block content %}
+<main class="auth-card" id="contenido-principal">
+    <h1>Enlace enviado</h1>
+    <p>Si ese correo tiene una activación pendiente, te enviamos un nuevo enlace. Revisa tu bandeja de entrada (y la carpeta de spam).</p>
+    <a class="btn btn--primario btn--bloque" href="{% url 'accounts:login' %}">Volver a iniciar sesión</a>
+</main>
+{% endblock %}

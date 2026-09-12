@@ -43,22 +43,28 @@ class RegistrationForm(forms.ModelForm):
         email = self.cleaned_data["email"].strip().lower()
         existente = User.objects.filter(email=email).first()
         if existente is not None:
-            # FASE DE CORRECCIÓN 1 (Acceso del Owner y ciclo de vida del
-            # Tenant): el registro público NUNCA crea un segundo User
-            # para un correo que ya tiene uno — ni siquiera cuando ese
-            # User fue creado automáticamente por Alta Manual
+            # FASE DE CORRECCIÓN 1/1B (Acceso del Owner y ciclo de vida
+            # del Tenant): el registro público NUNCA crea un segundo
+            # User para un correo que ya tiene uno — ni siquiera cuando
+            # ese User fue creado automáticamente por Alta Manual
             # (`apps.billing.admin_views.ManualTenantSaleView`) y todavía
             # no tiene contraseña (`set_unusable_password`). Se distingue
-            # ese caso solo para guiar al Owner real al enlace de
-            # activación en vez del mensaje genérico, que sugeriría
-            # "inicia sesión" sin que eso sea todavía posible.
+            # ese caso (código `pending_activation`) del de una cuenta ya
+            # completamente activa (código `account_exists`) para que
+            # `RegisterView.form_invalid` pueda ofrecer la acción
+            # correcta en cada caso — "Activar mi cuenta" vs. "Iniciar
+            # sesión" — en vez de un único mensaje genérico que no le
+            # dice al usuario qué hacer.
             if not existente.has_usable_password():
                 raise forms.ValidationError(
-                    "Ya existe una cuenta con este correo electrónico, pendiente de "
-                    "activación. Revisa tu correo para activarla con el enlace que "
-                    "recibiste, o pide a tu administrador que te envíe uno nuevo."
+                    "Esta cuenta ya fue creada para tu empresa. Activa tu cuenta para "
+                    "establecer tu contraseña.",
+                    code="pending_activation",
                 )
-            raise forms.ValidationError("Ya existe una cuenta con este correo electrónico.")
+            raise forms.ValidationError(
+                "Ya existe una cuenta con este correo electrónico. Inicia sesión.",
+                code="account_exists",
+            )
         return email
 
     def clean_password2(self):
@@ -98,6 +104,14 @@ class EmailAuthenticationForm(AuthenticationForm):
             "Correo electrónico o contraseña incorrectos. Verifica ambos "
             "datos e inténtalo de nuevo."
         ),
+        # FASE DE CORRECCIÓN 1B: distinto del genérico de arriba a
+        # propósito — un Owner creado por Alta Manual que todavía no
+        # activó su cuenta necesita saber QUÉ hacer (reenviar el
+        # enlace), no solo que "algo salió mal".
+        "pending_activation": (
+            "Esta cuenta todavía no activó su contraseña. Revisa tu correo o "
+            "solicita un nuevo enlace de activación."
+        ),
     }
 
     def clean(self):
@@ -128,6 +142,21 @@ class EmailAuthenticationForm(AuthenticationForm):
             rate_limit.register_attempt(
                 "login_ip", ip, window_seconds=LOGIN_THROTTLE_WINDOW_SECONDS
             )
+            # FASE DE CORRECCIÓN 1B (Escenario 2 — Login con Owner
+            # pendiente): el bloqueo por límite de intentos de arriba ya
+            # salió (nunca revela nada distinto); aquí, con el intento
+            # de autenticación real ya agotado, se distingue el único
+            # caso donde SÍ conviene revelar más — un correo que
+            # corresponde a un `User` real sin contraseña utilizable
+            # todavía (`set_unusable_password`, el estado exacto en el
+            # que Alta Manual deja al Owner) — para ofrecerle la acción
+            # correcta (reenviar activación) en vez de un genérico
+            # "credenciales incorrectas" que no le dice qué hacer.
+            usuario_pendiente = User.objects.filter(email=email).first()
+            if usuario_pendiente is not None and not usuario_pendiente.has_usable_password():
+                raise forms.ValidationError(
+                    self.error_messages["pending_activation"], code="pending_activation"
+                )
             raise
 
         # Login exitoso: limpia cualquier intento fallido previo para
@@ -185,3 +214,15 @@ class OnboardingForm(forms.Form):
         max_length=150,
         min_length=2,
     )
+
+
+class ActivationResendForm(forms.Form):
+    """Reenvío de activación (FASE DE CORRECCIÓN 1B, Escenario 3). Solo
+    valida la FORMA del correo — la existencia real, si está pendiente
+    de activación o ya activa, se resuelve en
+    `apps.accounts.services.resend_activation_email`, nunca aquí, para
+    que la respuesta al usuario sea siempre la misma (ver esa función
+    para el porqué: mismo criterio anti-enumeración que
+    `AccountPasswordResetView`)."""
+
+    email = forms.EmailField(label="Correo electrónico")
