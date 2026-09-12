@@ -147,6 +147,65 @@ class LoginLogoutTests(TestCase):
         )
 
 
+class SuperuserPostLoginRedirectTests(TestCase):
+    """Corrección de un bug real: un Super Admin de plataforma
+    (`is_superuser=True`) sin ninguna Membership de tenant caía en el
+    mismo flujo que un usuario que "todavía no tiene tenant" —
+    onboarding → creaba un Tenant real por accidente → Elegir plan.
+    `EmailLoginView.get_success_url`/`OnboardingView.dispatch` ahora
+    evalúan `is_superuser` ANTES que la Membership. Ver `KNOWN_ISSUES.md`."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(
+            email="superadmin.sin.tenant@example.com", password="una-clave-larga-987"
+        )
+        self.tenant_user = User.objects.create_user(
+            email="usuario.con.tenant@example.com", password="una-clave-larga-987"
+        )
+        tenant = Tenant.objects.create(name="Empresa Con Tenant", slug="empresa-con-tenant")
+        Membership.objects.create(user=self.tenant_user, tenant=tenant, role=Membership.Role.OWNER)
+        self.usuario_sin_tenant = User.objects.create_user(
+            email="usuario.sin.tenant@example.com", password="una-clave-larga-987"
+        )
+
+    def test_superadmin_sin_membership_login_redirige_a_plataforma(self):
+        respuesta = self.client.post(
+            reverse("accounts:login"),
+            {"username": "superadmin.sin.tenant@example.com", "password": "una-clave-larga-987"},
+        )
+        self.assertRedirects(respuesta, reverse("billing_admin:dashboard"))
+        # Nunca se crea un Tenant/Membership como efecto colateral del login.
+        self.assertFalse(Membership.objects.filter(user=self.superadmin).exists())
+
+    def test_usuario_con_tenant_login_redirige_al_panel_de_su_tenant(self):
+        respuesta = self.client.post(
+            reverse("accounts:login"),
+            {"username": "usuario.con.tenant@example.com", "password": "una-clave-larga-987"},
+        )
+        self.assertRedirects(respuesta, reverse("dashboard:panel"))
+
+    def test_usuario_sin_tenant_login_redirige_a_onboarding(self):
+        respuesta = self.client.post(
+            reverse("accounts:login"),
+            {"username": "usuario.sin.tenant@example.com", "password": "una-clave-larga-987"},
+        )
+        self.assertRedirects(respuesta, reverse("accounts:onboarding"))
+
+    def test_superadmin_no_puede_acceder_al_formulario_de_onboarding(self):
+        self.client.login(username="superadmin.sin.tenant@example.com", password="una-clave-larga-987")
+
+        respuesta = self.client.get(reverse("accounts:onboarding"))
+        self.assertRedirects(respuesta, reverse("billing_admin:dashboard"))
+
+        # Tampoco puede crear un tenant enviando el formulario directamente
+        # (defensa en profundidad — nunca solo confiar en el redirect del login).
+        conteo_tenants_antes = Tenant.objects.count()
+        respuesta_post = self.client.post(reverse("accounts:onboarding"), {"company_name": "Empresa Fantasma"})
+        self.assertRedirects(respuesta_post, reverse("billing_admin:dashboard"))
+        self.assertEqual(Tenant.objects.count(), conteo_tenants_antes)
+        self.assertFalse(Membership.objects.filter(user=self.superadmin).exists())
+
+
 class OnboardingTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="onboard@example.com", password="una-clave-larga-987")
