@@ -181,6 +181,68 @@ Tenant + PayPal + Transferencia" (ver `KNOWN_ISSUES.md` #130,
   correcto — nunca simular una entrega de webhook que no podría ocurrir
   de verdad en ese entorno.
 
+## RECURRING BILLING PATTERN
+
+Primeras entradas agregadas durante "FASE DE CORRECCIÓN 2C — PayPal
+Recurring Billing / Cobro Automático Mensual" (ver `KNOWN_ISSUES.md`
+#132, `DECISIONS.md` #112, `docs/billing.md` sección "Billing
+recurrente con PayPal").
+
+**Patrón reusable**: *"La plataforma SaaS mantiene la Subscription y
+las Invoices como fuente de verdad. El proveedor externo ejecuta el
+cobro recurrente. El estado externo se reconcilia mediante eventos
+idempotentes."* Ningún proveedor de cobro recurrente futuro (PayPal
+Subscriptions hoy; cualquier otro mañana) debe convertirse jamás en una
+segunda fuente de verdad de negocio — `Subscription.status`/
+`SaaSInvoice.status` siguen siendo lo único que Budun consulta para
+decidir si un tenant opera o no; el estado del proveedor externo
+(`Subscription.paypal_subscription_status` hoy) es SIEMPRE un espejo
+informativo, nunca una entrada a la lógica de negocio.
+
+- **Autorización inicial**: un flujo de aprobación por redirect (el
+  mismo patrón que el checkout de pago único: crear → `approve_url` →
+  el cliente aprueba en el sitio del proveedor → retorno) que autoriza
+  cobros FUTUROS, sin cobrar nada todavía por sí solo — el primer cobro
+  se confirma aparte (síncronamente al volver, en este proyecto).
+- **Renewal**: nunca depende de que un scheduler propio calcule "cuándo
+  cobrar" — el PROVEEDOR decide el calendario (su propio Billing Plan/
+  ciclo de facturación) y notifica el resultado por evento. El sistema
+  reacciona generando/reconciliando la factura correspondiente,
+  reactivamente si hace falta, nunca esperando pasivamente a que su
+  propio cron adivine el momento correcto primero.
+- **Payment failure / grace period / PAST_DUE**: un fallo de cobro
+  recurrente reportado por el proveedor marca el estado de gracia
+  (`PAST_DUE`) — nunca se salta directo a suspender. `PAST_DUE` es
+  siempre un estado DISTINTO de `SUSPENDED`, sin excepciones ni atajos.
+- **SUSPENDED / retry**: si el proveedor tiene su propio mecanismo de
+  reintentos configurable (como `payment_failure_threshold` de PayPal),
+  reutilizarlo — nunca construir un scheduler de reintentos propio en
+  paralelo al que el proveedor ya ofrece nativamente para esto mismo.
+  Budun solo reacciona a los webhooks de resultado (éxito → vuelve a
+  `ACTIVE`; agotado el umbral → `SUSPENDED`/`CANCELLED`).
+- **Cancellation**: coordinada en AMBOS lados explícitamente (proveedor
+  primero — impide cualquier cobro futuro real — luego el sistema
+  propio) — nunca cancelar solo un lado y asumir que el otro se entera
+  solo. El historial (facturas, pagos) NUNCA se borra al cancelar.
+- **Webhook reconciliation**: cada evento re-verifica el estado ACTUAL
+  antes de escribir (nunca asume que llega en el orden correcto ni que
+  es la primera vez que se ve) — un evento duplicado o tardío/fuera de
+  orden (p. ej. un cobro confirmado que llega DESPUÉS de una
+  cancelación) es siempre un no-op idempotente, nunca reactiva ni
+  duplica nada. El dinero que un evento tardío reporte como cobrado, si
+  ya no hay nada válido a lo que aplicarlo, se registra igual como pago
+  sin aplicar — nunca se descarta ni se pierde.
+- **Price snapshot**: el mismo principio de la Corrección 2B
+  ("`SaaSInvoice.total`/`currency` son el snapshot contractual") se
+  extiende al cobro recurrente con una garantía ADICIONAL: si el propio
+  objeto de facturación del proveedor externo es inmutable una vez
+  creado (el Billing Plan de PayPal lo es), el proveedor mismo refuerza
+  la regla — ni siquiera él podría cobrar un monto distinto del
+  congelado al crearlo. Un cambio de precio siempre crea una versión
+  contractual NUEVA (`PlanVersion` nueva) con su propio objeto de
+  facturación nuevo del lado del proveedor — nunca se edita el
+  existente.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -227,6 +289,17 @@ las decisiones de esta familia de correcciones:
   documentación oficial — la validación de moneda se limitó a una
   comprobación de buena formación, y la lista real queda como pendiente
   documentado, nunca como una suposición.
+- **#112**: PayPal Subscriptions API sobre Reference Transactions/Vault
+  — decisión tomada solo después de verificar oficialmente que Reference
+  Transactions exige aprobación especial de PayPal para cuentas LIVE
+  (bloqueo externo fuera de nuestro control), mientras que Subscriptions
+  no la necesita. Reintentos de cobro delegados enteramente al
+  `payment_failure_threshold` nativo de PayPal — nunca un scheduler de
+  reintentos propio compitiendo con uno que el proveedor ya ofrece. La
+  generación de la factura de renovación es reactiva (desde el webhook)
+  ADEMÁS de programada (desde el cron existente) — ambos caminos usan la
+  misma función idempotente, así que cualquiera de los dos que llegue
+  primero resuelve, sin necesitar coordinación explícita entre ellos.
 
 ## LESSONS LEARNED
 
@@ -341,3 +414,27 @@ las decisiones de esta familia de correcciones:
   exista ya un `PayPalTransaction` `CREATED`/`PENDING_CAPTURE` para la
   misma suscripción antes de crear uno nuevo — verificado con un test
   de concurrencia real (`TransactionTestCase` + hilos).
+- **Síntoma**: nunca existía ningún cobro automático real para una
+  suscripción recurrente — solo se generaba la factura del período
+  siguiente, sin ningún intento de cobrarla. → **Causa real**: FASE 16
+  conectó PayPal únicamente vía Orders API v2 (pago único) porque en ese
+  momento el `Plan`/`Subscription` real de FASE 17 todavía no existía;
+  nunca se volvió a conectar un mecanismo de cobro recurrente después de
+  que FASE 17 sí los construyera. → **Corrección**: PayPal Subscriptions
+  API completa (autorización, confirmación, renovación por webhook,
+  fallo/PAST_DUE, cancelación coordinada).
+- **Síntoma**: un webhook de Subscriptions procesado en un smoke manual
+  quedaba silenciosamente marcado `ERROR` (`TransactionManagementError:
+  select_for_update cannot be used outside a transaction`), pese a que
+  los 24 tests unitarios nuevos pasaban en verde. → **Causa real**: la
+  función que aplicaba la transición (`apply_subscription_webhook_
+  event`) usaba `select_for_update()` sin su propio `transaction.
+  atomic()` — funcionaba en los tests SOLO porque `TestCase` ya envuelve
+  cada prueba en una transacción ambiente, ocultando el error. →
+  **Corrección**: `transaction.atomic()` explícito alrededor de esa
+  lectura+escritura. **Lección**: un test que pasa dentro de `TestCase`
+  no prueba que el código funcione FUERA de una transacción ya
+  existente — cualquier función que use `select_for_update()` debe
+  abrir su PROPIA transacción, nunca asumir que el llamador ya abrió
+  una; un smoke manual ejecutado fuera del framework de tests es lo que
+  expuso este caso real.

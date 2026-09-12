@@ -292,6 +292,17 @@ Cuando la implementación lo requiera, consultar la documentación oficial vigen
 - [x] Documentación actualizada — `docs/paypal.md` (reescrito, CONSTRUIDO), `docs/billing.md`, `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md`, `docs/project-status/*`.
 - [x] Git commit.
 
+**Nota de sincronización posterior** (Gate Local, "FASE DE CORRECCIÓN
+2C", posterior al cierre de FASE 17): `apps.billing.providers.base.
+PaymentProvider` ganó nuevos métodos (`create_product`/`create_billing_
+plan`/`create_recurring_subscription`/`get_recurring_subscription`/
+`cancel_recurring_subscription`) para el cobro recurrente vía PayPal
+Subscriptions API — deliberadamente aditivo, nunca una reforma de los
+métodos de Orders API v2 de esta fase (`create_order`/`capture_order`/
+`refund_capture`/`verify_webhook_signature` siguen exactamente iguales).
+Ver `docs/billing.md` sección "Billing recurrente con PayPal" y
+`docs/paypal.md` para el detalle completo.
+
 ## 19. Regla de parada
 
 Al cerrar FASE 16:

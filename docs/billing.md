@@ -273,6 +273,130 @@ supera `past_due_to_suspend_days`). `manage.py seed_billing_plans`
 siembra los 3 planes reales a partir de `apps.core.pricing.PLANS`
 (idempotente).
 
+## Billing recurrente con PayPal (Corrección de Gate Local — "FASE DE CORRECCIÓN 2C")
+
+**Estado**: IMPLEMENTADO y PROBADO EN SANDBOX (vía `FakePayPalProvider`,
+el test double ya establecido del proyecto — ver "Localhost" más abajo
+para por qué). PREPARADO PARA PRODUCCIÓN en cuanto exista una URL
+pública (el checkout síncrono ya funciona igual en local que en
+producción; el webhook, indispensable para las renovaciones, exige una
+URL HTTPS pública real). NO se ha probado todavía contra un endpoint
+real de PayPal Sandbox por HTTP — la validación es de la lógica interna
+completa, con la capa de red sustituida por el mismo doble ya usado en
+todo `apps.billing` desde FASE 16.
+
+**Arquitectura elegida — PayPal Subscriptions API** (Catalog Products +
+Billing Plans + Subscriptions), evaluada oficialmente contra la
+alternativa (PayPal Reference Transactions / Vault) antes de escribir
+código: Reference Transactions exige aprobación especial de PayPal para
+cuentas LIVE (contactar al gestor de cuenta; el error real documentado
+por PayPal si no se tiene es `MERCHANT_NOT_ENABLED_FOR_REFERENCE_
+TRANSACTION`), mientras que Subscriptions es una API REST estándar sin
+aprobación adicional, igual en Sandbox que en Live — la decisión
+correcta para no depender de un proceso de aprobación externo fuera de
+nuestro control. Fuentes oficiales consultadas: `developer.paypal.com/
+docs/subscriptions/integrate/`, `.../subscriptions/webhooks`,
+`.../subscriptions/customize/payment-failure-retry/`,
+`.../api/nvp-soap/paypal-payments-pro/integration-guide/reference-
+transactions` (septiembre 2026).
+
+**Mapeo Budun ↔ PayPal, siempre 1:1 y CENTRALIZADO** (nunca un
+producto/plan de PayPal por tenant — la misma `PlanVersion` la
+reutilizan todos los tenants que la contraten):
+- `PlanVersion.paypal_product_id`/`paypal_plan_id` (campos nuevos,
+  vacíos hasta que algún tenant contrate esa versión con cobro
+  recurrente) ↔ Producto + Billing Plan de PayPal —
+  `apps.billing.services.recurring.ensure_paypal_billing_plan`, creados
+  una única vez, inmutables desde entonces (igual que el precio que
+  representan: un cambio de precio siempre crea una `PlanVersion` nueva
+  con su propio Producto/Plan de PayPal, nunca edita los existentes).
+- `Subscription.paypal_subscription_id`/`paypal_subscription_status`
+  (campos nuevos) ↔ Subscription de PayPal — una por tenant, creada al
+  autorizar el cobro recurrente
+  (`recurring.create_recurring_checkout`). `paypal_subscription_status`
+  es un espejo informativo del último estado conocido en PayPal
+  (visible para el Super Admin, nunca usado para decidir nada de
+  negocio por sí solo — la fuente de verdad de negocio sigue siendo
+  `Subscription.status`, gobernado exclusivamente por
+  `apps.billing.services.subscriptions`).
+
+**Flujo completo**:
+1. **Autorización + primer cobro** (`RecurringCheckoutInitiateView` →
+   `create_recurring_checkout` → PayPal → `RecurringCheckoutReturnView`
+   → `reconcile_recurring_subscription`): reconciliación SÍNCRONA al
+   volver del checkout — nunca depende del webhook para la autorización
+   inicial (ver "Localhost" abajo). Si PayPal ya reporta `ACTIVE`, se
+   confirma el primer cobro contra la factura inicial ya generada por
+   `SelectPlanView`/Venta Manual.
+2. **Renovación** (`PAYMENT.SALE.COMPLETED`, únicamente por webhook —
+   no hay ningún retorno del navegador para un cobro que PayPal ejecuta
+   en segundo plano meses después): `confirm_recurring_charge` busca la
+   factura `OPEN`/`PARTIALLY_PAID` de la suscripción; si no existe
+   todavía (el cron `generate_saas_invoices` no alcanzó a correr antes
+   que el webhook), la genera ella misma
+   (`invoicing.ensure_next_renewal_invoice`, la misma función que usa
+   el cron) — el sistema nunca depende de que el scheduler corra
+   primero. El monto/moneda cobrados SIEMPRE respetan la Corrección 2B
+   (`SaaSInvoice.total`/`currency`, nunca el precio vigente del plan) —
+   y, para el caso recurrente, esto está ADEMÁS estructuralmente
+   garantizado por PayPal: el Billing Plan es inmutable, así que ni
+   siquiera PayPal podría cobrar un monto distinto del congelado al
+   crearlo.
+3. **Fallo de cobro** (`BILLING.SUBSCRIPTION.PAYMENT.FAILED`): marca
+   `PAST_DUE` (`subscription_services.mark_past_due`, sin cambios).
+   **Reintentos**: PayPal reintenta un cobro recurrente fallido POR SU
+   CUENTA — `payment_preferences.payment_failure_threshold` (configurado
+   al crear el Billing Plan, propuesta de 2 intentos, documentada como
+   propuesta y no como política comercial ya decidida por el negocio) —
+   Budun NO implementa un scheduler de reintentos propio para PayPal;
+   solo reacciona a los webhooks de éxito/fallo que PayPal ya emite. Si
+   el reintento tiene éxito, `PAYMENT.SALE.COMPLETED` vuelve la
+   suscripción a `ACTIVE`; si se agota el umbral, PayPal emite
+   `BILLING.SUBSCRIPTION.SUSPENDED`/`CANCELLED` y Budun sincroniza
+   (`suspend_subscription`/`cancel_subscription`, sin cambios).
+   `PENDING ≠ SUSPENDED` y `PAST_DUE ≠ SUSPENDED` se mantienen sin
+   ninguna excepción para el método recurrente.
+4. **Cancelación** (`recurring.cancel_recurring_subscription`): cancela
+   AMBOS lados de forma coordinada — primero PayPal (impide cualquier
+   cobro futuro), luego Budun (`cancel_subscription`, conserva intacto
+   todo el historial de facturas/pagos, nunca los borra). Un cobro
+   tardío/fuera de orden que de todas formas llegara después de
+   cancelar (`confirm_recurring_charge` sobre una suscripción
+   `CANCELLED`/`EXPIRED`) nunca genera una factura nueva — se registra
+   como pago sin aplicar (nunca se pierde, mismo criterio que un
+   sobrepago) y se audita como anomalía para revisión humana.
+
+**Transferencia bancaria** sigue siendo, deliberadamente, un método
+distinto y NO automático — nunca hay una autorización de cobro
+recurrente posible sin una cuenta ya vinculada, así que la transferencia
+siempre exige comprobante → revisión → aprobación manual (sin cambios).
+El Portal distingue explícitamente "PayPal (pago único)", "PayPal
+(cobro automático)" y "Transferencia bancaria" como tres opciones
+claramente etiquetadas — nunca una sola opción ambigua "PayPal".
+
+**Localhost**: mismo criterio ya documentado para el checkout de pago
+único (`docs/paypal.md`) — un webhook de PayPal Sandbox no puede
+entregarse a `127.0.0.1`. La autorización INICIAL nunca depende de él
+(reconciliación síncrona al volver del checkout); las renovaciones SÍ
+dependen exclusivamente del webhook (no hay otra forma de enterarse de
+un cobro que PayPal ejecuta sin ningún retorno del navegador) — para
+Gate Local, esto se valida con `FakePayPalProvider` + payloads de
+webhook realistas construidos a mano (`apps.billing.tests._helpers.
+build_webhook_body`, el mismo mecanismo que ya usan los webhooks de
+Orders API desde FASE 16) — nunca simulando una entrega real a
+`localhost`, que sería fingir una integración que no puede ocurrir de
+verdad en este entorno. La prueba de webhook real contra una URL HTTPS
+pública queda para la fase de despliegue.
+
+**Seguridad**: nunca se almacena Client Secret/access token/credenciales
+(sin cambios respecto a FASE 16 — siguen siendo variables de entorno de
+plataforma). Los únicos identificadores nuevos guardados
+(`paypal_product_id`/`paypal_plan_id`/`paypal_subscription_id`) son
+referencias públicas no sensibles (los mismos IDs que ya aparecen en el
+panel de PayPal del propio Super Admin), nunca un secreto ni una
+credencial tokenizada — Budun no implementa (ni necesita) tokenización
+de medios de pago propia, PayPal la gestiona enteramente de su lado.
+
 ## Alta inicial y activación: `ACTIVATE != REACTIVATE`
 
 Gap real encontrado y corregido durante el Gate Local de validación

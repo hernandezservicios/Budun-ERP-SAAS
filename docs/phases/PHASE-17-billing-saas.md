@@ -695,6 +695,32 @@ siguen siendo los únicos); la separación Billing SaaS vs.
 `apps.sales.Payment` y la independencia de la herramienta de prueba de
 PayPal de FASE 16 se preservaron sin cambios.
 
+## Corrección posterior al cierre: Billing recurrente con PayPal (Gate Local, "FASE DE CORRECCIÓN 2C")
+
+FASE 16 conectó PayPal vía Orders API v2 (pago único, deliberadamente
+sin Subscriptions API porque en ese momento el `Plan`/`Subscription`
+real de FASE 17 todavía no existía). Con FASE 17 ya cerrada, esta
+corrección posterior agrega el cobro automático recurrente que la
+especificación original de la fase siempre exigió (mensual/anual,
+renovación, PAST_DUE, suspensión, reactivación) pero que nunca se había
+construido — `generate_due_renewal_invoices` solo generaba la factura
+del siguiente período, sin ningún intento de cobro real.
+
+Arquitectura evaluada oficialmente antes de escribir código: PayPal
+Subscriptions API (Catalog Products + Billing Plans + Subscriptions),
+NUNCA PayPal Reference Transactions/Vault (exige aprobación especial de
+PayPal para cuentas LIVE). Nuevos campos `PlanVersion.paypal_product_id`/
+`paypal_plan_id` y `Subscription.paypal_subscription_id`/
+`paypal_subscription_status` (migración `billing.0003`); nuevo módulo
+`apps.billing.services.recurring`; nuevos webhooks de Subscriptions
+(`PAYMENT.SALE.COMPLETED`, `BILLING.SUBSCRIPTION.PAYMENT.FAILED`/
+`SUSPENDED`/`CANCELLED`/`EXPIRED`/`ACTIVATED`) con dispatch separado del
+de Orders API v2. `Budun` sigue siendo la única fuente de verdad de
+negocio; PayPal solo autoriza/ejecuta el cobro. Ver `docs/billing.md`
+sección "Billing recurrente con PayPal", `docs/paypal.md`,
+`KNOWN_ISSUES.md` y `DECISIONS.md` para el detalle completo, incluidas
+las fuentes oficiales de PayPal consultadas.
+
 ## 36. Regla de parada
 
 FASE 17 no se considera PASS sin evidencia de todos los criterios aplicables.

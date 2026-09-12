@@ -228,6 +228,32 @@ síncrono/local ya existente contra Sandbox real; no se simula ni se
 inventa una entrega de webhook a `localhost` — eso sería fingir una
 integración externa que no puede ocurrir de verdad en este entorno.
 
+**Cobro recurrente — eventos de Subscriptions (FASE DE CORRECCIÓN 2C,
+ver `docs/billing.md` sección "Billing recurrente con PayPal")**: a
+diferencia de los eventos de Orders API v2 de arriba (que siempre
+resuelven un `PayPalTransaction`), estos referencian una `Subscription`
+de PayPal vía `resource.id` (la mayoría) o `resource.billing_agreement_
+id` (`PAYMENT.SALE.COMPLETED` — nombre heredado de la API de Payments
+clásica que PayPal reutiliza aquí) — dispatch completamente separado
+en `apps.billing.services.recurring`, nunca mezclado con
+`_apply_webhook_event`/`_resolve_transaction_from_resource`.
+
+| Evento | Efecto en Budun |
+|---|---|
+| `PAYMENT.SALE.COMPLETED` | Confirma el cobro (`confirm_recurring_charge`): genera la factura si hace falta, `SaaSPayment`, `Allocation`, `Invoice PAID`, activa la suscripción si no lo estaba. |
+| `BILLING.SUBSCRIPTION.PAYMENT.FAILED` | `mark_past_due` (solo si estaba `ACTIVE`). |
+| `BILLING.SUBSCRIPTION.SUSPENDED` | `suspend_subscription` (PayPal agotó su umbral de reintentos). |
+| `BILLING.SUBSCRIPTION.CANCELLED` / `EXPIRED` | `cancel_subscription` inmediata. |
+| `BILLING.SUBSCRIPTION.ACTIVATED` | Informativo — la activación real de Budun ocurre al confirmar el primer cobro, nunca solo por este evento. |
+| `BILLING.SUBSCRIPTION.CREATED`/`UPDATED`, eventos de `BILLING.PLAN.*`/`CATALOG.PRODUCT.*` | Reconocidos por PayPal pero fuera de alcance — no-op deliberado (Budun nunca edita un Billing Plan ya creado; un cambio de precio siempre crea uno nuevo). |
+
+Mismas garantías que el resto de webhooks de esta fase: firma
+verificada, idempotencia real por `PayPalWebhookEvent.event_id`
+(`UniqueConstraint`), y cada rama re-verifica el estado ACTUAL de la
+`Subscription` antes de escribir — un evento duplicado o fuera de orden
+(p. ej. un `PAYMENT.SALE.COMPLETED` tardío después de una cancelación)
+es un no-op idempotente, nunca reactiva ni duplica nada.
+
 ## 9. Refunds
 
 `apps.billing.services.request_refund`: solo desde `CONFIRMED`
