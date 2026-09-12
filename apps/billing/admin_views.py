@@ -10,6 +10,7 @@ UI (CLAUDE.md) — pantallas propias con el Design System del proyecto."""
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
@@ -31,6 +32,7 @@ from .models import (
     Subscription,
 )
 from .services import credits as credit_services
+from .services import invoicing as invoicing_services
 from .services import refunds as refund_services
 from .services import reports as report_services
 from .services import subscriptions as subscription_services
@@ -87,21 +89,39 @@ class TenantDetailView(LoginRequiredMixin, SuperuserRequiredMixin, View):
         tenant = get_object_or_404(Tenant, pk=pk)
         accion = request.POST.get("accion")
         subscription = Subscription.all_objects.filter(tenant=tenant).order_by("-created_at").first()
-        if accion == "suspender":
-            if subscription is not None:
-                subscription_services.suspend_subscription(subscription, user=request.user, reason="Suspendido manualmente por Super Admin")
-            else:
-                tenant_lifecycle_services.suspend_tenant(tenant, user=request.user, reason="Suspendido manualmente por Super Admin")
-        elif accion == "reactivar":
-            if subscription is not None:
-                subscription_services.reactivate_subscription(subscription, user=request.user)
-            else:
-                tenant_lifecycle_services.reactivate_tenant(tenant, user=request.user)
-        elif accion == "cancelar":
-            if subscription is not None:
-                subscription_services.cancel_subscription(subscription, immediate=True, reason="Cancelado manualmente por Super Admin", user=request.user)
-            else:
-                tenant_lifecycle_services.cancel_tenant(tenant, user=request.user)
+        try:
+            if accion == "activar":
+                # ACTIVATE != REACTIVATE (Gate Local, sección 5): acción
+                # explícita propia, solo para una Subscription PENDING —
+                # nunca reutiliza reactivar (exclusivo SUSPENDED/PAST_DUE).
+                if subscription is None:
+                    raise ValidationError("Este tenant no tiene ninguna suscripción que activar.")
+                subscription_services.activate_pending_subscription(
+                    subscription, user=request.user, reference="Activación manual por Super Admin",
+                )
+            elif accion == "suspender":
+                if subscription is not None:
+                    subscription_services.suspend_subscription(subscription, user=request.user, reason="Suspendido manualmente por Super Admin")
+                else:
+                    tenant_lifecycle_services.suspend_tenant(tenant, user=request.user, reason="Suspendido manualmente por Super Admin")
+            elif accion == "reactivar":
+                if subscription is not None:
+                    subscription_services.reactivate_subscription(subscription, user=request.user)
+                else:
+                    tenant_lifecycle_services.reactivate_tenant(tenant, user=request.user)
+            elif accion == "cancelar":
+                if subscription is not None:
+                    subscription_services.cancel_subscription(subscription, immediate=True, reason="Cancelado manualmente por Super Admin", user=request.user)
+                else:
+                    tenant_lifecycle_services.cancel_tenant(tenant, user=request.user)
+        except ValidationError as error:
+            # Antes de este fix, una transición inválida (ej. "Reactivar"
+            # sobre una Subscription PENDING) no se atrapaba aquí y
+            # producía un error 500 sin manejar — ver KNOWN_ISSUES.md.
+            mensaje = error.messages[0] if hasattr(error, "messages") and error.messages else str(error)
+            messages.error(request, mensaje)
+            return redirect("billing_admin:tenant_detail", pk=pk)
+
         messages.success(request, "Estado actualizado.")
         return redirect("billing_admin:tenant_detail", pk=pk)
 
@@ -151,8 +171,23 @@ class ManualTenantSaleView(LoginRequiredMixin, SuperuserRequiredMixin, View):
             subscription = subscription_services.create_subscription(
                 tenant, saas_customer=saas_customer, plan_version=form.cleaned_data["plan_version"], user=request.user,
             )
+            # Gate Local (hallazgo real, ver KNOWN_ISSUES.md): la venta
+            # manual creaba la Subscription pero nunca generaba su
+            # primera SaaSInvoice — el tenant quedaba "pendiente de
+            # pago" sin ninguna factura real contra la cual pagar.
+            # `generate_invoice_for_subscription` es idempotente
+            # (UniqueConstraint(subscription, period_start) real de
+            # base de datos), así que llamarla aquí nunca duplica nada
+            # si en el futuro se reintenta esta operación.
+            invoicing_services.generate_invoice_for_subscription(subscription, user=request.user)
+            # PENDING_SETUP → PENDING_PAYMENT: ya existe una factura real
+            # esperando pago — un estado más preciso que "configuración
+            # pendiente" a secas (sección 3 del Gate Local). Nunca ACTIVE:
+            # activar sin pago aprobado es exactamente lo que esta fase
+            # prohíbe (ver `activate_pending_subscription`).
+            tenant_lifecycle_services.mark_tenant_pending_payment(tenant, user=request.user)
 
-        messages.success(request, f"Tenant «{tenant.name}» creado — pendiente de pago/activación.")
+        messages.success(request, f"Tenant «{tenant.name}» creado con su factura inicial — pendiente de pago/activación.")
         return redirect("billing_admin:tenant_detail", pk=tenant.pk)
 
 

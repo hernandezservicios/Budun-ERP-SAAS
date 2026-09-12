@@ -10,16 +10,29 @@
 <div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></h3>
-        <p>Período: {{ subscription.current_period_start|default:"—" }} — {{ subscription.current_period_end|default:"—" }}</p>
+        {% if subscription.current_period_start %}
+        <p>Período: {{ subscription.current_period_start }} — {{ subscription.current_period_end }}</p>
+        {% else %}
+        <p>Período: <em>pendiente de activación</em></p>
+        {% endif %}
     </div>
 </div>
 {% endif %}
 
 <form method="post" style="margin-bottom: var(--espacio-6);">
     {% csrf_token %}
-    <button type="submit" class="btn btn--peligro" name="accion" value="suspender">Suspender</button>
+    {% if subscription and subscription.status == "pending" %}
+    <button type="submit" class="btn btn--primario" name="accion" value="activar">Activar</button>
+    {% endif %}
+    {% if not subscription or subscription.status == "suspended" or subscription.status == "past_due" %}
     <button type="submit" class="btn btn--contorno" name="accion" value="reactivar">Reactivar</button>
+    {% endif %}
+    {% if not subscription or subscription.status == "active" or subscription.status == "past_due" %}
+    <button type="submit" class="btn btn--peligro" name="accion" value="suspender">Suspender</button>
+    {% endif %}
+    {% if not subscription or subscription.status != "cancelled" %}
     <button type="submit" class="btn btn--peligro" name="accion" value="cancelar">Cancelar</button>
+    {% endif %}
 </form>
 
 <div class="encabezado-pagina"><h2>Facturas recientes</h2></div>

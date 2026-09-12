@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.billing.models import BankAccount, PaymentProof, Plan, PlanVersion, Subscription, Tenant
+from apps.billing.models import BankAccount, PaymentProof, Plan, PlanVersion, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation, Subscription, Tenant
 from apps.billing.services import invoicing as invoicing_services
 from apps.billing.services import subscriptions as subscription_services
 from apps.billing.services import transfers as transfer_services
@@ -43,10 +43,30 @@ class ManualTenantSaleViewTests(TestCase):
             "owner_email": "owner.manual@example.com",
         })
         tenant = Tenant.objects.get(slug="empresa-manual")
-        self.assertEqual(tenant.billing_status, Tenant.BillingStatus.PENDING_SETUP)
+        # Gate Local (KNOWN_ISSUES.md): la venta manual deja al tenant en
+        # PENDING_PAYMENT (ya existe una factura real esperando pago),
+        # nunca en PENDING_SETUP a secas ni en ACTIVE sin pago aprobado.
+        self.assertEqual(tenant.billing_status, Tenant.BillingStatus.PENDING_PAYMENT)
         subscription = Subscription.all_objects.get(tenant=tenant)
         self.assertEqual(subscription.status, Subscription.Status.PENDING)
         self.assertRedirects(respuesta, reverse("billing_admin:tenant_detail", args=[tenant.pk]))
+
+    def test_venta_manual_genera_la_primera_saasinvoice(self):
+        """Hallazgo real del Gate Local: ManualTenantSaleView creaba la
+        Subscription pero nunca generaba su primera SaaSInvoice — el
+        tenant quedaba "pendiente de pago" sin ninguna factura real."""
+        self.client.post(reverse("billing_admin:manual_sale"), {
+            "customer_name": "Cliente Manual 2", "customer_email": "cliente.manual2@example.com",
+            "tenant_name": "Empresa Manual Dos", "plan_version": self.version.pk,
+            "owner_email": "owner.manual2@example.com",
+        })
+        tenant = Tenant.objects.get(slug="empresa-manual-dos")
+        subscription = Subscription.all_objects.get(tenant=tenant)
+        facturas = SaaSInvoice.all_objects.filter(subscription=subscription)
+        self.assertEqual(facturas.count(), 1)
+        factura = facturas.first()
+        self.assertEqual(factura.status, SaaSInvoice.Status.OPEN)
+        self.assertEqual(factura.total, Decimal("29.00"))
 
 
 class TenantLifecycleAdminViewTests(TestCase):
@@ -69,6 +89,82 @@ class TenantLifecycleAdminViewTests(TestCase):
         self.client.post(reverse("billing_admin:tenant_detail", args=[self.tenant.pk]), {"accion": "reactivar"})
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.billing_status, Tenant.BillingStatus.ACTIVE)
+
+
+class ActivateVsReactivateAdminViewTests(TestCase):
+    """Gate Local (KNOWN_ISSUES.md): ACTIVATE != REACTIVATE — dos
+    acciones distintas, con guardas distintas, nunca intercambiables."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(email="super.activar@example.com", password="clave-de-prueba-987")
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        self.subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+    def _post_accion(self, accion):
+        return self.client.post(reverse("billing_admin:tenant_detail", args=[self.tenant.pk]), {"accion": accion})
+
+    def test_activar_desde_admin_activa_subscription_y_tenant_con_evidencia_real(self):
+        respuesta = self._post_accion("activar")
+        self.assertRedirects(respuesta, reverse("billing_admin:tenant_detail", args=[self.tenant.pk]))
+
+        self.subscription.refresh_from_db()
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.ACTIVE)
+        self.assertIsNotNone(self.subscription.current_period_start)
+        self.assertIsNotNone(self.subscription.current_period_end)
+        self.assertEqual(self.tenant.billing_status, Tenant.BillingStatus.ACTIVE)
+
+        # "Activar" nunca activa sin dejar evidencia real de pago.
+        factura = SaaSInvoice.all_objects.get(subscription=self.subscription)
+        self.assertEqual(factura.status, SaaSInvoice.Status.PAID)
+        pago = SaaSPayment.all_objects.get(subscription=self.subscription)
+        self.assertEqual(pago.method, SaaSPayment.Method.MANUAL_OTHER)
+        self.assertEqual(pago.status, SaaSPayment.Status.CONFIRMED)
+        self.assertEqual(SaaSPaymentAllocation.all_objects.filter(payment=pago).count(), 1)
+
+    def test_activar_es_idempotente_ante_doble_clic(self):
+        self._post_accion("activar")
+        self._post_accion("activar")
+        self.assertEqual(SaaSInvoice.all_objects.filter(subscription=self.subscription).count(), 1)
+        self.assertEqual(SaaSPayment.all_objects.filter(subscription=self.subscription).count(), 1)
+        self.assertEqual(SaaSPaymentAllocation.all_objects.filter(payment__subscription=self.subscription).count(), 1)
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.ACTIVE)
+
+    def test_activar_sin_subscription_muestra_error_amigable_no_500(self):
+        tenant_sin_subscription, _owner = crear_tenant_con_owner(name="Sin Suscripción", slug="sin-suscripcion", email="sin.sub@example.com")
+        respuesta = self.client.post(
+            reverse("billing_admin:tenant_detail", args=[tenant_sin_subscription.pk]), {"accion": "activar"}
+        )
+        self.assertEqual(respuesta.status_code, 302)  # nunca un 500
+        respuesta_seguida = self.client.get(respuesta.url)
+        self.assertContains(respuesta_seguida, "no tiene ninguna suscripción")
+
+    def test_reactivar_sobre_subscription_pending_muestra_error_amigable_no_500(self):
+        """Hallazgo real del Gate Local: antes de este fix, "Reactivar"
+        sobre una Subscription PENDING lanzaba InvalidSubscriptionOperation
+        sin capturar -> error 500 sin manejar."""
+        respuesta = self._post_accion("reactivar")
+        self.assertEqual(respuesta.status_code, 302)  # nunca un 500
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.PENDING)
+        respuesta_seguida = self.client.get(respuesta.url)
+        self.assertContains(respuesta_seguida, "Solo se puede reactivar")
+
+    def test_activar_no_reutiliza_reactivar_para_suspendida(self):
+        """Lo inverso también debe respetarse: una Subscription SUSPENDED
+        no se "activa" con la acción activar (que exige PENDING) — debe
+        usarse reactivar."""
+        subscription_services.activate_subscription(self.subscription)
+        subscription_services.suspend_subscription(self.subscription)
+        respuesta = self._post_accion("activar")
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.SUSPENDED)
+        respuesta_seguida = self.client.get(respuesta.url)
+        self.assertContains(respuesta_seguida, "Solo se puede ACTIVAR una suscripción pendiente")
 
 
 class ProofApprovalAdminViewTests(TestCase):

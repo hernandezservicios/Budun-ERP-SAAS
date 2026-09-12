@@ -25,6 +25,12 @@
     </div>
 </div>
 
+{% if not tiene_saas_payment %}
+<div class="alerta alerta--advertencia" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+    Esta transacción <strong>no tiene ningún SaaS Payment asociado</strong> — se creó desde esta herramienta de operación/prueba de PayPal, no desde el Portal de Billing de un tenant. Aunque su estado sea <code>{{ transaccion.get_status_display }}</code>, no activó ninguna Subscription ni Tenant.
+</div>
+{% endif %}
+
 {% if transaccion.status == "confirmed" %}
 <div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
     <div class="tarjeta__cuerpo">

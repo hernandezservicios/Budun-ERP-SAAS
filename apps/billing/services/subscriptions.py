@@ -100,6 +100,56 @@ def activate_subscription(subscription, *, user=None):
         return subscription
 
 
+def activate_pending_subscription(subscription, *, user=None, reference=""):
+    """Activación INICIAL explícita de una `Subscription` en `PENDING`
+    (Gate Local, alta manual + activación) — NUNCA reutiliza
+    `reactivate_subscription` (que exige `SUSPENDED`/`PAST_DUE`, sin
+    modificar: `ACTIVATE != REACTIVATE` son dos operaciones distintas,
+    con guardas distintas). Pensada para un Super Admin que confirma
+    manualmente que el pago inicial de una venta manual ya está
+    cubierto por una vía fuera de los flujos automáticos (PayPal Portal
+    del tenant / comprobante de transferencia ya aprobado por
+    `apps.billing.services.transfers.approve_payment_proof`).
+
+    Nunca activa "porque sí": jamás se salta la evidencia de pago.
+    Genera (o recupera, idempotente) la factura inicial y, si todavía
+    tiene saldo pendiente, registra y confirma un `SaaSPayment`
+    (`method=MANUAL_OTHER`) que lo cubre — exactamente el mismo motivo
+    de seguridad por el que la Transacción de PayPal de la herramienta
+    de prueba de FASE 16 nunca activa nada por sí sola (no tiene un
+    `SaaSPayment` asociado, ver `services.paypal_integration`): aquí SÍ
+    se crea esa evidencia real antes de activar, nunca se activa sin
+    ella."""
+    from . import invoicing as invoicing_services
+    from . import payments as payment_services
+    from ..models import SaaSPayment
+
+    with transaction.atomic():
+        subscription = Subscription.all_objects.select_for_update().get(pk=subscription.pk)
+        if subscription.status == Subscription.Status.ACTIVE:
+            # Idempotente: doble clic / doble envío del formulario —
+            # nunca un error, nunca una segunda factura/pago.
+            return subscription
+        if subscription.status != Subscription.Status.PENDING:
+            raise InvalidSubscriptionOperation(
+                "Solo se puede ACTIVAR una suscripción pendiente — use Reactivar para una suspendida o en PAST_DUE."
+            )
+
+        invoice, _creada = invoicing_services.generate_invoice_for_subscription(subscription, user=user)
+        saldo = invoicing_services.get_invoice_balance_due(invoice)
+        if saldo > 0:
+            pago = payment_services.record_payment(
+                tenant=subscription.tenant, saas_customer=subscription.saas_customer, subscription=subscription,
+                method=SaaSPayment.Method.MANUAL_OTHER, amount=saldo, currency=invoice.currency,
+                external_reference=reference, user=user, status=SaaSPayment.Status.CONFIRMED,
+            )
+            pago.received_at = timezone.now()
+            pago.save(update_fields=["received_at"])
+            payment_services.auto_apply_payment(pago, user=user)
+
+    return activate_subscription(subscription, user=user)
+
+
 def mark_past_due(subscription, *, user=None):
     with transaction.atomic():
         subscription = Subscription.all_objects.select_for_update().get(pk=subscription.pk)

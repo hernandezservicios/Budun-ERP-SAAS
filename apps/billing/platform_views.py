@@ -21,7 +21,7 @@ from apps.tenants.permissions import SuperuserRequiredMixin
 
 from . import services
 from .forms import CheckoutCreateForm, RefundForm
-from .models import PayPalTransaction
+from .models import PayPalTransaction, SaaSPayment
 
 
 class GatewayStatusView(LoginRequiredMixin, SuperuserRequiredMixin, View):
@@ -97,6 +97,14 @@ class TransactionDetailView(LoginRequiredMixin, SuperuserRequiredMixin, View):
         return render(request, "billing/transaction_detail.html", {
             "transaccion": txn, "refund_form": RefundForm(),
             "eventos": txn.webhook_events.all()[:20],
+            # Gate Local (ver KNOWN_ISSUES.md): esta transacción solo
+            # activa algo de Billing si un SaaSPayment real la referencia
+            # (ver apps.billing.services.paypal_integration) — nunca por
+            # el solo hecho de tener Order/Capture ID, aunque esté
+            # `confirmed` (sección 13 del Gate Local: "no permitir
+            # activación solo porque exista PayPalTransaction/Order ID/
+            # Capture ID").
+            "tiene_saas_payment": SaaSPayment.all_objects.filter(paypal_transaction=txn).exists(),
         })
 
     def post(self, request, pk):
