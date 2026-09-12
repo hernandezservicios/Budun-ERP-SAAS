@@ -205,6 +205,61 @@ supera `past_due_to_suspend_days`). `manage.py seed_billing_plans`
 siembra los 3 planes reales a partir de `apps.core.pricing.PLANS`
 (idempotente).
 
+## Alta inicial y activación: `ACTIVATE != REACTIVATE`
+
+Gap real encontrado y corregido durante el Gate Local de validación
+manual (ver `KNOWN_ISSUES.md`): `ManualTenantSaleView` creaba
+`Tenant`+`Owner`+`Subscription` pero NUNCA generaba la primera
+`SaaSInvoice` — el tenant quedaba "pendiente de pago" sin ninguna
+factura real contra la cual pagar. Corregido llamando a
+`invoicing_services.generate_invoice_for_subscription` (el mismo
+servicio idempotente ya usado por la renovación recurrente, real vía
+`UniqueConstraint(subscription, period_start)`, nunca duplica) justo
+después de crear la `Subscription`, y moviendo `Tenant.billing_status`
+a `PENDING_PAYMENT` (en vez de dejarlo en `PENDING_SETUP` a secas) —
+ya existe una factura real esperando pago.
+
+**`ACTIVATE` y `REACTIVATE` son dos operaciones DISTINTAS, con guardas
+distintas, deliberadamente nunca intercambiables**:
+
+- `subscription_services.activate_pending_subscription` — activación
+  INICIAL, exclusiva de una `Subscription` en `PENDING` (nunca
+  `SUSPENDED`/`PAST_DUE`). Nunca activa "porque sí": genera (o
+  recupera, idempotente) la factura inicial y, si todavía tiene saldo
+  pendiente, registra y confirma un `SaaSPayment`
+  (`method=MANUAL_OTHER`) que lo cubre ANTES de activar — la misma
+  garantía de seguridad por la que la Transacción de PayPal de la
+  herramienta de prueba de FASE 16 nunca activa nada por sí sola (no
+  tiene ningún `SaaSPayment` asociado, ver más abajo): aquí SÍ se crea
+  esa evidencia real antes de activar, nunca se activa sin ella.
+  Expuesta en la UI del Super Admin como el botón **Activar**
+  (`/plataforma/billing/admin/tenants/<id>/`, acción `activar`),
+  visible solo cuando la suscripción está `PENDING`.
+- `subscription_services.reactivate_subscription` — **sin modificar**:
+  sigue exigiendo `SUSPENDED`/`PAST_DUE` exclusivamente (lanza
+  `InvalidSubscriptionOperation` para cualquier otro estado, incluido
+  `PENDING`). Botón **Reactivar**, visible solo cuando la suscripción
+  está `SUSPENDED`/`PAST_DUE`.
+
+`TenantDetailView.post` ahora atrapa `ValidationError` (antes: una
+transición inválida, p. ej. "Reactivar" sobre una `Subscription`
+`PENDING`, producía un error 500 sin manejar — hallazgo real,
+corregido en el mismo cambio) y muestra un mensaje de error legible en
+vez de romper la página. El período de la suscripción se muestra como
+"pendiente de activación" en vez de un guion ambiguo cuando todavía no
+se ha fijado.
+
+**Seguridad (sin excepciones)**: ninguna activación ocurre solo porque
+exista una `PayPalTransaction`/Order ID/Capture ID — la herramienta de
+prueba de PayPal de plataforma (`/plataforma/billing/admin/cobrar/`,
+FASE 16) es deliberadamente independiente del ciclo de vida de Billing
+SaaS (su propio receptor de señal, `apps.billing.services.
+paypal_integration._on_payment_confirmed`, ya documentaba en código
+"transacción de PayPal sin un SaaSPayment asociado — nada que hacer");
+ahora además muestra una advertencia visible en su UI, y la vista de
+detalle de cada transacción indica explícitamente si tiene o no un
+`SaaSPayment` real asociado.
+
 ## Super Admin (`/plataforma/billing/admin/`) y Portal del tenant (`/facturacion/`)
 
 Dos superficies completamente separadas, mismo criterio que FASE 16:
@@ -213,8 +268,9 @@ Dos superficies completamente separadas, mismo criterio que FASE 16:
   `is_superuser` — `apps.tenants.permissions.require_superuser`, el
   catálogo tenant-scoped de `apps.permissions` no aplica a un recurso
   de plataforma): Dashboard (MRR/ARR/altas/cancelaciones/transferencias
-  pendientes/ingresos/reembolsos), Clientes SaaS, Tenants (suspender/
-  reactivar/cancelar), Venta manual, Planes (crear plan + nueva versión
+  pendientes/ingresos/reembolsos), Clientes SaaS, Tenants (activar/
+  suspender/reactivar/cancelar — ver "Alta inicial y activación" más
+  abajo para la diferencia real entre activar y reactivar), Venta manual, Planes (crear plan + nueva versión
   de precio), Suscripciones, Facturas (detalle con líneas/pagos
   aplicados/notas de crédito aplicadas), Pagos (solicitar reembolso),
   Transferencias (cola + aprobar/rechazar), Notas de crédito,

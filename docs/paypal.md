@@ -284,6 +284,16 @@ Billing — ambos FASE 17. No existe todavía una navegación/hub de
 17 lo formalice) — la URL se documenta aquí como punto de entrada
 directo.
 
+**Confusión real encontrada y corregida durante el Gate Local de FASE
+17** (ver `docs/billing.md` sección "Alta inicial y activación" y
+`KNOWN_ISSUES.md`): una captura hecha con esta herramienta NUNCA crea
+ni activa un `SaaSPayment`/`Subscription`/`Tenant` de Billing SaaS —
+queda registrada solo como `PayPalTransaction`, sin ninguna relación
+con el ciclo de vida real de un tenant, aunque su estado llegue a
+`CONFIRMED` con Order ID/Capture ID reales. La UI ahora muestra esta
+advertencia explícitamente (en el formulario de cobro y en el detalle
+de cada transacción sin `SaaSPayment` asociado).
+
 ## 14. Qué NO se construyó en FASE 16
 
 `Plan`/`Subscription`/`SaaS Invoice`/`SaaS Payment` como modelos de

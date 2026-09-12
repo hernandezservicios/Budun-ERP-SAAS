@@ -667,6 +667,34 @@ Super Admin
 - [x] Smoke tests — ver reporte de cierre.
 - [x] Documentación — `docs/billing.md` (reescrito a CONSTRUIDO), `CLAUDE.md`/`docs/MASTER-PROMPT.md`/`ARCHITECTURE.md`, `docs/project-status/*`.
 
+## Corrección posterior al cierre: Alta inicial + Activación (Gate Local)
+
+Durante el Gate Local de validación manual (posterior al cierre de
+FASE 20), se encontraron 2 gaps reales en el criterio "Alta manual"
+(punto 646 arriba) que la marca `[x]` original no reflejaba con
+precisión:
+
+1. `ManualTenantSaleView` creaba `Tenant`+`Owner`+`Subscription` pero
+   nunca generaba la primera `SaaSInvoice` — corregido llamando a
+   `generate_invoice_for_subscription` (mismo servicio idempotente ya
+   usado por la renovación recurrente) y moviendo el tenant a
+   `PENDING_PAYMENT`.
+2. No existía ninguna acción explícita de activación inicial para una
+   `Subscription` en `PENDING` — la única UI disponible
+   (`Suspender`/`Reactivar`/`Cancelar`) podía intentar "Reactivar"
+   sobre una suscripción nunca activada, lanzando una excepción sin
+   manejar (error 500). Corregido con `activate_pending_subscription`
+   (nuevo servicio, exclusivo de `PENDING`, nunca reutiliza
+   `reactivate_subscription` — `ACTIVATE != REACTIVATE`) + botón
+   `Activar` en la UI + manejo de errores en `TenantDetailView.post`.
+
+Ver `docs/billing.md` sección "Alta inicial y activación", `KNOWN_ISSUES.md`
+y `DECISIONS.md` para el detalle completo. Ningún estado nuevo se
+inventó (`PENDING`/`ACTIVE`/`PAST_DUE`/`SUSPENDED`/`CANCELLED`/`EXPIRED`
+siguen siendo los únicos); la separación Billing SaaS vs.
+`apps.sales.Payment` y la independencia de la herramienta de prueba de
+PayPal de FASE 16 se preservaron sin cambios.
+
 ## 36. Regla de parada
 
 FASE 17 no se considera PASS sin evidencia de todos los criterios aplicables.
