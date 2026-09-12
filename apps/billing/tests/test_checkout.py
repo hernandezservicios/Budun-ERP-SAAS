@@ -3,9 +3,13 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.billing import services
-from apps.billing.models import PayPalTransaction
+from apps.billing.models import PayPalTransaction, PlanVersion, SaaSInvoice, SaaSPayment
+from apps.billing.services import invoicing as invoicing_services
+from apps.billing.services import subscriptions as subscription_services
+from apps.sales.models import Payment as SalesPayment
 
 from ._helpers import BillingTestCase, fake_provider
+from ._helpers_saas import crear_plan_con_version, crear_saas_customer, crear_tenant_con_owner
 
 
 class CreateCheckoutTests(BillingTestCase, TestCase):
@@ -119,3 +123,97 @@ class CaptureCancelCheckoutTests(BillingTestCase, TestCase):
             txn = services.capture_checkout(txn, user=self.superadmin)
         txn = services.cancel_checkout(txn, user=self.superadmin)
         self.assertEqual(txn.status, PayPalTransaction.Status.CONFIRMED)
+
+
+class CreateCheckoutForInvoiceTests(TestCase):
+    """FASE DE CORRECCIÓN 2B — Integridad del monto de factura en
+    PayPal (ver `KNOWN_ISSUES.md` #131, `DECISIONS.md` #111):
+    `create_checkout_for_invoice` es la única vía real para el Portal
+    del tenant — el monto/moneda enviados a PayPal SIEMPRE deben salir
+    del snapshot contractual de la `SaaSInvoice`, nunca del precio
+    vigente del plan."""
+
+    def setUp(self):
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        self.subscription = subscription_services.create_subscription(
+            self.tenant, saas_customer=self.saas_customer, plan_version=self.version,
+        )
+        self.invoice, _creada = invoicing_services.generate_invoice_for_subscription(self.subscription)
+
+    def _iniciar(self):
+        return services.create_checkout_for_invoice(
+            invoice=self.invoice, user=self.owner,
+            return_url="https://example.test/return", cancel_url="https://example.test/cancel",
+        )
+
+    def test_a_paypal_recibe_exactamente_el_monto_y_moneda_de_la_factura(self):
+        with fake_provider() as fake:
+            pago, txn, approve_url = self._iniciar()
+        self.assertEqual(txn.amount, Decimal("29.00"))
+        self.assertEqual(txn.currency, "USD")
+        self.assertEqual(pago.amount, Decimal("29.00"))
+        self.assertEqual(pago.currency, "USD")
+        self.assertTrue(approve_url.startswith("https://sandbox.paypal.test/approve/"))
+        self.assertEqual(len([c for c in fake.calls if c[0] == "create_order"]), 1)
+
+    def test_b_un_cambio_de_precio_del_plan_tras_emitir_la_factura_no_afecta_el_monto_cobrado(self):
+        # El precio VIGENTE del plan cambia DESPUÉS de que la factura ya
+        # se emitió — mismo patrón real que `PlansListView.post()` usa
+        # para versionar un precio (nunca edita la fila existente, ver
+        # `apps/billing/admin_views.py`).
+        PlanVersion.objects.filter(plan=self.plan, frequency=self.version.frequency, is_current=True).update(is_current=False)
+        PlanVersion.objects.create(
+            plan=self.plan, frequency=self.version.frequency, price_amount=Decimal("39.00"), price_currency="USD", is_current=True,
+        )
+        with fake_provider():
+            pago, txn, _url = self._iniciar()
+        # PayPal debe recibir el monto DE LA FACTURA (29.00) — nunca el
+        # nuevo precio vigente del plan (39.00). Este es el hallazgo
+        # real que originó esta corrección.
+        self.assertEqual(txn.amount, Decimal("29.00"))
+        self.assertEqual(pago.amount, Decimal("29.00"))
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.total, Decimal("29.00"))  # el historial de la factura nunca cambia.
+
+    def test_c_una_factura_ya_pagada_rechaza_un_nuevo_checkout(self):
+        self.invoice.status = SaaSInvoice.Status.PAID
+        self.invoice.save(update_fields=["status"])
+        with fake_provider() as fake:
+            with self.assertRaises(services.InvalidBillingOperation):
+                self._iniciar()
+        self.assertEqual(len(fake.calls), 0)  # nunca llegó a llamar al proveedor.
+        self.assertEqual(PayPalTransaction.objects.filter(tenant=self.tenant).count(), 0)
+        self.assertEqual(SaaSPayment.all_objects.filter(tenant=self.tenant).count(), 0)
+
+    def test_d_moneda_de_factura_invalida_rechaza_el_checkout_antes_de_llamar_a_paypal(self):
+        self.invoice.currency = ""
+        self.invoice.save(update_fields=["currency"])
+        with fake_provider() as fake:
+            with self.assertRaises(services.InvalidBillingOperation):
+                self._iniciar()
+        self.assertEqual(len(fake.calls), 0)
+
+    def test_monto_de_factura_invalido_rechaza_el_checkout_antes_de_llamar_a_paypal(self):
+        self.invoice.total = Decimal("0.00")
+        self.invoice.save(update_fields=["total"])
+        with fake_provider() as fake:
+            with self.assertRaises(services.InvalidBillingOperation):
+                self._iniciar()
+        self.assertEqual(len(fake.calls), 0)
+
+    def test_e_repetir_la_misma_operacion_mientras_hay_un_checkout_en_curso_no_duplica(self):
+        with fake_provider():
+            self._iniciar()
+        with fake_provider() as fake:
+            with self.assertRaises(services.InvalidBillingOperation):
+                self._iniciar()
+        self.assertEqual(len(fake.calls), 0)  # el segundo intento nunca llegó a llamar al proveedor.
+        self.assertEqual(PayPalTransaction.objects.filter(tenant=self.tenant).count(), 1)
+        self.assertEqual(SaaSPayment.all_objects.filter(tenant=self.tenant).count(), 1)
+
+    def test_g_este_flujo_nunca_crea_un_apps_sales_payment(self):
+        with fake_provider():
+            self._iniciar()
+        self.assertEqual(SalesPayment.all_objects.filter(tenant=self.tenant).count(), 0)

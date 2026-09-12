@@ -9,13 +9,15 @@ from decimal import Decimal
 from django.db import connection
 from django.test import TransactionTestCase
 
-from apps.billing.models import BankAccount, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation, Subscription
+from apps.billing import services as billing_services
+from apps.billing.models import BankAccount, PayPalTransaction, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation, Subscription
 from apps.billing.services import invoicing as invoicing_services
 from apps.billing.services import payments as payment_services
 from apps.billing.services import subscriptions as subscription_services
 from apps.billing.services import transfers as transfer_services
 from apps.tenants.models import Tenant
 
+from ._helpers import fake_provider
 from ._helpers_saas import crear_plan_con_version, crear_saas_customer, crear_tenant_con_owner
 
 
@@ -247,3 +249,50 @@ class PaymentProofApprovalConcurrencyTests(TransactionTestCase):
         pagos_creados = [r for r in resultados if r is not None]
         self.assertEqual(SaaSPayment.all_objects.filter(payment_proof=self.proof).count(), 1)
         self.assertEqual(len(pagos_creados), 1, "Exactamente una de las dos aprobaciones concurrentes debe crear el pago; la otra ve ya APROBADO y no crea uno segundo.")
+
+
+class CreateCheckoutForInvoiceConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 2B — dos clics simultáneos en "Pagar con
+    PayPal" sobre la MISMA factura (dos pestañas, doble clic) nunca
+    deben crear dos órdenes de PayPal en paralelo — ver
+    `create_checkout_for_invoice`, `KNOWN_ISSUES.md` #131."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        self.subscription = subscription_services.create_subscription(
+            self.tenant, saas_customer=self.saas_customer, plan_version=self.version,
+        )
+        self.invoice, _creada = invoicing_services.generate_invoice_for_subscription(self.subscription)
+
+    def test_dos_intentos_simultaneos_de_pagar_la_misma_factura_por_paypal_solo_crean_un_checkout(self):
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def iniciar_checkout():
+            barrera.wait()
+            try:
+                billing_services.create_checkout_for_invoice(
+                    invoice=self.invoice, user=self.owner,
+                    return_url="https://example.test/return", cancel_url="https://example.test/cancel",
+                )
+                resultados.append("ok")
+            except billing_services.InvalidBillingOperation:
+                resultados.append("rechazado")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=iniciar_checkout) for _ in range(2)]
+        with fake_provider():
+            for hilo in hilos:
+                hilo.start()
+            for hilo in hilos:
+                hilo.join()
+
+        self.assertEqual(resultados.count("ok"), 1)
+        self.assertEqual(resultados.count("rechazado"), 1)
+        self.assertEqual(PayPalTransaction.objects.filter(tenant=self.tenant).count(), 1)
+        self.assertEqual(SaaSPayment.all_objects.filter(tenant=self.tenant).count(), 1)

@@ -108,25 +108,20 @@ class CheckoutPayPalInitiateView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request, invoice_id):
         require_permission(request, "billing.saas.manage")
         invoice = get_object_or_404(SaaSInvoice, pk=invoice_id, tenant=request.tenant)
-        from .services import payments as payment_services
-
-        pago = payment_services.record_payment(
-            tenant=request.tenant, saas_customer=invoice.subscription.saas_customer, subscription=invoice.subscription,
-            method="paypal", amount=invoice.total, currency=invoice.currency, user=request.user,
-        )
+        # Corrección de integridad (Gate Local, ver KNOWN_ISSUES.md
+        # #131): TODA la lógica de "cobrar esta factura por PayPal"
+        # vive en el servicio — el monto/moneda enviados a PayPal SIEMPRE
+        # salen de invoice.total/invoice.currency (el snapshot
+        # contractual de la factura), nunca del precio vigente del plan.
         try:
-            txn, approve_url = paypal_services.create_checkout(
-                tenant=request.tenant, plan_id=invoice.subscription.plan_version.plan.slug,
-                purpose=(PayPalTransaction.Purpose.RENEWAL if invoice.subscription.started_at else PayPalTransaction.Purpose.SIGNUP),
-                user=request.user, description=f"Factura {invoice.number}",
+            _pago, _txn, approve_url = paypal_services.create_checkout_for_invoice(
+                invoice=invoice, user=request.user,
                 return_url=request.build_absolute_uri(reverse("billing_portal:checkout_paypal_return", args=[invoice.pk])),
                 cancel_url=request.build_absolute_uri(reverse("billing_portal:checkout_paypal_cancel", args=[invoice.pk])),
             )
         except paypal_services.InvalidBillingOperation as error:
             messages.error(request, str(error))
             return redirect("billing_portal:status")
-        pago.paypal_transaction = txn
-        pago.save(update_fields=["paypal_transaction"])
         return redirect(approve_url)
 
 

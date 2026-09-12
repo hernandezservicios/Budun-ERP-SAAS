@@ -32,7 +32,7 @@ from django.utils import timezone
 from apps.audit.models import AuditLog
 
 from .. import signals
-from ..models import PayPalGatewayStatus, PayPalTransaction, PayPalWebhookEvent
+from ..models import PayPalGatewayStatus, PayPalTransaction, PayPalWebhookEvent, SaaSInvoice, SaaSPayment, Subscription
 from ..providers import PaymentProviderError, get_default_provider
 from .subscriptions import resolve_plan_pricing
 
@@ -119,17 +119,37 @@ def test_paypal_connection(*, user):
 # Checkout (Orders API v2): crear -> aprobar (redirect) -> capturar
 # ---------------------------------------------------------------------
 
-def create_checkout(*, tenant, plan_id, purpose, user, return_url, cancel_url, description=""):
+def create_checkout(*, tenant, plan_id, purpose, user, return_url, cancel_url, description="", amount=None, currency=None):
+    """Crea una orden de PayPal para un `plan_id` — usada por la
+    herramienta de prueba/venta manual de plataforma
+    (`apps.billing.platform_views.CheckoutCreateView`, FASE 16, sin
+    ninguna `SaaSInvoice` real de por medio) y, indirectamente, por
+    `create_checkout_for_invoice` de abajo.
+
+    `amount`/`currency` son OPCIONALES y existen exclusivamente para que
+    `create_checkout_for_invoice` pueda pasar el monto/moneda YA
+    resueltos de una factura real (su snapshot contractual) sin que
+    esta función los recalcule — cuando se omiten (el caso de siempre
+    para la herramienta de plataforma), el comportamiento es IDÉNTICO
+    al de antes: se resuelven desde el precio VIGENTE del plan
+    (`resolve_plan_pricing`). Nunca al revés: un llamador que YA sabe
+    el monto exacto a cobrar (porque viene de una factura) nunca debe
+    dejar que esta función se lo recalcule (ver `KNOWN_ISSUES.md` #131
+    — el monto vigente del plan pudo cambiar desde que la factura se
+    emitió)."""
     from django.conf import settings
 
-    # Resuelve PRIMERO el `Plan`/`PlanVersion` real de FASE 17 (por
-    # `slug`); si no existe todavía, cae al fallback estático de
-    # `apps.core.pricing.PLANS` (FASE 6) — mismo criterio de
-    # compatibilidad que el resto del proyecto, ver `docs/paypal.md`
-    # sección 2 y `subscriptions.resolve_plan_pricing`.
-    nombre_plan, amount, currency, _version = resolve_plan_pricing(plan_id)
-    if amount is None:
-        raise InvalidBillingOperation(f"«{plan_id}» no es un plan reconocido o no tiene checkout de autoservicio (sin precio fijo).")
+    if amount is not None and currency is not None:
+        nombre_plan = plan_id
+    else:
+        # Resuelve PRIMERO el `Plan`/`PlanVersion` real de FASE 17 (por
+        # `slug`); si no existe todavía, cae al fallback estático de
+        # `apps.core.pricing.PLANS` (FASE 6) — mismo criterio de
+        # compatibilidad que el resto del proyecto, ver `docs/paypal.md`
+        # sección 2 y `subscriptions.resolve_plan_pricing`.
+        nombre_plan, amount, currency, _version = resolve_plan_pricing(plan_id)
+        if amount is None:
+            raise InvalidBillingOperation(f"«{plan_id}» no es un plan reconocido o no tiene checkout de autoservicio (sin precio fijo).")
 
     status = get_gateway_status()
     if not status.is_enabled:
@@ -164,6 +184,84 @@ def create_checkout(*, tenant, plan_id, purpose, user, return_url, cancel_url, d
         after={"plan_id": plan_id, "amount": str(amount), "currency": currency, "external_order_id": orden.external_order_id},
     )
     return txn, orden.approve_url
+
+
+def create_checkout_for_invoice(*, invoice, user, return_url, cancel_url):
+    """Inicia un checkout de PayPal para pagar una `SaaSInvoice`
+    EXISTENTE — la ÚNICA vía real para el Portal del tenant
+    (`apps.billing.portal_views.CheckoutPayPalInitiateView`).
+
+    Corrección de integridad (Gate Local, ver `KNOWN_ISSUES.md` #131,
+    `DECISIONS.md` #111): una factura emitida es un SNAPSHOT
+    CONTRACTUAL del importe y la moneda a pagar — `invoice.total`/
+    `invoice.currency`, congelados al generarse (`generate_invoice_
+    for_subscription`) — y PayPal debe cobrar exactamente eso, nunca el
+    precio VIGENTE del plan (que pudo cambiar después). Antes de esta
+    corrección, el llamador pasaba `plan_id` a `create_checkout`, que
+    recalculaba el monto desde `resolve_plan_pricing` — un cambio de
+    precio del plan entre la emisión de la factura y su pago habría
+    hecho que PayPal cobrara un monto DISTINTO del que el ledger interno
+    (`SaaSPayment.amount`, ya correcto, tomado de `invoice.total`)
+    registraba como recibido — una discrepancia real de dinero que
+    nunca se habría detectado.
+
+    Validaciones (fallar ANTES de tocar PayPal o crear ningún registro):
+    - la factura debe seguir `OPEN`/`PARTIALLY_PAID` (una ya `PAID`/
+      `VOID`/`DRAFT` nunca admite un nuevo cobro);
+    - el monto debe ser positivo;
+    - la moneda debe tener la forma de un código real (3 letras).
+
+    Concurrencia: bloquea la propia `SaaSInvoice` (`select_for_update()`,
+    mismo patrón ya usado en `capture_checkout`/`activate_pending_
+    subscription`) mientras decide si ya existe un `PayPalTransaction`
+    sin resolver (`CREATED`/`PENDING_CAPTURE`) para la suscripción de
+    esa factura — dos clics simultáneos sobre la MISMA factura ("Pagar
+    con PayPal" dos veces, dos pestañas) se serializan por el lock de la
+    fila: el segundo intento espera a que el primero termine de crear su
+    propio `SaaSPayment`/`PayPalTransaction` y COMMITEE, y entonces sí
+    ve el checkout ya en curso y lo rechaza — nunca crea una segunda
+    orden de PayPal en paralelo para la misma operación."""
+    from . import payments as payment_services
+
+    with transaction.atomic():
+        invoice = SaaSInvoice.all_objects.select_for_update().get(pk=invoice.pk)
+        subscription = invoice.subscription
+
+        if invoice.status not in (SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID):
+            raise InvalidBillingOperation(
+                f"La factura {invoice.number} no admite un nuevo cobro en su estado actual "
+                f"({invoice.get_status_display()})."
+            )
+        if invoice.total is None or invoice.total <= 0:
+            raise InvalidBillingOperation(f"La factura {invoice.number} no tiene un monto válido para cobrar.")
+        moneda = (invoice.currency or "").strip().upper()
+        if len(moneda) != 3 or not moneda.isalpha():
+            raise InvalidBillingOperation(f"La factura {invoice.number} tiene una moneda inválida ({invoice.currency!r}).")
+
+        hay_checkout_en_curso = SaaSPayment.all_objects.filter(
+            subscription=subscription,
+            paypal_transaction__status__in=[PayPalTransaction.Status.CREATED, PayPalTransaction.Status.PENDING_CAPTURE],
+        ).exists()
+        if hay_checkout_en_curso:
+            raise InvalidBillingOperation(
+                "Ya existe un cobro de PayPal en curso para esta suscripción — espera a que se confirme, "
+                "falle o cancele antes de intentar uno nuevo."
+            )
+
+        pago = payment_services.record_payment(
+            tenant=invoice.tenant, saas_customer=subscription.saas_customer, subscription=subscription,
+            method="paypal", amount=invoice.total, currency=moneda, user=user,
+        )
+        txn, approve_url = create_checkout(
+            tenant=invoice.tenant, plan_id=subscription.plan_version.plan.slug,
+            purpose=(PayPalTransaction.Purpose.RENEWAL if subscription.started_at else PayPalTransaction.Purpose.SIGNUP),
+            user=user, description=f"Factura {invoice.number}",
+            return_url=return_url, cancel_url=cancel_url,
+            amount=invoice.total, currency=moneda,
+        )
+        pago.paypal_transaction = txn
+        pago.save(update_fields=["paypal_transaction"])
+    return pago, txn, approve_url
 
 
 def capture_checkout(txn, *, user=None):
