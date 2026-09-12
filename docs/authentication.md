@@ -26,6 +26,7 @@ la columna (0 filas).
 | Perfil | `ProfileView` (`/cuentas/perfil/`) | Edita nombre/apellido/email. No exige tenant activo (ver "Fail-closed" abajo). Muestra la empresa y el rol si el usuario ya tiene un tenant. |
 | Onboarding | `OnboardingView` (`/cuentas/onboarding/`) | Creación **transaccional** (`transaction.atomic()`) de `Tenant` + `Membership` con rol `OWNER`. Si el usuario ya tiene una membresía activa, redirige a perfil sin crear un tenant adicional (gestión multi-empresa no es alcance de FASE 4). |
 | Activar cuenta | `AccountActivation*View` (`/cuentas/activacion/...`) | Para el `User` Owner que `apps.billing.admin_views.ManualTenantSaleView` crea automáticamente con `set_unusable_password()` (FASE DE CORRECCIÓN 1 del Gate Local, ver sección al final de este documento). |
+| Reenviar activación | `AccountActivationResendView` (`/cuentas/activacion/reenviar/`) | Self-service, sin sesión: localiza el `User` existente por correo (nunca crea uno nuevo) e invalida funcionalmente cualquier token anterior antes de enviar uno nuevo (FASE DE CORRECCIÓN 1B, ver sección al final). |
 
 ## Nota técnica: por qué el redirect post-login NO usa `request.tenant`
 
@@ -148,3 +149,60 @@ para el hallazgo completo y la justificación de diseño.
   correcto, token expirado, token reutilizado tras activar, token
   inválido, contraseña corta rechazada, sin duplicar `User` al reintentar
   `/cuentas/registro/`) más `ManualTenantSaleViewTests` extendida.
+
+## Activación desde Registro/Login (Corrección de Gate Local — "FASE DE CORRECCIÓN 1B")
+
+Completa la corrección de arriba para cuando el cliente llega por las
+pantallas normales de Registro/Login en vez del correo original de
+Venta Manual — nunca crea un segundo `User` en ningún caso. Ver
+`KNOWN_ISSUES.md` #129, `DECISIONS.md` #109 y
+`docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md` (sección "ACCOUNT
+ACTIVATION") para el patrón general, reusable en cualquier flujo futuro
+que cree una identidad por adelantado.
+
+- **Registro con correo pendiente de activación**:
+  `RegistrationForm.clean_email` distingue con un código de error propio
+  (`pending_activation` vs. `account_exists`, en vez del único mensaje
+  genérico anterior) si el correo ya existe porque está pendiente de
+  activación o porque ya está completamente activo.
+  `RegisterView.form_invalid` expone ese correo a la plantilla
+  (`registro.html`) para ofrecer "Activar mi cuenta" o "Iniciar sesión"
+  según corresponda — nunca solo el mensaje de error del campo.
+- **Login con Owner pendiente**: `EmailAuthenticationForm.clean`
+  distingue, únicamente cuando la autenticación real ya falló, el caso
+  de un correo que pertenece a un `User` con `has_usable_password() ==
+  False` (código `pending_activation`) del resto de fallos de login —
+  que siguen mostrando el mensaje genérico sin cambios.
+  `EmailLoginView.form_invalid` expone el correo a `login.html` para
+  ofrecer "Reenviar enlace de activación".
+- **`AccountActivationResendView`** (`accounts:activacion_reenviar`,
+  `FormView` con un único campo de correo) y
+  `apps.accounts.services.resend_activation_email`: localizan el `User`
+  existente por correo — nunca crean uno — y, solo si sigue pendiente,
+  invalidan funcionalmente cualquier token anterior llamando de nuevo a
+  `set_unusable_password()` (genera un hash aleatorio distinto cada vez,
+  lo que invalida cualquier token de `default_token_generator` calculado
+  contra el valor anterior) antes de emitir y enviar uno nuevo. Mismo
+  criterio anti-enumeración que `AccountPasswordResetView` (FASE 18): la
+  respuesta es siempre la misma exista o no la cuenta, esté o no ya
+  activada — con el mismo throttling por email/IP
+  (`ACTIVATION_RESEND_MAX_ATTEMPTS_PER_*`, `apps/accounts/views.py`).
+- **Token expirado con pantalla propia**:
+  `apps.accounts.services.classify_activation_token` distingue "expiró"
+  de "es inválido por cualquier otra razón" reutilizando el mismo
+  `default_token_generator` (que solo expone un booleano) con su propio
+  método de extensión (`_make_token_with_timestamp`) — nunca un segundo
+  generador de tokens. `AccountActivationConfirmView.get_context_data`
+  usa esa clasificación para mostrar "Este enlace de activación ha
+  expirado" con un botón directo a "Solicitar nuevo enlace"
+  (precompletado con el correo), en vez del mensaje genérico de
+  "inválido" que sigue cubriendo el resto de los casos (adulterado, de
+  otro usuario, ya usado).
+- Tests: `apps/accounts/tests.py` —
+  `RegistrationPendingActivationUxTests`,
+  `LoginPendingActivationUxTests`, `ActivationResendTests`,
+  `ActivationTokenExpirationUxTests`, `ActivationTokenSecurityTests`
+  (token inválido/adulterado/de otro usuario); más
+  `apps/billing/tests/test_admin_views.py::OwnerRegistroLoginResendUxTests`
+  (los mismos escenarios sobre un Owner real creado por Venta Manual,
+  incluido un test de aislamiento con DOS tenants/Owners).
