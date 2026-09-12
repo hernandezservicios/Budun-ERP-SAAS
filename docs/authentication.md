@@ -25,6 +25,7 @@ la columna (0 filas).
 | Cambiar contraseña | `AccountPasswordChangeView` (`/cuentas/password/cambiar/`) | `PasswordChangeView` estándar: exige la contraseña actual, mantiene la sesión activa tras el cambio (`update_session_auth_hash`, incorporado por Django). |
 | Perfil | `ProfileView` (`/cuentas/perfil/`) | Edita nombre/apellido/email. No exige tenant activo (ver "Fail-closed" abajo). Muestra la empresa y el rol si el usuario ya tiene un tenant. |
 | Onboarding | `OnboardingView` (`/cuentas/onboarding/`) | Creación **transaccional** (`transaction.atomic()`) de `Tenant` + `Membership` con rol `OWNER`. Si el usuario ya tiene una membresía activa, redirige a perfil sin crear un tenant adicional (gestión multi-empresa no es alcance de FASE 4). |
+| Activar cuenta | `AccountActivation*View` (`/cuentas/activacion/...`) | Para el `User` Owner que `apps.billing.admin_views.ManualTenantSaleView` crea automáticamente con `set_unusable_password()` (FASE DE CORRECCIÓN 1 del Gate Local, ver sección al final de este documento). |
 
 ## Nota técnica: por qué el redirect post-login NO usa `request.tenant`
 
@@ -111,3 +112,39 @@ ejercitan el aislamiento a través del flujo **real** de registro → login
   tenants adicionales desde una cuenta existente.
 - **Proveedor SMTP real**: se usa el backend de consola en desarrollo;
   la configuración de producción es decisión de FASE 21.
+
+## Activación de cuenta para Owners creados automáticamente (Corrección de Gate Local — "FASE DE CORRECCIÓN 1")
+
+`apps.billing.admin_views.ManualTenantSaleView` (FASE 17, Super Admin,
+`/plataforma/billing/admin/venta-manual/`) crea el `Tenant` y el `User`
+Owner de una vez, con `owner.set_unusable_password()` — correcto para que
+nadie pueda autenticarse con una contraseña adivinada, pero antes de esta
+corrección no existía ningún flujo real para que ese Owner estableciera
+su propia contraseña. Ver `KNOWN_ISSUES.md` #128 y `DECISIONS.md` #108
+para el hallazgo completo y la justificación de diseño.
+
+- **`apps.accounts.services`** (nuevo): `build_activation_url`/
+  `send_account_activation_email` generan el enlace y envían el correo.
+  Reutilizan `django.contrib.auth.tokens.default_token_generator` —
+  el mismo mecanismo de la fila "Recuperar contraseña" de arriba — pero
+  construyen el token directamente para el `User` ya conocido, sin pasar
+  por `PasswordResetForm.get_users()` (que excluye a propósito cualquier
+  cuenta con `has_usable_password() == False`, precisamente este caso).
+- **`AccountActivationConfirmView`/`AccountActivationCompleteView`**
+  (`apps/accounts/views.py`) son subclases mínimas de
+  `PasswordResetConfirmView`/`PasswordResetCompleteView` de Django —
+  mismo `SetPasswordForm` (valida `AUTH_PASSWORD_VALIDATORS`, incluida la
+  longitud mínima), solo cambian plantilla y URL de éxito.
+- `ManualTenantSaleView.post()` envía el correo de activación justo
+  DESPUÉS de que la transacción de alta ya confirmó — nunca dentro de su
+  `with transaction.atomic()` — y nunca bloquea la venta si el envío
+  falla (se le muestra el enlace directamente al Super Admin).
+- `RegistrationForm.clean_email()` sigue rechazando siempre un correo ya
+  existente (nunca crea un segundo `User`, sin cambios en esa regla); si
+  la cuenta existente tiene `has_usable_password() == False`, el mensaje
+  ahora señala el correo de activación en vez de sugerir "inicia sesión".
+- Tests: `apps/billing/tests/test_admin_views.py::OwnerActivationFlowTests`
+  (7 tests HTTP end-to-end: activación válida + login + acceso al tenant
+  correcto, token expirado, token reutilizado tras activar, token
+  inválido, contraseña corta rechazada, sin duplicar `User` al reintentar
+  `/cuentas/registro/`) más `ManualTenantSaleViewTests` extendida.
