@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -64,6 +65,16 @@ class PaymentProofFlowTests(TestCase):
         self.assertNotEqual(self.tenant.billing_status, Tenant.BillingStatus.ACTIVE)
 
     def test_referencias_son_unicas_por_tenant(self):
+        # FASE DE CORRECCIÓN 2: usa una SEGUNDA factura del mismo tenant
+        # (período distinto) a propósito — reenviar sobre la MISMA
+        # factura ya lo bloquea el nuevo guard de "comprobante pendiente
+        # duplicado" (ver `test_no_permite_un_segundo_comprobante_
+        # mientras_uno_sigue_pendiente` más abajo), y esta prueba
+        # necesita aislar específicamente la unicidad de referencia
+        # (`UniqueConstraint(tenant, reference)`), no esa otra regla.
+        segunda_factura, _creada = invoicing_services.generate_invoice_for_subscription(
+            self.subscription, period_start=self.invoice.period_end, period_end=self.invoice.period_end + timedelta(days=30),
+        )
         referencia = services.generate_transfer_reference(self.tenant)
         proof = services.submit_payment_proof(
             subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
@@ -72,8 +83,47 @@ class PaymentProofFlowTests(TestCase):
         self.assertEqual(proof.reference, referencia)
         with self.assertRaises(Exception):
             services.submit_payment_proof(
+                subscription=self.subscription, invoice=segunda_factura, bank_account=self.bank_account,
+                declared_amount=segunda_factura.total, declared_currency="USD", file=_comprobante_pdf(), reference=referencia,
+            )
+
+    def test_no_permite_un_segundo_comprobante_mientras_uno_sigue_pendiente(self):
+        services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(),
+        )
+        with self.assertRaises(services.InvalidTransferOperation):
+            services.submit_payment_proof(
                 subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
-                declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(), reference=referencia,
+                declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(),
+            )
+        self.assertEqual(PaymentProof.all_objects.filter(invoice=self.invoice).count(), 1)
+
+    def test_no_permite_comprobante_para_factura_ya_pagada(self):
+        proof = services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(),
+        )
+        services.approve_payment_proof(proof)
+        self.invoice.refresh_from_db()
+        with self.assertRaises(services.InvalidTransferOperation):
+            services.submit_payment_proof(
+                subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+                declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(),
+            )
+
+    def test_rechaza_monto_declarado_invalido(self):
+        with self.assertRaises(services.InvalidTransferOperation):
+            services.submit_payment_proof(
+                subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+                declared_amount=Decimal("0"), declared_currency="USD", file=_comprobante_pdf(),
+            )
+
+    def test_rechaza_moneda_declarada_que_no_coincide_con_la_cuenta(self):
+        with self.assertRaises(services.InvalidTransferOperation):
+            services.submit_payment_proof(
+                subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+                declared_amount=self.invoice.total, declared_currency="EUR", file=_comprobante_pdf(),
             )
 
     def test_archivo_disfrazado_es_rechazado(self):

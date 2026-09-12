@@ -71,6 +71,20 @@ def get_gateway_status():
     return status
 
 
+def is_paypal_available():
+    """FASE DE CORRECCIÓN 2 (Billing del Tenant): única fuente de
+    verdad de "¿el Portal debe ofrecer PayPal como método de pago?" —
+    ni el Portal (`portal_forms.SelectPlanForm`,
+    `portal_views.BillingPortalStatusView`) ni ninguna vista futura
+    deben volver a leer `PayPalGatewayStatus` directamente para decidir
+    esto; ambos reutilizan esta función. `create_checkout` ya rechaza
+    el checkout si el gateway está deshabilitado (defensa real en el
+    backend, sin cambios) — esto solo evita que la UI ofrezca un botón
+    que el backend rechazaría, o que lo esconda cuando SÍ está
+    disponible."""
+    return get_gateway_status().is_enabled
+
+
 def set_gateway_enabled(*, is_enabled, user):
     status = get_gateway_status()
     status.is_enabled = is_enabled

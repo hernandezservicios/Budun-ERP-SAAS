@@ -59,7 +59,15 @@
                 <td><span class="badge">{{ invoice.get_status_display }}</span></td>
                 <td>
                     {% if invoice.status == "open" or invoice.status == "partially_paid" %}
-                    <a class="btn btn--contorno btn--sm" href="{% url 'billing_portal:transfer_instructions' invoice.pk %}">Pagar</a>
+                    {% if paypal_disponible %}
+                    <a class="btn btn--primario btn--sm" href="{% url 'billing_portal:checkout_paypal_initiate' invoice.pk %}">Pagar con PayPal</a>
+                    {% endif %}
+                    {% if transferencia_disponible %}
+                    <a class="btn btn--contorno btn--sm" href="{% url 'billing_portal:transfer_instructions' invoice.pk %}">Pagar mediante transferencia bancaria</a>
+                    {% endif %}
+                    {% if not paypal_disponible and not transferencia_disponible %}
+                    <span class="badge">Sin métodos de pago disponibles</span>
+                    {% endif %}
                     {% endif %}
                 </td>
             </tr>

@@ -42,7 +42,16 @@ class BillingPortalStatusView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request):
         require_permission(request, "billing.saas.view")
         subscription = _current_subscription(request.tenant)
-        contexto = {"subscription": subscription, "tenant": request.tenant}
+        contexto = {
+            "subscription": subscription, "tenant": request.tenant,
+            # FASE DE CORRECCIÓN 2 (Billing del Tenant): la plantilla
+            # NUNCA decide por sí sola qué método de pago mostrar en la
+            # tabla de facturas — ambos flags vienen de la misma
+            # configuración real que ya usa `SelectPlanForm`
+            # (`portal_forms.py`), nunca hardcodeados ni duplicados.
+            "paypal_disponible": paypal_services.is_paypal_available(),
+            "transferencia_disponible": transfer_services.is_bank_transfer_available(),
+        }
         if subscription is not None:
             contexto["invoices"] = SaaSInvoice.all_objects.filter(tenant=request.tenant).order_by("-issue_date")[:10]
             contexto["credit_balance"] = credit_services.get_subscription_credit_balance(tenant=request.tenant, subscription=subscription)

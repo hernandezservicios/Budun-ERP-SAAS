@@ -15,7 +15,7 @@ from django.utils import timezone
 from apps.audit.models import AuditLog
 from apps.customers.file_validation import nombre_original_seguro, validar_archivo_adjunto
 
-from ..models import PaymentProof, SaaSPayment, Subscription
+from ..models import BankAccount, PaymentProof, SaaSInvoice, SaaSPayment, Subscription
 from ._saas_audit import audit_event
 from . import notifications
 from . import tenants as tenant_services
@@ -23,6 +23,19 @@ from . import tenants as tenant_services
 
 class InvalidTransferOperation(ValidationError):
     pass
+
+
+def is_bank_transfer_available():
+    """FASE DE CORRECCIÓN 2 (Billing del Tenant): única fuente de
+    verdad de "¿el Portal debe ofrecer transferencia bancaria como
+    método de pago?" — no existe un interruptor único como el de
+    PayPal (`services.is_paypal_available`) porque la transferencia
+    nunca tuvo uno: su disponibilidad real siempre fue "¿hay al menos
+    una cuenta bancaria activa a la que transferir?" (la misma
+    condición que `TransferInstructionsView` ya usa para listarlas).
+    Se centraliza aquí para que el Portal (formulario de elegir plan,
+    pantalla de estado) nunca duplique este `filter(is_active=True)`."""
+    return BankAccount.objects.filter(is_active=True).exists()
 
 
 def generate_transfer_reference(tenant):
@@ -38,6 +51,32 @@ def generate_transfer_reference(tenant):
 
 def submit_payment_proof(*, subscription, invoice, bank_account, declared_amount, declared_currency,
                           file, declared_bank_name="", user=None, reference=None):
+    # FASE DE CORRECCIÓN 2 (Billing del Tenant) — validaciones reales
+    # que faltaban en el servicio (antes solo validaba el archivo): un
+    # comprobante nunca es la fuente de verdad del pago (eso sigue
+    # siendo `approve_payment_proof`, sin cambios), pero aceptar uno
+    # para una factura que ya no admite pago, o un segundo comprobante
+    # mientras otro sigue en revisión, o un monto/moneda claramente
+    # inconsistentes, son errores detectables ANTES de crear la fila —
+    # nunca una segunda fuente de verdad, solo defensa real en el punto
+    # de entrada único del dominio.
+    if invoice.status not in (SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID):
+        raise InvalidTransferOperation(
+            f"La factura {invoice.number} no admite un nuevo comprobante en su estado actual "
+            f"({invoice.get_status_display()})."
+        )
+    if PaymentProof.all_objects.filter(
+        invoice=invoice, status__in=[PaymentProof.Status.SUBMITTED, PaymentProof.Status.UNDER_REVIEW]
+    ).exists():
+        raise InvalidTransferOperation("Ya existe un comprobante pendiente de revisión para esta factura.")
+    if declared_amount is None or declared_amount <= 0:
+        raise InvalidTransferOperation("El monto declarado debe ser mayor que cero.")
+    if (declared_currency or "").strip().upper() != bank_account.currency.upper():
+        raise InvalidTransferOperation(
+            f"La moneda declarada ({declared_currency}) no coincide con la moneda de la cuenta "
+            f"receptora seleccionada ({bank_account.currency})."
+        )
+
     _extension, content_type = validar_archivo_adjunto(file)
     referencia = reference or generate_transfer_reference(subscription.tenant)
 
