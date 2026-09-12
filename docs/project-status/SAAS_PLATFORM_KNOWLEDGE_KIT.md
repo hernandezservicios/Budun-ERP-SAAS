@@ -92,6 +92,80 @@ sin releer el documento completo:
   son tres ejes de `apps.accounts.rate_limit` completamente
   independientes (agotar uno nunca agota los otros).
 
+## SAAS BILLING & PAYMENT PROVIDERS
+
+Primeras entradas agregadas durante "FASE DE CORRECCIÓN 2 — Billing del
+Tenant + PayPal + Transferencia" (ver `KNOWN_ISSUES.md` #130,
+`DECISIONS.md` #110, `docs/billing.md`/`docs/paypal.md`).
+
+- **SaaS Billing separado del ERP Operational Payments**: `apps.billing`
+  (`Subscription`/`SaaSInvoice`/`SaaSPayment`/`SaaSPaymentAllocation`)
+  es lo que un Tenant paga a Budun ERP por usar la plataforma;
+  `apps.sales.Payment`/`PaymentAllocation` es el motor de cuentas por
+  cobrar de CADA TENANT hacia SUS PROPIOS clientes — dominios
+  ortogonales que nunca se mezclan, ni siquiera comparten tabla aunque
+  su forma sea casi idéntica (mismo principio que
+  `Payment`/`SupplierPayment` desde FASE 10/12). Ninguna integración de
+  Billing SaaS (PayPal, transferencia) escribe jamás en `apps.sales`.
+- **Payment Methods configurables**: ningún método de pago se
+  hardcodea en una plantilla o formulario — cada uno expone una función
+  `is_X_available()` (`apps.billing.services.is_paypal_available`,
+  `apps.billing.services.transfers.is_bank_transfer_available`) que el
+  Portal consulta en cada request; nunca una lista fija de opciones en
+  el código de la plantilla/formulario.
+- **PayPal como provider**: `apps.billing.providers.base.PaymentProvider`
+  es la interfaz; `PayPalProvider` es la única implementación real hoy.
+  Disponibilidad = `PayPalGatewayStatus.is_enabled` (un interruptor
+  único de PLATAFORMA, no por tenant) — el backend (`create_checkout`)
+  ya rechazaba un checkout con el gateway deshabilitado antes de esta
+  corrección; lo que faltaba era que la UI también lo consultara.
+- **Bank Transfer como provider** (conceptual — no hay una llamada a un
+  servicio externo, así que no tiene una interfaz `PaymentProvider`
+  formal): disponibilidad = "¿existe al menos una `BankAccount`
+  activa?" — nunca tuvo un interruptor único como PayPal porque nunca
+  lo necesitó.
+- **Invoice → Payment → Allocation**: un método de pago NUNCA marca una
+  factura como pagada directamente — siempre crea un `SaaSPayment`
+  (registrado y confirmado) que luego se APLICA a la factura vía
+  `SaaSPaymentAllocation` (`record_payment` + `auto_apply_payment`), y
+  solo entonces el saldo de la factura (recalculado del ledger, nunca
+  un campo cacheado) llega a cero y el estado pasa a `PAID`. Los dos
+  caminos reales (PayPal síncrono vía `_on_payment_confirmed`,
+  transferencia vía `approve_payment_proof`) convergen en el MISMO par
+  de funciones — nunca dos implementaciones paralelas de "aplicar un
+  pago".
+- **Subscription lifecycle**: un pago confirmado (por cualquier
+  método) dispara `activate_subscription` — el mismo primitivo de bajo
+  nivel que usan tanto la activación inicial
+  (`activate_pending_subscription`, exclusiva de `PENDING`) como la
+  reactivación (`reactivate_subscription`, exclusiva de
+  `SUSPENDED`/`PAST_DUE`); el propio evento de pago real ya es la
+  evidencia que esos dos guardas exigen para una acción administrativa
+  manual, así que la señal puede llamar al primitivo directamente sin
+  pasar por ninguno de los dos guardas — `PENDING` sigue sin ser
+  `SUSPENDED`, "Activar" y "Reactivar" siguen siendo operaciones
+  distintas para el Super Admin (sin cambios de la corrección
+  anterior).
+- **Payment method availability** es una decisión de PLATAFORMA
+  (PayPal) o de CONFIGURACIÓN COMPARTIDA (cuentas bancarias, no por
+  tenant) — nunca algo que un tenant individual activa/desactiva para
+  sí mismo.
+- **Separación entre provider y dominio de negocio**:
+  `apps.billing.providers` (PayPal) no sabe qué es una
+  `Subscription`/`SaaSInvoice` — solo sabe crear/capturar/reembolsar
+  órdenes. Toda la lógica de negocio (qué factura se paga, cuándo se
+  activa una suscripción) vive en `apps.billing.services`, nunca en el
+  provider ni en la vista.
+- **Limitaciones de webhook en localhost**: un webhook de PayPal
+  Sandbox no puede llegar a `127.0.0.1` — el flujo real de este
+  proyecto NUNCA depende de él para confirmar un pago (la captura es
+  SÍNCRONA en el `return_url` al volver de PayPal); el webhook es solo
+  una confirmación redundante para cuando el navegador no vuelve. Para
+  el Gate Local, validar el flujo síncrono contra Sandbox real (o
+  contra `FakePayPalProvider` en un smoke automatizado) es suficiente y
+  correcto — nunca simular una entrega de webhook que no podría ocurrir
+  de verdad en ese entorno.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -112,6 +186,17 @@ las decisiones de esta familia de correcciones:
   tokens; el reenvío es anti-enumeración por diseño (misma respuesta
   exista o no la cuenta, esté o no ya activada), igual criterio que
   `AccountPasswordResetView` desde FASE 18.
+- **#110**: la disponibilidad de un método de pago se calcula desde la
+  configuración real en cada request (`is_paypal_available`/
+  `is_bank_transfer_available`), nunca cacheada ni hardcodeada en el
+  formulario/plantilla. Se descartó unificar ambos métodos detrás de
+  una interfaz común tipo "PaymentMethodProvider": PayPal y
+  transferencia tienen semánticas de disponibilidad genuinamente
+  distintas (un interruptor único de plataforma vs. "¿existe al menos
+  una fila activa?") y forzarlas a la misma forma habría sido una
+  abstracción prematura sin un tercer método real que la necesite
+  todavía — mismo criterio de "no generalizar sin un segundo caso real"
+  ya aplicado repetidas veces en este proyecto.
 
 ## LESSONS LEARNED
 
@@ -134,6 +219,20 @@ las decisiones de esta familia de correcciones:
   reimplementar esa distinción reutilizando el propio método de
   extensión de Django (`_make_token_with_timestamp`), no inventar un
   mecanismo de expiración paralelo.
+- Un backend correcto (`create_checkout` ya rechazaba un checkout de
+  PayPal con el gateway deshabilitado) no implica una UI correcta — la
+  ausencia de una prueba end-to-end contra la PLANTILLA renderizada (no
+  solo contra la vista/servicio a nivel de API) dejó pasar un botón que
+  nunca se mostraba, con el backend detrás funcionando perfectamente
+  todo el tiempo. Una prueba que solo llama al servicio/vista
+  directamente no habría detectado este hallazgo — hacía falta
+  `assertContains`/`assertNotContains` sobre el HTML real.
+- Antes de replicar el patrón de disponibilidad de un método de pago en
+  otro ("¿tiene un booleano `is_enabled` como PayPal?"), preguntar
+  primero cuál es la señal REAL de disponibilidad de ESE método
+  específico — la transferencia nunca necesitó un interruptor propio
+  porque su señal real ya existía (`BankAccount.objects.filter(
+  is_active=True)`).
 
 ## COMMON FAILURES
 
@@ -157,3 +256,32 @@ las decisiones de esta familia de correcciones:
   no es un bug a arreglar en ese flujo — es el motivo por el que existe
   un flujo de activación dedicado, separado de la recuperación de
   contraseña.
+- **Síntoma**: "El Portal de Billing del tenant solo muestra
+  Transferencia bancaria, nunca PayPal", pese a que PayPal está
+  habilitado y el checkout funciona perfectamente si se llega a él por
+  otra vía. → **Causa real**: la plantilla de la tabla de facturas
+  (`portal_status.html`) enlazaba EXCLUSIVAMENTE a
+  `transfer_instructions` — nunca existía ningún enlace a
+  `checkout_paypal_initiate` desde ahí, ni ninguna condición que lo
+  bloqueara; el backend nunca tuvo el problema. → **Corrección**:
+  exponer ambos métodos de pago en la tabla de facturas, cada uno
+  condicionado a su disponibilidad real
+  (`is_paypal_available`/`is_bank_transfer_available`).
+- **Síntoma**: PayPal aparece como opción para elegir plan incluso con
+  el gateway deshabilitado por el Super Admin. → **Causa real**:
+  `SelectPlanForm.payment_method` tenía las `choices` hardcodeadas en
+  la definición de la clase (`[("paypal", "PayPal"), ("bank_transfer",
+  ...)]`), nunca calculadas contra la configuración real. →
+  **Corrección**: calcular `choices` dinámicamente en `__init__` a
+  partir de `is_paypal_available()`/`is_bank_transfer_available()` —
+  `create_checkout` sigue siendo, además, la segunda defensa real en el
+  backend si de todos modos llegara un valor inválido.
+- **Síntoma**: un tenant podría, en teoría, subir dos comprobantes de
+  transferencia para la misma factura, o uno para una factura ya
+  pagada, o declarar un monto de cero o una moneda que no coincide con
+  la cuenta receptora — ninguno de estos casos estaba validado. →
+  **Causa real**: `submit_payment_proof` solo validaba el archivo
+  adjunto; nunca el estado de la factura, la existencia de un
+  comprobante pendiente previo, el monto ni la moneda declarados. →
+  **Corrección**: cuatro validaciones nuevas en el servicio (único
+  punto de entrada real del dominio), nunca duplicadas en la vista.

@@ -214,6 +214,20 @@ banda, directamente en el panel de PayPal), `PAYMENT.REFUND.PENDING`/
 esta fase (p. ej. disputas) se marca procesado sin cambiar estado —
 nunca un error.
 
+**Limitación real en desarrollo local (Gate Local, FASE DE CORRECCIÓN
+2)**: un webhook de PayPal Sandbox no puede entregarse a
+`127.0.0.1`/`localhost` — PayPal necesita una URL pública. Esto NUNCA
+bloquea validar el flujo completo en local, precisamente porque la
+captura real no depende del webhook: `CheckoutPayPalReturnView`
+(`apps.billing.portal_views`) llama a `capture_checkout` de forma
+SÍNCRONA en el propio `return_url` al volver de PayPal — el webhook es
+una confirmación REDUNDANTE para cuando el navegador no vuelve (el
+usuario cierra la pestaña, pierde la conexión), nunca el único camino
+para que un pago se confirme. El Gate Local valida el flujo
+síncrono/local ya existente contra Sandbox real; no se simula ni se
+inventa una entrega de webhook a `localhost` — eso sería fingir una
+integración externa que no puede ocurrir de verdad en este entorno.
+
 ## 9. Refunds
 
 `apps.billing.services.request_refund`: solo desde `CONFIRMED`

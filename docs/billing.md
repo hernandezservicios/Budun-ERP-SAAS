@@ -149,6 +149,31 @@ La venta manual por Super Admin (`/plataforma/billing/admin/venta-manual/`,
 `create_subscription`) — nunca escribe `Tenant.billing_status=ACTIVE`
 directamente.
 
+## Disponibilidad de métodos de pago (Corrección de Gate Local — "FASE DE CORRECCIÓN 2")
+
+El Portal NUNCA hardcodea qué métodos de pago mostrar — ambos flags se
+calculan en cada request a partir de configuración real, nunca de una
+lista fija:
+
+- `apps.billing.services.is_paypal_available()` → lee
+  `PayPalGatewayStatus.is_enabled` (el mismo interruptor que
+  `create_checkout` ya usaba para RECHAZAR el checkout si está
+  deshabilitado — antes de esta corrección, el backend ya se protegía
+  correctamente, pero la UI nunca lo consultaba).
+- `apps.billing.services.transfers.is_bank_transfer_available()` →
+  `BankAccount.objects.filter(is_active=True).exists()` — la
+  transferencia nunca tuvo un interruptor único como PayPal; su
+  disponibilidad real siempre fue "¿hay al menos una cuenta activa?".
+
+Ambos flags alimentan dos puntos: `portal_forms.SelectPlanForm` (el
+desplegable de método de pago al elegir plan, antes con las dos
+opciones fijas en el código) y `BillingPortalStatusView`/
+`portal_status.html` (la tabla de facturas pendientes de
+`/facturacion/`, que antes SOLO enlazaba a transferencia — nunca
+ofrecía PayPal, aunque el checkout ya funcionaba perfectamente si se
+llegaba a él por otra vía, como probó el hallazgo que originó esta
+corrección). Ver `KNOWN_ISSUES.md` #130 para el hallazgo completo.
+
 ## Transferencia bancaria
 
 `apps.billing.services.transfers`: `submit_payment_proof` (valida el
@@ -156,7 +181,13 @@ archivo con `apps.customers.file_validation`, genera una referencia
 única, marca el tenant `PENDING_PAYMENT` — nunca activa nada) →
 `approve_payment_proof` (Super Admin, crea el `SaaSPayment` CONFIRMED,
 lo aplica automáticamente, activa suscripción/tenant) o
-`reject_payment_proof` (nunca activa). Notificaciones por correo
+`reject_payment_proof` (nunca activa). Validaciones agregadas en la
+Corrección de Gate Local #2 (antes ausentes): rechaza un comprobante
+para una factura que ya no está `OPEN`/`PARTIALLY_PAID` (pagada,
+anulada o en borrador), rechaza un segundo comprobante mientras uno
+sigue `SUBMITTED`/`UNDER_REVIEW` para la misma factura, exige un monto
+declarado positivo, y exige que la moneda declarada coincida con la de
+la cuenta bancaria receptora seleccionada. Notificaciones por correo
 (`apps.billing.services.notifications`, reutiliza `EMAIL_BACKEND`
 existente desde FASE 4 — no existe todavía ningún centro de
 notificaciones in-app en el proyecto, construir uno sería un
