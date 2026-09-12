@@ -267,3 +267,28 @@ class AccountPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
 
 class AccountPasswordChangeDoneView(LoginRequiredMixin, PasswordChangeDoneView):
     template_name = "accounts/password_change_done.html"
+
+
+# ----------------------------------------------------------------------
+# Activación de cuenta (FASE DE CORRECCIÓN 1 — Acceso del Owner y ciclo
+# de vida del Tenant).
+#
+# Mismo mecanismo que la recuperación de contraseña de arriba —
+# `PasswordResetConfirmView`/`PasswordResetCompleteView` de Django ya
+# cubren token de un solo uso con expiración, `SetPasswordForm` (valida
+# contra `AUTH_PASSWORD_VALIDATORS`, incluida la longitud mínima), y
+# mantener la sesión anónima (no autentica automáticamente: el Owner
+# inicia sesión normalmente después, vía `EmailLoginView`, con su email
+# y la contraseña recién elegida). Únicamente se personalizan
+# plantillas y la URL de éxito — ver `apps.accounts.services` para cómo
+# se genera y envía el enlace.
+# ----------------------------------------------------------------------
+
+
+class AccountActivationConfirmView(PasswordResetConfirmView):
+    template_name = "accounts/activation_confirm.html"
+    success_url = reverse_lazy("accounts:activacion_completada")
+
+
+class AccountActivationCompleteView(PasswordResetCompleteView):
+    template_name = "accounts/activation_complete.html"

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Activa tu cuenta — ERP SaaS{% endblock %}
+
+{% block content %}
+<main class="auth-card" id="contenido-principal">
+    <h1>Activa tu cuenta</h1>
+    {% if validlink %}
+    <p>Elige tu contraseña para terminar de activar tu cuenta y acceder a tu empresa.</p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <div class="alerta alerta--peligro" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in form %}
+        <div class="campo">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+            <ul class="errores">
+                {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn--primario btn--bloque">Activar cuenta</button>
+    </form>
+    {% else %}
+    <p>El enlace de activación no es válido, ya fue usado, o venció. Pide a tu administrador que te envíe uno nuevo.</p>
+    <a class="enlace-secundario" href="{% url 'accounts:login' %}">Ir a iniciar sesión</a>
+    {% endif %}
+</main>
+{% endblock %}

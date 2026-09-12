@@ -1,13 +1,16 @@
+import re
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core import mail
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.billing.models import BankAccount, PaymentProof, Plan, PlanVersion, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation, Subscription, Tenant
 from apps.billing.services import invoicing as invoicing_services
 from apps.billing.services import subscriptions as subscription_services
 from apps.billing.services import transfers as transfer_services
+from apps.tenants.models import Membership
 
 from ._helpers_saas import crear_plan_con_version, crear_saas_customer, crear_tenant_con_owner
 
@@ -67,6 +70,141 @@ class ManualTenantSaleViewTests(TestCase):
         factura = facturas.first()
         self.assertEqual(factura.status, SaaSInvoice.Status.OPEN)
         self.assertEqual(factura.total, Decimal("29.00"))
+
+    def test_owner_creado_con_password_inutilizable_y_recibe_correo_de_activacion(self):
+        """FASE DE CORRECCIÓN 1 (Acceso del Owner y ciclo de vida del
+        Tenant): el Owner que Venta Manual crea automáticamente no debe
+        poder iniciar sesión hasta activar su cuenta, y debe recibir un
+        correo real con el enlace de activación."""
+        mail.outbox.clear()
+        self.client.post(reverse("billing_admin:manual_sale"), {
+            "customer_name": "Cliente Manual 3", "customer_email": "cliente.manual3@example.com",
+            "tenant_name": "Empresa Manual Tres", "plan_version": self.version.pk,
+            "owner_email": "owner.manual3@example.com",
+        })
+        owner = User.objects.get(email="owner.manual3@example.com")
+        self.assertFalse(owner.has_usable_password())
+
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertIn("owner.manual3@example.com", correo.to)
+        self.assertRegex(correo.body, r"https?://\S+/cuentas/activacion/\S+/\S+/")
+
+
+class OwnerActivationFlowTests(TestCase):
+    """FASE DE CORRECCIÓN 1 — Acceso del Owner y ciclo de vida del
+    Tenant: cierra el flujo completo "Super Admin crea Tenant → Owner
+    activa su cuenta → Owner inicia sesión → Owner accede a SU Tenant",
+    de punta a punta vía HTTP real (incluido el correo real enviado por
+    `ManualTenantSaleView`), sin crear nunca un segundo `User`."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(
+            email="super.activacion@example.com", password="clave-de-prueba-987"
+        )
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+        mail.outbox.clear()
+        self.client.post(reverse("billing_admin:manual_sale"), {
+            "customer_name": "Cliente Activación", "customer_email": "cliente.activacion@example.com",
+            "tenant_name": "Empresa Activación", "plan_version": self.version.pk,
+            "owner_email": "owner.activacion@example.com",
+        })
+        self.tenant = Tenant.objects.get(slug="empresa-activacion")
+        self.owner = User.objects.get(email="owner.activacion@example.com")
+        self.activation_url = re.search(r"https?://\S+/cuentas/activacion/\S+/\S+/", mail.outbox[0].body).group(0)
+        self.client.logout()
+
+    def _seguir_hasta_formulario(self, url):
+        """Reproduce el patrón real de `PasswordResetConfirmView`: la
+        primera visita con el token "crudo" redirige a una segunda URL
+        con un token provisional guardado en sesión, desde donde ya se
+        puede postear la nueva contraseña."""
+        respuesta_inicial = self.client.get(url)
+        self.assertEqual(respuesta_inicial.status_code, 302)
+        return respuesta_inicial.url
+
+    def test_activacion_valida_permite_iniciar_sesion_y_acceder_al_tenant_correcto(self):
+        url_formulario = self._seguir_hasta_formulario(self.activation_url)
+        respuesta_form = self.client.get(url_formulario)
+        self.assertEqual(respuesta_form.status_code, 200)
+
+        respuesta_post = self.client.post(url_formulario, {
+            "new_password1": "clave-owner-activada-1!", "new_password2": "clave-owner-activada-1!",
+        })
+        self.assertRedirects(respuesta_post, reverse("accounts:activacion_completada"))
+
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.has_usable_password())
+
+        # Login posterior con la contraseña recién elegida.
+        self.assertTrue(self.client.login(
+            username="owner.activacion@example.com", password="clave-owner-activada-1!"
+        ))
+
+        # Acceso al Tenant correcto (no a otro, no a ninguno): una URL
+        # bajo /cuentas/ (fuera del alcance de BillingStatusMiddleware,
+        # que solo bloquea rutas operativas del ERP cuando el tenant no
+        # está ACTIVE/PAST_DUE — no es lo que se corrige en esta fase)
+        # confirma que TenantMiddleware resolvió exactamente ESTE
+        # Tenant vía la Membership OWNER real.
+        respuesta_perfil = self.client.get(reverse("accounts:perfil"))
+        self.assertEqual(respuesta_perfil.status_code, 200)
+        self.assertEqual(respuesta_perfil.context["tenant"], self.tenant)
+        self.assertEqual(respuesta_perfil.context["membership"].role, Membership.Role.OWNER)
+        self.assertEqual(respuesta_perfil.context["membership"].tenant_id, self.tenant.pk)
+
+    def test_token_expirado_no_permite_activar(self):
+        # PASSWORD_RESET_TIMEOUT negativo: cualquier token, sin importar
+        # qué tan reciente, queda fuera de ventana — misma mecánica que
+        # Django usa internamente (segundos transcurridos > TIMEOUT),
+        # sin necesitar viajar en el tiempo de verdad.
+        with override_settings(PASSWORD_RESET_TIMEOUT=-1):
+            respuesta = self.client.get(self.activation_url, follow=True)
+        self.assertContains(respuesta, "no es válido")
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.has_usable_password())
+
+    def test_token_reutilizado_tras_activar_ya_no_funciona(self):
+        url_formulario = self._seguir_hasta_formulario(self.activation_url)
+        self.client.post(url_formulario, {
+            "new_password1": "clave-owner-activada-1!", "new_password2": "clave-owner-activada-1!",
+        })
+
+        # Reutilizar el enlace ORIGINAL (el que llegó por correo) tras
+        # ya haber activado la cuenta: cambiar la contraseña cambió el
+        # hash del que depende el token, así que el mismo enlace nunca
+        # vuelve a funcionar.
+        respuesta = self.client.get(self.activation_url, follow=True)
+        self.assertContains(respuesta, "no es válido")
+
+    def test_token_invalido_no_permite_activar(self):
+        base, _token_real = self.activation_url.rstrip("/").rsplit("/", 1)
+        url_con_token_invalido = f"{base}/token-invalido-000/"
+        respuesta = self.client.get(url_con_token_invalido, follow=True)
+        self.assertContains(respuesta, "no es válido")
+
+    def test_password_corta_es_rechazada_en_activacion(self):
+        url_formulario = self._seguir_hasta_formulario(self.activation_url)
+        respuesta = self.client.post(url_formulario, {
+            "new_password1": "corta1", "new_password2": "corta1",
+        })
+        self.assertFalse(respuesta.context["form"].is_valid())
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.has_usable_password())
+
+    def test_no_se_duplica_el_user_al_reintentar_registro_publico_con_el_mismo_correo(self):
+        respuesta = self.client.post(reverse("accounts:registro"), {
+            "email": "owner.activacion@example.com", "first_name": "Owner", "last_name": "Duplicado",
+            "password1": "otra-clave-cualquiera-1!", "password2": "otra-clave-cualquiera-1!",
+        })
+        self.assertFalse(respuesta.context["form"].is_valid())
+        self.assertEqual(User.objects.filter(email="owner.activacion@example.com").count(), 1)
+        # Sigue sin poder iniciar sesión: el intento de registro público
+        # nunca le puso una contraseña utilizable a escondidas.
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.has_usable_password())
 
 
 class TenantLifecycleAdminViewTests(TestCase):

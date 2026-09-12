@@ -40,4 +40,14 @@ urlpatterns = [
         views.AccountPasswordChangeDoneView.as_view(),
         name="password_change_done",
     ),
+    path(
+        "activacion/<uidb64>/<token>/",
+        views.AccountActivationConfirmView.as_view(),
+        name="activacion_confirmar",
+    ),
+    path(
+        "activacion/completada/",
+        views.AccountActivationCompleteView.as_view(),
+        name="activacion_completada",
+    ),
 ]

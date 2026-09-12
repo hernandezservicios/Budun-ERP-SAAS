@@ -16,6 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from django.views import View
 
+from apps.accounts import services as account_services
 from apps.tenants.models import Membership, Tenant
 from apps.tenants.permissions import SuperuserRequiredMixin
 
@@ -187,7 +188,27 @@ class ManualTenantSaleView(LoginRequiredMixin, SuperuserRequiredMixin, View):
             # prohíbe (ver `activate_pending_subscription`).
             tenant_lifecycle_services.mark_tenant_pending_payment(tenant, user=request.user)
 
-        messages.success(request, f"Tenant «{tenant.name}» creado con su factura inicial — pendiente de pago/activación.")
+        mensaje = f"Tenant «{tenant.name}» creado con su factura inicial — pendiente de pago/activación."
+        if _creado:
+            # FASE DE CORRECCIÓN 1 (Acceso del Owner y ciclo de vida del
+            # Tenant): el Owner se acaba de crear con contraseña
+            # inutilizable — no puede iniciar sesión hasta activar su
+            # cuenta. Se envía DESPUÉS de que el `with transaction.
+            # atomic()` de arriba ya cerró (Tenant/Owner/Membership/
+            # Subscription/Invoice ya están confirmados) para nunca
+            # enviar un correo sobre datos que terminaran revertidos por
+            # un error posterior dentro de la transacción. Un fallo de
+            # envío nunca bloquea la venta — se le muestra el enlace
+            # directamente al Super Admin para compartirlo a mano.
+            enviado, activation_url = account_services.send_account_activation_email(owner, request=request)
+            if enviado:
+                mensaje += " Se envió un correo de activación al Owner para que establezca su contraseña."
+            else:
+                mensaje += (
+                    " No se pudo enviar el correo de activación — comparte este enlace "
+                    f"manualmente con el Owner: {activation_url}"
+                )
+        messages.success(request, mensaje)
         return redirect("billing_admin:tenant_detail", pk=tenant.pk)
 
 

@@ -1,0 +1,10 @@
+Hola{% if user.first_name %} {{ user.first_name }}{% endif %},
+
+Se creó una cuenta para ti en ERP SaaS ({{ user.email }}) como propietario/a de tu empresa.
+
+Para activar tu cuenta y elegir tu contraseña, abre este enlace:
+{{ activation_url }}
+
+Este enlace es personal, de un solo uso y vence en unos días. Si no esperabas este correo, puedes ignorarlo.
+
+— ERP SaaS

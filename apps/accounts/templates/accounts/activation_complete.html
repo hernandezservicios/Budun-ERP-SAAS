@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Cuenta activada — ERP SaaS{% endblock %}
+
+{% block content %}
+<main class="auth-card" id="contenido-principal">
+    <h1>Cuenta activada</h1>
+    <p>Tu contraseña quedó configurada. Ya puedes iniciar sesión y acceder a tu empresa.</p>
+    <a class="btn btn--primario btn--bloque" href="{% url 'accounts:login' %}">Iniciar sesión</a>
+</main>
+{% endblock %}

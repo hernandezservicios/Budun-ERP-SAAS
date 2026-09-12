@@ -41,7 +41,23 @@ class RegistrationForm(forms.ModelForm):
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
-        if User.objects.filter(email=email).exists():
+        existente = User.objects.filter(email=email).first()
+        if existente is not None:
+            # FASE DE CORRECCIÓN 1 (Acceso del Owner y ciclo de vida del
+            # Tenant): el registro público NUNCA crea un segundo User
+            # para un correo que ya tiene uno — ni siquiera cuando ese
+            # User fue creado automáticamente por Alta Manual
+            # (`apps.billing.admin_views.ManualTenantSaleView`) y todavía
+            # no tiene contraseña (`set_unusable_password`). Se distingue
+            # ese caso solo para guiar al Owner real al enlace de
+            # activación en vez del mensaje genérico, que sugeriría
+            # "inicia sesión" sin que eso sea todavía posible.
+            if not existente.has_usable_password():
+                raise forms.ValidationError(
+                    "Ya existe una cuenta con este correo electrónico, pendiente de "
+                    "activación. Revisa tu correo para activarla con el enlace que "
+                    "recibiste, o pide a tu administrador que te envíe uno nuevo."
+                )
             raise forms.ValidationError("Ya existe una cuenta con este correo electrónico.")
         return email
 
