@@ -439,6 +439,33 @@ class ProofApprovalAdminViewTests(TestCase):
         self.proof.refresh_from_db()
         self.assertEqual(self.proof.status, PaymentProof.Status.REJECTED)
 
+    def test_descargar_comprobante_desde_admin(self):
+        # FASE DE CORRECCIÓN 4 (sección 5, "consultar comprobante"): antes
+        # de esta corrección no existía ninguna vía para ver el contenido
+        # real del archivo — el Super Admin aprobaba/rechazaba a ciegas.
+        respuesta = self.client.get(reverse("billing_admin:proof_download", args=[self.proof.pk]))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("attachment", respuesta.headers.get("Content-Disposition", ""))
+
+    def test_un_tenant_normal_no_puede_descargar_comprobantes_via_admin(self):
+        self.client.logout()
+        self.client.login(username=self.owner.email, password="clave-de-prueba-987")
+        respuesta = self.client.get(reverse("billing_admin:proof_download", args=[self.proof.pk]))
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_rechazar_un_comprobante_ya_aprobado_desde_admin_muestra_error_amigable_no_500(self):
+        # FASE DE CORRECCIÓN 4 (sección 18): la carrera "aprobación +
+        # rechazo" también se prueba a nivel de vista HTTP — nunca un 500.
+        self.client.post(reverse("billing_admin:proof_detail", args=[self.proof.pk]), {"accion": "aprobar"})
+        respuesta = self.client.post(
+            reverse("billing_admin:proof_detail", args=[self.proof.pk]), {"accion": "rechazar", "reason": "tardío"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        respuesta_seguida = self.client.get(respuesta.url)
+        self.assertContains(respuesta_seguida, "Solo se puede rechazar un comprobante enviado o en revisión")
+        self.proof.refresh_from_db()
+        self.assertEqual(self.proof.status, PaymentProof.Status.APPROVED)
+
 
 class PlanManagementViewTests(TestCase):
     def setUp(self):

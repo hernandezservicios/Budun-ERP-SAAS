@@ -8,15 +8,17 @@ plataforma (aprobar transferencias, reembolsar, etc. — eso es
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 
+from apps.customers.file_validation import nombre_original_seguro
 from apps.permissions.services import require_permission
 from apps.tenants.permissions import TenantRequiredMixin
 
 from . import services as paypal_services
-from .models import BankAccount, PayPalTransaction, SaaSCustomer, SaaSInvoice, Subscription
+from .models import BankAccount, PayPalTransaction, PaymentProof, SaaSCustomer, SaaSInvoice, Subscription
 from .portal_forms import CancelSubscriptionForm, ChangePlanForm, SelectPlanForm, UploadProofForm
 from .services import coupons as coupon_services
 from .services import credits as credit_services
@@ -56,6 +58,13 @@ class BillingPortalStatusView(LoginRequiredMixin, TenantRequiredMixin, View):
         if subscription is not None:
             contexto["invoices"] = SaaSInvoice.all_objects.filter(tenant=request.tenant).order_by("-issue_date")[:10]
             contexto["credit_balance"] = credit_services.get_subscription_credit_balance(tenant=request.tenant, subscription=subscription)
+            # FASE DE CORRECCIÓN 4 (sección 15, "historial"): antes de esta
+            # corrección, un comprobante rechazado solo se comunicaba por
+            # correo — el propio Portal nunca mostraba el estado/motivo de
+            # los comprobantes ya enviados.
+            contexto["comprobantes"] = PaymentProof.all_objects.filter(tenant=request.tenant).select_related(
+                "invoice", "bank_account",
+            ).order_by("-uploaded_at")[:10]
         return render(request, "billing/portal_status.html", contexto)
 
 
@@ -200,8 +209,13 @@ class TransferInstructionsView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request, invoice_id):
         require_permission(request, "billing.saas.view")
         invoice = get_object_or_404(SaaSInvoice, pk=invoice_id, tenant=request.tenant)
+        # FASE DE CORRECCIÓN 4 (sección 9): precargar la moneda de LA
+        # FACTURA (nunca un "USD" fijo) — el servicio ahora exige que
+        # coincida exactamente, así que el formulario debe guiar al
+        # tenant hacia el único valor que en la práctica puede aceptarse.
         return render(request, "billing/portal_transfer_instructions.html", {
-            "invoice": invoice, "bank_accounts": BankAccount.objects.filter(is_active=True), "form": UploadProofForm(),
+            "invoice": invoice, "bank_accounts": BankAccount.objects.filter(is_active=True),
+            "form": UploadProofForm(initial={"declared_currency": invoice.currency}),
         })
 
     def post(self, request, invoice_id):
@@ -226,6 +240,24 @@ class TransferInstructionsView(LoginRequiredMixin, TenantRequiredMixin, View):
             })
         messages.success(request, "Comprobante enviado — tu pago quedará en revisión.")
         return redirect("billing_portal:status")
+
+
+class PaymentProofDownloadView(LoginRequiredMixin, TenantRequiredMixin, View):
+    """FASE DE CORRECCIÓN 4 (sección 15): el tenant debe poder volver a
+    ver/descargar su propio comprobante ya enviado — antes de esta
+    corrección no existía ninguna vía para hacerlo. Nunca servido por
+    `MEDIA_URL` estático (`PaymentProof.file` vive en `media-private/`)
+    — solo por esta vista protegida, filtrada explícitamente por
+    `tenant=request.tenant` (un ID de otro tenant da 404, nunca el
+    contenido — mismo patrón que `apps.customers.
+    _ContactDocumentDownloadView`)."""
+
+    def get(self, request, pk):
+        require_permission(request, "billing.saas.view")
+        proof = get_object_or_404(PaymentProof, pk=pk, tenant=request.tenant)
+        return FileResponse(
+            proof.file.open("rb"), as_attachment=True, filename=nombre_original_seguro(proof.original_filename),
+        )
 
 
 class ChangePlanView(LoginRequiredMixin, TenantRequiredMixin, View):

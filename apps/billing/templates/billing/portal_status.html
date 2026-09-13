@@ -91,5 +91,44 @@
 {% else %}
 <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin facturas todavía</h3></div>
 {% endif %}
+
+{% if comprobantes %}
+<div class="encabezado-pagina"><h2>Historial de comprobantes de transferencia</h2></div>
+<div class="tabla-envoltorio">
+    <table class="tabla">
+        <thead><tr><th>Factura</th><th>Enviado</th><th>Monto</th><th>Estado</th><th>Resultado / motivo</th></tr></thead>
+        <tbody>
+            {% for comprobante in comprobantes %}
+            <tr>
+                <td>{{ comprobante.invoice.number }}</td>
+                <td>{{ comprobante.uploaded_at }}</td>
+                <td>{{ comprobante.declared_amount }} {{ comprobante.declared_currency }}</td>
+                <td>
+                    {% if comprobante.status == "submitted" or comprobante.status == "under_review" %}
+                    <span class="badge">Pendiente de revisión</span>
+                    {% elif comprobante.status == "approved" %}
+                    <span class="badge badge--verde">Aprobado</span>
+                    {% elif comprobante.status == "rejected" %}
+                    <span class="badge badge--peligro">Rechazado</span>
+                    {% else %}
+                    <span class="badge">{{ comprobante.get_status_display }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if comprobante.status == "rejected" %}
+                    Motivo: {{ comprobante.rejection_reason }}
+                    {% elif comprobante.status == "approved" %}
+                    Pago aplicado a la factura.
+                    {% else %}
+                    —
+                    {% endif %}
+                    <a href="{% url 'billing_portal:proof_download' comprobante.pk %}">Ver comprobante</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 {% endif %}
 {% endblock %}

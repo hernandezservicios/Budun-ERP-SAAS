@@ -12,11 +12,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from django.views import View
 
 from apps.accounts import services as account_services
+from apps.customers.file_validation import nombre_original_seguro
 from apps.tenants.models import Membership, Tenant
 from apps.tenants.permissions import SuperuserRequiredMixin
 
@@ -315,17 +317,55 @@ class ProofDetailView(LoginRequiredMixin, SuperuserRequiredMixin, View):
         # bug-class que `get_invoice_balance_due`, ver KNOWN_ISSUES.md).
         proof = get_object_or_404(PaymentProof.all_objects, pk=pk)
         accion = request.POST.get("accion")
-        if accion == "aprobar":
-            transfer_services.approve_payment_proof(proof, user=request.user)
-            messages.success(request, "Comprobante aprobado — pago registrado y aplicado.")
-        elif accion == "rechazar":
-            form = ProofRejectForm(request.POST)
-            if form.is_valid():
-                transfer_services.reject_payment_proof(proof, reason=form.cleaned_data["reason"], user=request.user)
-                messages.success(request, "Comprobante rechazado.")
-            else:
-                messages.error(request, "Indica el motivo del rechazo.")
+        try:
+            if accion == "aprobar":
+                transfer_services.approve_payment_proof(proof, user=request.user)
+                messages.success(request, "Comprobante aprobado — pago registrado y aplicado.")
+            elif accion == "rechazar":
+                form = ProofRejectForm(request.POST)
+                if form.is_valid():
+                    transfer_services.reject_payment_proof(proof, reason=form.cleaned_data["reason"], user=request.user)
+                    messages.success(request, "Comprobante rechazado.")
+                else:
+                    messages.error(request, "Indica el motivo del rechazo.")
+        except ValidationError as error:
+            # FASE DE CORRECCIÓN 4 (sección 18): una transición inválida
+            # (aprobar uno ya rechazado, rechazar uno ya aprobado — p. ej.
+            # dos pestañas del Super Admin operando el mismo comprobante a
+            # la vez) nunca debe producir un error 500 sin manejar — mismo
+            # criterio ya aplicado en `TenantDetailView.post()`.
+            mensaje = error.messages[0] if hasattr(error, "messages") and error.messages else str(error)
+            messages.error(request, mensaje)
         return redirect("billing_admin:proof_detail", pk=pk)
+
+
+class ProofDownloadView(LoginRequiredMixin, SuperuserRequiredMixin, View):
+    """FASE DE CORRECCIÓN 4 (sección 5, "consultar comprobante"): antes
+    de esta corrección, el Super Admin no tenía NINGUNA forma de ver el
+    contenido real del comprobante subido — `proof_detail.html` solo
+    mostraba el nombre de archivo como texto plano, sin ningún enlace —
+    así que aprobar o rechazar una transferencia se decidía
+    completamente A CIEGAS, confiando únicamente en los metadatos
+    declarados por el propio tenant. Nunca servido por `MEDIA_URL`
+    estático (`PaymentProof.file` vive en `media-private/`) — solo por
+    esta vista protegida. `all_objects` explícito (mismo motivo que el
+    resto de este archivo: el Super Admin no tiene tenant activo en el
+    ContextVar)."""
+
+    def get(self, request, pk):
+        from apps.audit.models import AuditLog
+
+        from .models import PaymentProof
+        from .services._saas_audit import audit_event
+
+        proof = get_object_or_404(PaymentProof.all_objects, pk=pk)
+        audit_event(
+            proof.tenant, action=AuditLog.Action.GENERIC, user=request.user, object_type="payment_proof", object_id=proof.pk,
+            reason="Comprobante descargado por Super Admin",
+        )
+        return FileResponse(
+            proof.file.open("rb"), as_attachment=True, filename=nombre_original_seguro(proof.original_filename),
+        )
 
 
 # ---------------------------------------------------------------------

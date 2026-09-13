@@ -81,6 +81,19 @@ def apply_payment_to_invoices(payment, allocations, *, user=None):
             invoice_bloqueada = SaaSInvoice.all_objects.select_for_update().get(pk=invoice.pk)
             if invoice_bloqueada.tenant_id != payment.tenant_id:
                 raise InvalidPaymentOperation("El pago y la factura deben pertenecer al mismo tenant.")
+            # FASE DE CORRECCIÓN 4 (Transferencias/comprobantes, sección 9):
+            # mismo criterio ya establecido para Cuentas por Cobrar del ERP
+            # (`apps.sales.services.allocate_payment` rechaza cross-currency
+            # sin motor de tipos de cambio, ver `docs/currency.md`) — nunca
+            # una conversión implícita. Defensa EN el núcleo del ledger,
+            # nunca solo en el punto de entrada (`transfers.submit_payment_
+            # proof` ya valida esto también, pero el ledger no debe confiar
+            # solo en eso).
+            if invoice_bloqueada.currency != payment.currency:
+                raise InvalidPaymentOperation(
+                    f"La moneda del pago ({payment.currency}) no coincide con la moneda de la factura "
+                    f"{invoice_bloqueada.number} ({invoice_bloqueada.currency}) — no se realizan conversiones automáticas."
+                )
             saldo_factura = get_invoice_balance_due(invoice_bloqueada)
             if monto > saldo_factura:
                 raise InvalidPaymentOperation(f"El monto ({monto}) excede el saldo pendiente de la factura {invoice_bloqueada.number} ({saldo_factura}).")
@@ -102,29 +115,73 @@ def auto_apply_payment(payment, *, user=None):
     pendientes) queda simplemente SIN APLICAR, lo cual ya es, por
     definición, el "saldo a favor" del tenant (ver
     `apps.billing.services.credits.get_subscription_credit_balance`) —
-    nunca se pierde, nunca requiere un modelo nuevo."""
-    disponible = get_unallocated_payment_amount(payment)
-    if disponible <= 0:
-        return []
-    facturas_abiertas = SaaSInvoice.all_objects.filter(
-        tenant=payment.tenant, status__in=[SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID],
-    ).order_by("due_date", "id")
-    if payment.subscription_id:
-        facturas_abiertas = facturas_abiertas.filter(subscription_id=payment.subscription_id)
+    nunca se pierde, nunca requiere un modelo nuevo.
 
-    asignaciones = []
-    for invoice in facturas_abiertas:
+    FASE DE CORRECCIÓN 4 (sección 18/19, "comprobante + PayPal sobre la
+    misma factura"): el plan de asignación (`asignaciones`) se calcula
+    leyendo `get_invoice_balance_due` SIN lock — entre ese cálculo y el
+    `select_for_update()` real dentro de `apply_payment_to_invoices`,
+    OTRO método de pago completamente independiente (p. ej. una
+    aprobación de transferencia y una captura de PayPal sobre la MISMA
+    factura, ejecutándose en hilos distintos) puede haber cubierto esa
+    factura primero — un hallazgo real de esta corrección, encontrado
+    por la propia prueba de concurrencia nueva
+    (`TransferAndPayPalRaceConcurrencyTests`). Sin este reintento, esa
+    carrera legítima (nadie hizo nada mal, dos pagos válidos llegaron a
+    la vez) hacía que `apply_payment_to_invoices` lanzara
+    `InvalidPaymentOperation` sin atrapar — y como `auto_apply_payment`
+    se llama typically desde dentro de la transacción de OTRA operación
+    (una captura de PayPal, un webhook), esa excepción sin atrapar
+    revertía la transacción COMPLETA del llamador (p. ej. deshacía la
+    propia confirmación de la captura de PayPal ya exitosa). Un
+    reintento ACOTADO (una sola vez, con el saldo recalculado) es
+    suficiente: si tras recalcular ya no queda ninguna factura con
+    saldo real, el pago simplemente queda sin aplicar — nunca se
+    pierde, nunca rompe la operación del llamador."""
+    for _intento in range(2):
+        disponible = get_unallocated_payment_amount(payment)
         if disponible <= 0:
-            break
-        saldo = get_invoice_balance_due(invoice)
-        if saldo <= 0:
+            return []
+        # Nunca considera una factura en otra moneda — `apply_payment_
+        # to_invoices` la rechazaría igual, pero filtrarla aquí evita que
+        # un pago legítimamente sin aplicar (p. ej. una anomalía de cobro
+        # recurrente reportada en otra moneda, ver `services.recurring.
+        # confirm_recurring_charge`) intente aplicarse contra una factura
+        # que nunca podría cubrir, en vez de quedar simplemente como
+        # saldo a favor (nunca se pierde, ver `credits.
+        # get_subscription_credit_balance`).
+        facturas_abiertas = SaaSInvoice.all_objects.filter(
+            tenant=payment.tenant, status__in=[SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID],
+            currency=payment.currency,
+        ).order_by("due_date", "id")
+        if payment.subscription_id:
+            facturas_abiertas = facturas_abiertas.filter(subscription_id=payment.subscription_id)
+
+        asignaciones = []
+        restante = disponible
+        for invoice in facturas_abiertas:
+            if restante <= 0:
+                break
+            saldo = get_invoice_balance_due(invoice)
+            if saldo <= 0:
+                continue
+            monto = min(saldo, restante)
+            asignaciones.append((invoice, monto))
+            restante -= monto
+        if not asignaciones:
+            return []
+        try:
+            return apply_payment_to_invoices(payment, asignaciones, user=user)
+        except InvalidPaymentOperation:
+            if _intento == 1:
+                # Ya se recalculó una vez con datos frescos y sigue sin
+                # poder aplicarse (otra carrera, o el pago genuinamente ya
+                # no tiene ninguna factura válida a la que aplicarse) —
+                # nunca insistir indefinidamente; el monto simplemente
+                # queda sin aplicar, contabilizado como saldo a favor.
+                return []
             continue
-        monto = min(saldo, disponible)
-        asignaciones.append((invoice, monto))
-        disponible -= monto
-    if not asignaciones:
-        return []
-    return apply_payment_to_invoices(payment, asignaciones, user=user)
+    return []
 
 
 def reverse_allocation(allocation, *, user=None, reason=""):

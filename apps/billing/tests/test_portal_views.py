@@ -328,6 +328,40 @@ class TransferInstructionsViewTests(TestCase):
         self.assertEqual(respuesta_duplicada.status_code, 200)
         self.assertEqual(PaymentProof.all_objects.filter(tenant=self.tenant).count(), 1)
 
+    def test_moneda_declarada_no_coincide_con_la_factura_es_rechazada(self):
+        # FASE DE CORRECCIÓN 4 (sección 9): una cuenta EUR real usada para
+        # "pagar" una factura USD nunca debe aceptarse implícitamente.
+        from apps.billing.models import BankAccount
+
+        cuenta_eur = BankAccount.objects.create(
+            bank_name="Banco EUR", country="ES", currency="EUR", account_holder="Budun ERP", account_number="EUR-0001",
+        )
+        respuesta = self.client.post(reverse("billing_portal:transfer_instructions", args=[self.invoice.pk]), {
+            "bank_account": cuenta_eur.pk, "declared_amount": "29.00", "declared_currency": "EUR",
+            "declared_bank_name": "Mi Banco", "file": _comprobante_pdf(),
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(PaymentProof.all_objects.filter(tenant=self.tenant).count(), 0)
+
+    def test_descargar_mi_propio_comprobante_funciona(self):
+        self.client.post(reverse("billing_portal:transfer_instructions", args=[self.invoice.pk]), {
+            "bank_account": self.bank_account.pk, "declared_amount": "29.00", "declared_currency": "USD",
+            "declared_bank_name": "Mi Banco", "file": _comprobante_pdf(),
+        })
+        proof = PaymentProof.all_objects.get(tenant=self.tenant)
+        respuesta = self.client.get(reverse("billing_portal:proof_download", args=[proof.pk]))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("attachment", respuesta.headers.get("Content-Disposition", ""))
+
+    def test_historial_de_comprobantes_se_muestra_en_mi_facturacion(self):
+        self.client.post(reverse("billing_portal:transfer_instructions", args=[self.invoice.pk]), {
+            "bank_account": self.bank_account.pk, "declared_amount": "29.00", "declared_currency": "USD",
+            "declared_bank_name": "Mi Banco", "file": _comprobante_pdf(),
+        })
+        respuesta = self.client.get(reverse("billing_portal:status"))
+        self.assertContains(respuesta, "Historial de comprobantes")
+        self.assertContains(respuesta, "Pendiente de revisión")
+
     def test_un_miembro_sin_permiso_de_gestionar_billing_no_puede_subir_comprobante(self):
         miembro = self._crear_miembro_admin()
         self.client.logout()
@@ -398,6 +432,7 @@ class PortalMultiTenantIsolationTests(TestCase):
             bank_name="Banco de Prueba", country="RD", currency="USD",
             account_holder="Budun ERP", account_number="0000",
         )
+        self.subscription_a = subscription_a
         # Autenticado como el OWNER del tenant B — intenta acceder a
         # recursos de la factura del tenant A.
         self.client.login(username=self.owner_b.email, password="clave-de-prueba-987")
@@ -440,4 +475,20 @@ class PortalMultiTenantIsolationTests(TestCase):
             reverse("billing_portal:checkout_paypal_cancel", args=[self.invoice_a.pk]),
             {"token": "cualquier-token"},
         )
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_descargar_comprobante_de_otro_tenant_da_404(self):
+        # FASE DE CORRECCIÓN 4 (sección 11, "tenant isolation"): la nueva
+        # vista de descarga de comprobantes debe filtrar explícitamente
+        # por tenant — un ID de otro tenant nunca puede servir el archivo.
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.billing.services import transfers as transfer_services
+
+        proof_a = transfer_services.submit_payment_proof(
+            subscription=self.subscription_a, invoice=self.invoice_a, bank_account=self.bank_account,
+            declared_amount=self.invoice_a.total, declared_currency="USD",
+            file=SimpleUploadedFile("comprobante.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf"),
+        )
+        respuesta = self.client.get(reverse("billing_portal:proof_download", args=[proof_a.pk]))
         self.assertEqual(respuesta.status_code, 404)

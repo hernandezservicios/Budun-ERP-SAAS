@@ -21,6 +21,7 @@ urlpatterns = [
     path("pagos/<int:payment_id>/reembolsar/", views.RequestRefundView.as_view(), name="request_refund"),
     path("transferencias/", views.TransfersQueueView.as_view(), name="transfers_queue"),
     path("transferencias/<int:pk>/", views.ProofDetailView.as_view(), name="proof_detail"),
+    path("transferencias/<int:pk>/descargar/", views.ProofDownloadView.as_view(), name="proof_download"),
     path("notas-credito/", views.CreditNotesListView.as_view(), name="credit_notes_list"),
     path("reembolsos/", views.RefundsListView.as_view(), name="refunds_list"),
     path("reembolsos/<int:pk>/completar/", views.CompleteManualRefundView.as_view(), name="complete_refund"),

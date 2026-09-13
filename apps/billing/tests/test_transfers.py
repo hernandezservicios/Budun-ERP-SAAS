@@ -134,6 +134,18 @@ class PaymentProofFlowTests(TestCase):
                 declared_amount=self.invoice.total, declared_currency="USD", file=archivo_falso,
             )
 
+    def test_archivo_vacio_es_rechazado(self):
+        # Sección 10 de la corrección: un archivo de 0 bytes nunca debe
+        # aceptarse -- sus primeros bytes nunca coinciden con ninguna
+        # firma binaria válida.
+        archivo_vacio = SimpleUploadedFile("comprobante.pdf", b"", content_type="application/pdf")
+        with self.assertRaises(Exception):
+            services.submit_payment_proof(
+                subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+                declared_amount=self.invoice.total, declared_currency="USD", file=archivo_vacio,
+            )
+        self.assertEqual(PaymentProof.all_objects.filter(invoice=self.invoice).count(), 0)
+
     def test_list_pending_proofs_solo_lista_enviados_o_en_revision(self):
         proof = services.submit_payment_proof(
             subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
@@ -142,6 +154,87 @@ class PaymentProofFlowTests(TestCase):
         self.assertIn(proof, list(services.list_pending_proofs()))
         services.approve_payment_proof(proof)
         self.assertNotIn(proof, list(services.list_pending_proofs()))
+
+    def test_rechaza_moneda_declarada_que_no_coincide_con_la_factura(self):
+        # FASE DE CORRECCIÓN 4 (sección 9): antes de esta corrección, solo
+        # se validaba declarada-vs-cuenta-receptora — una transferencia en
+        # una moneda que coincidiera con la cuenta pero NO con la factura
+        # (p. ej. una cuenta EUR real usada para pagar una factura USD)
+        # pasaba sin ningún rechazo.
+        cuenta_eur = BankAccount.objects.create(
+            bank_name="Banco EUR", country="ES", currency="EUR", account_holder="Budun ERP", account_number="EUR-0001",
+        )
+        with self.assertRaises(services.InvalidTransferOperation):
+            services.submit_payment_proof(
+                subscription=self.subscription, invoice=self.invoice, bank_account=cuenta_eur,
+                declared_amount=self.invoice.total, declared_currency="EUR", file=_comprobante_pdf(),
+            )
+        self.assertEqual(PaymentProof.all_objects.filter(invoice=self.invoice).count(), 0)
+
+    def test_rechaza_cuenta_bancaria_inactiva(self):
+        # Defensa en profundidad: el formulario del Portal ya solo lista
+        # cuentas activas, pero el servicio nunca debe confiar solo en eso.
+        cuenta_inactiva = BankAccount.objects.create(
+            bank_name="Banco Inactivo", country="RD", currency="USD", account_holder="Budun ERP",
+            account_number="0000-INACTIVA", is_active=False,
+        )
+        with self.assertRaises(services.InvalidTransferOperation):
+            services.submit_payment_proof(
+                subscription=self.subscription, invoice=self.invoice, bank_account=cuenta_inactiva,
+                declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(),
+            )
+
+    def test_no_se_puede_rechazar_un_comprobante_ya_aprobado(self):
+        # FASE DE CORRECCIÓN 4 (sección 18, "aprobación + rechazo"): antes
+        # de esta corrección, no existía ningún guard aquí — rechazar un
+        # comprobante YA aprobado dejaba un estado contradictorio (factura
+        # efectivamente pagada, comprobante marcado como rechazado).
+        proof = services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(),
+        )
+        services.approve_payment_proof(proof)
+        with self.assertRaises(services.InvalidTransferOperation):
+            services.reject_payment_proof(proof, reason="intento tardío de rechazo")
+        proof.refresh_from_db()
+        self.assertEqual(proof.status, PaymentProof.Status.APPROVED)
+
+    def test_sobrepago_via_transferencia_deja_saldo_a_favor_sin_perder_el_excedente(self):
+        # Sección 8: factura=29, transferencia declarada=40 -- la factura
+        # queda PAID, el excedente (11.00) queda como saldo a favor
+        # trazable, nunca se pierde ni crea una factura falsa.
+        from apps.billing.services import credits as credit_services
+
+        proof = services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=Decimal("40.00"), declared_currency="USD", file=_comprobante_pdf(),
+        )
+        proof, payment = services.approve_payment_proof(proof)
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, "paid")
+        self.assertEqual(payment.amount, Decimal("40.00"))
+        saldo = credit_services.get_subscription_credit_balance(tenant=self.tenant, subscription=self.subscription)
+        self.assertEqual(saldo, Decimal("11.00"))
+
+    def test_reenvio_tras_rechazo_crea_un_comprobante_nuevo_y_preserva_el_anterior(self):
+        # Sección 16: un comprobante rechazado nunca se sobrescribe ni se
+        # borra -- el reenvío es un PaymentProof NUEVO y distinto.
+        primero = services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf(),
+        )
+        services.reject_payment_proof(primero, reason="comprobante ilegible")
+
+        segundo = services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=self.invoice.total, declared_currency="USD", file=_comprobante_pdf("comprobante2.pdf"),
+        )
+        self.assertNotEqual(primero.pk, segundo.pk)
+        primero.refresh_from_db()
+        self.assertEqual(primero.status, PaymentProof.Status.REJECTED)
+        self.assertEqual(primero.rejection_reason, "comprobante ilegible")
+        self.assertEqual(segundo.status, PaymentProof.Status.SUBMITTED)
+        self.assertEqual(PaymentProof.all_objects.filter(invoice=self.invoice).count(), 2)
 
     def test_aprobar_comprobante_sobre_suscripcion_suspendida_reactiva_no_activa(self):
         # FASE DE CORRECCIÓN 3: `ACTIVATE != REACTIVATE` — aprobar un

@@ -60,35 +60,71 @@ def submit_payment_proof(*, subscription, invoice, bank_account, declared_amount
     # inconsistentes, son errores detectables ANTES de crear la fila —
     # nunca una segunda fuente de verdad, solo defensa real en el punto
     # de entrada único del dominio.
-    if invoice.status not in (SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID):
-        raise InvalidTransferOperation(
-            f"La factura {invoice.number} no admite un nuevo comprobante en su estado actual "
-            f"({invoice.get_status_display()})."
-        )
-    if PaymentProof.all_objects.filter(
-        invoice=invoice, status__in=[PaymentProof.Status.SUBMITTED, PaymentProof.Status.UNDER_REVIEW]
-    ).exists():
-        raise InvalidTransferOperation("Ya existe un comprobante pendiente de revisión para esta factura.")
     if declared_amount is None or declared_amount <= 0:
         raise InvalidTransferOperation("El monto declarado debe ser mayor que cero.")
+    # FASE DE CORRECCIÓN 4 (sección 2): el formulario ya solo lista
+    # cuentas activas, pero el servicio nunca debe confiar únicamente en
+    # eso — mismo criterio de "el backend nunca confía solo en el
+    # formulario" aplicado en todo el proyecto.
+    if not bank_account.is_active:
+        raise InvalidTransferOperation("La cuenta receptora seleccionada ya no está activa.")
     if (declared_currency or "").strip().upper() != bank_account.currency.upper():
         raise InvalidTransferOperation(
             f"La moneda declarada ({declared_currency}) no coincide con la moneda de la cuenta "
             f"receptora seleccionada ({bank_account.currency})."
         )
+    # FASE DE CORRECCIÓN 4 (sección 9): sin motor de tipos de cambio
+    # (`docs/currency.md`), una transferencia en una moneda distinta de
+    # la factura nunca se acepta implícitamente — mismo criterio ya
+    # establecido para Cuentas por Cobrar del ERP
+    # (`apps.sales.services.allocate_payment`). Sumado a la validación de
+    # arriba (declarada == cuenta receptora), esto garantiza que las TRES
+    # monedas (factura/comprobante/cuenta) coincidan exactamente.
+    if (declared_currency or "").strip().upper() != invoice.currency.upper():
+        raise InvalidTransferOperation(
+            f"La moneda declarada ({declared_currency}) no coincide con la moneda de la factura "
+            f"{invoice.number} ({invoice.currency}) — no se realizan conversiones automáticas."
+        )
 
+    # Validación de archivo ANTES de tomar cualquier lock — su I/O
+    # (lectura de los primeros bytes) no debe alargar el tiempo que la
+    # fila de la factura queda bloqueada más abajo.
     _extension, content_type = validar_archivo_adjunto(file)
-    referencia = reference or generate_transfer_reference(subscription.tenant)
+    nombre_seguro = nombre_original_seguro(file.name)
+    tamano = file.size or 0
 
-    proof = PaymentProof.all_objects.create(
-        tenant=subscription.tenant, subscription=subscription, invoice=invoice, bank_account=bank_account,
-        reference=referencia, declared_amount=declared_amount, declared_currency=declared_currency,
-        declared_bank_name=declared_bank_name, file=file, original_filename=nombre_original_seguro(file.name),
-        content_type=content_type, size_bytes=file.size or 0, uploaded_by=user, status=PaymentProof.Status.SUBMITTED,
-    )
-    tenant_services.mark_tenant_pending_payment(subscription.tenant, user=user)
-    audit_event(subscription.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="payment_proof", object_id=proof.pk,
-                after={"reference": referencia, "amount": str(declared_amount)})
+    # FASE DE CORRECCIÓN 4 (sección 18, "doble submit"): antes de esta
+    # corrección, la comprobación de "factura vigente" + "sin comprobante
+    # pendiente" era un simple `.exists()` sin ningún lock — dos envíos
+    # concurrentes del mismo formulario (doble clic, dos pestañas) podían
+    # AMBOS pasar la comprobación antes de que cualquiera comprometiera su
+    # propia fila, creando dos `PaymentProof` `SUBMITTED` para la misma
+    # factura. `select_for_update()` sobre la `SaaSInvoice` (mismo patrón
+    # ya usado en `create_checkout_for_invoice`) serializa los dos
+    # intentos: el segundo, tras esperar al primero, ve el comprobante ya
+    # creado y es rechazado correctamente.
+    with transaction.atomic():
+        invoice = SaaSInvoice.all_objects.select_for_update().get(pk=invoice.pk)
+        if invoice.status not in (SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID):
+            raise InvalidTransferOperation(
+                f"La factura {invoice.number} no admite un nuevo comprobante en su estado actual "
+                f"({invoice.get_status_display()})."
+            )
+        if PaymentProof.all_objects.filter(
+            invoice=invoice, status__in=[PaymentProof.Status.SUBMITTED, PaymentProof.Status.UNDER_REVIEW]
+        ).exists():
+            raise InvalidTransferOperation("Ya existe un comprobante pendiente de revisión para esta factura.")
+
+        referencia = reference or generate_transfer_reference(subscription.tenant)
+        proof = PaymentProof.all_objects.create(
+            tenant=subscription.tenant, subscription=subscription, invoice=invoice, bank_account=bank_account,
+            reference=referencia, declared_amount=declared_amount, declared_currency=declared_currency,
+            declared_bank_name=declared_bank_name, file=file, original_filename=nombre_seguro,
+            content_type=content_type, size_bytes=tamano, uploaded_by=user, status=PaymentProof.Status.SUBMITTED,
+        )
+        tenant_services.mark_tenant_pending_payment(subscription.tenant, user=user)
+        audit_event(subscription.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="payment_proof", object_id=proof.pk,
+                    after={"reference": referencia, "amount": str(declared_amount)})
     notifications.notify_payment_proof_submitted(proof)
     return proof
 
@@ -144,6 +180,19 @@ def reject_payment_proof(proof, *, reason, user=None):
         proof = PaymentProof.all_objects.select_for_update().get(pk=proof.pk)
         if proof.status == PaymentProof.Status.REJECTED:
             return proof
+        # FASE DE CORRECCIÓN 4 (sección 18, "aprobación + rechazo
+        # simultáneos"): antes de esta corrección, no existía ningún
+        # guard aquí contra un comprobante YA `APPROVED` — rechazarlo de
+        # todas formas dejaba el `PaymentProof` en `REJECTED` mientras el
+        # `SaaSPayment`/`Allocation`/`Subscription ACTIVE` ya generados
+        # por la aprobación seguían intactos, un estado contradictorio
+        # (factura efectivamente pagada, comprobante que dice "rechazado").
+        # `select_for_update()` serializa la carrera real (aprobar y
+        # rechazar el MISMO comprobante a la vez): quien pierda la carrera
+        # ve el estado ya transicionado y es rechazado con un error claro,
+        # nunca sobrescribe una transición terminal distinta.
+        if proof.status not in (PaymentProof.Status.SUBMITTED, PaymentProof.Status.UNDER_REVIEW):
+            raise InvalidTransferOperation("Solo se puede rechazar un comprobante enviado o en revisión.")
         proof.status = PaymentProof.Status.REJECTED
         proof.reviewed_by = user
         proof.reviewed_at = timezone.now()

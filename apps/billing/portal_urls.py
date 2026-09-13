@@ -25,4 +25,5 @@ urlpatterns = [
         views.RecurringCheckoutCancelView.as_view(), name="checkout_paypal_recurring_cancel",
     ),
     path("transferencia/<int:invoice_id>/", views.TransferInstructionsView.as_view(), name="transfer_instructions"),
+    path("comprobantes/<int:pk>/descargar/", views.PaymentProofDownloadView.as_view(), name="proof_download"),
 ]

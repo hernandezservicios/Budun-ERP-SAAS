@@ -51,6 +51,36 @@ class PaymentAllocationTests(TestCase):
         with self.assertRaises(services.InvalidPaymentOperation):
             services.apply_payment_to_invoices(pago, [(self.invoice, Decimal("20.00"))])
 
+    def test_no_se_puede_aplicar_un_pago_a_una_factura_en_otra_moneda(self):
+        # FASE DE CORRECCIÓN 4 (sección 9): defensa en el núcleo del
+        # ledger, nunca solo en el punto de entrada — sin motor de tipos
+        # de cambio, nunca una conversión implícita (mismo criterio que
+        # `apps.sales.services.allocate_payment`).
+        pago_eur = services.record_payment(
+            tenant=self.tenant, saas_customer=self.saas_customer, subscription=self.subscription,
+            method=SaaSPayment.Method.MANUAL_OTHER, amount=self.invoice.total, currency="EUR",
+        )
+        pago_eur = services.confirm_payment(pago_eur)
+        with self.assertRaises(services.InvalidPaymentOperation):
+            services.apply_payment_to_invoices(pago_eur, [(self.invoice, self.invoice.total)])
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, SaaSInvoice.Status.OPEN)
+
+    def test_auto_apply_payment_nunca_aplica_a_factura_en_otra_moneda(self):
+        pago_eur = services.record_payment(
+            tenant=self.tenant, saas_customer=self.saas_customer, subscription=self.subscription,
+            method=SaaSPayment.Method.MANUAL_OTHER, amount=self.invoice.total, currency="EUR",
+        )
+        pago_eur = services.confirm_payment(pago_eur)
+        asignaciones = services.auto_apply_payment(pago_eur)
+        self.assertEqual(asignaciones, [])
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, SaaSInvoice.Status.OPEN)
+        # El pago EUR queda simplemente sin aplicar -- nunca se pierde,
+        # sigue contando como saldo a favor (en su propia moneda).
+        saldo = credit_services.get_subscription_credit_balance(tenant=self.tenant, subscription=self.subscription)
+        self.assertEqual(saldo, self.invoice.total)
+
     def test_sobrepago_deja_saldo_a_favor_sin_perder_el_sobrante(self):
         """Ejemplo exacto de la especificación: factura 29.00, pago 40.00
         → 29.00 a la factura, 11.00 de saldo a favor."""

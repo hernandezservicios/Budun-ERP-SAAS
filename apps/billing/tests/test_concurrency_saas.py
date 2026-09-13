@@ -437,3 +437,204 @@ class UpgradeProrationInvoiceConcurrencyTests(TransactionTestCase):
         self.assertEqual(
             SaaSInvoice.all_objects.filter(subscription=self.subscription, period_start=self.change_date).count(), 1,
         )
+
+
+class SubmitPaymentProofConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 4 (sección 18, "doble submit"/"dos comprobantes
+    concurrentes"): antes de esta corrección, el guard de "factura vigente
+    + sin comprobante pendiente" era un `.exists()` sin ningún lock — dos
+    envíos concurrentes del mismo formulario podían crear dos
+    `PaymentProof` `SUBMITTED` para la MISMA factura."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        self.subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        self.invoice, _creada = invoicing_services.generate_invoice_for_subscription(self.subscription)
+        self.bank_account = BankAccount.objects.create(
+            bank_name="Banco de Prueba", country="RD", currency="USD", account_holder="Budun ERP", account_number="0000",
+        )
+
+    def test_dos_envios_simultaneos_del_mismo_comprobante_solo_uno_se_crea(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def enviar():
+            barrera.wait()
+            try:
+                transfer_services.submit_payment_proof(
+                    subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+                    declared_amount=self.invoice.total, declared_currency="USD",
+                    file=SimpleUploadedFile("comprobante.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf"),
+                )
+                resultados.append("ok")
+            except transfer_services.InvalidTransferOperation:
+                resultados.append("rechazado")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=enviar) for _ in range(2)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+
+        self.assertEqual(resultados.count("ok"), 1)
+        self.assertEqual(resultados.count("rechazado"), 1)
+        from apps.billing.models import PaymentProof
+
+        self.assertEqual(PaymentProof.all_objects.filter(invoice=self.invoice).count(), 1)
+
+
+class ApproveRejectRaceConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 4 (sección 18, "aprobación + rechazo
+    simultáneos"): la carrera real entre un Super Admin que aprueba y otro
+    (u otra pestaña del mismo) que rechaza el MISMO comprobante a la vez
+    debe resolverse en una única transición consistente, nunca en un
+    estado contradictorio (comprobante `REJECTED` con un `SaaSPayment`
+    `CONFIRMED`/`Subscription ACTIVE` ya generados por la aprobación)."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        self.subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        self.invoice, _creada = invoicing_services.generate_invoice_for_subscription(self.subscription)
+        self.bank_account = BankAccount.objects.create(
+            bank_name="Banco de Prueba", country="RD", currency="USD", account_holder="Budun ERP", account_number="0000",
+        )
+        self.proof = transfer_services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=self.invoice.total, declared_currency="USD",
+            file=SimpleUploadedFile("comprobante.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf"),
+        )
+
+    def test_aprobar_y_rechazar_el_mismo_comprobante_a_la_vez_converge_en_un_estado_consistente(self):
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def aprobar():
+            barrera.wait()
+            try:
+                transfer_services.approve_payment_proof(self.proof)
+                resultados.append("aprobado")
+            except transfer_services.InvalidTransferOperation:
+                resultados.append("aprobacion_rechazada")
+            finally:
+                connection.close()
+
+        def rechazar():
+            barrera.wait()
+            try:
+                transfer_services.reject_payment_proof(self.proof, reason="carrera de prueba")
+                resultados.append("rechazado")
+            except transfer_services.InvalidTransferOperation:
+                resultados.append("rechazo_rechazado")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=aprobar), threading.Thread(target=rechazar)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+
+        # Exactamente uno de los dos debe haber ganado la carrera.
+        self.assertEqual(len(resultados), 2)
+        self.assertEqual(sum(1 for r in resultados if r in ("aprobado", "rechazado")), 1)
+
+        self.proof.refresh_from_db()
+        if self.proof.status == "approved":
+            self.assertEqual(SaaSPayment.all_objects.filter(payment_proof=self.proof, status="confirmed").count(), 1)
+        else:
+            self.assertEqual(self.proof.status, "rejected")
+            self.assertEqual(SaaSPayment.all_objects.filter(payment_proof=self.proof).count(), 0)
+
+
+class TransferAndPayPalRaceConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 4 (sección 18, "comprobante + PayPal sobre la
+    misma factura"): PayPal y Transferencia son métodos INDEPENDIENTES
+    (sección 19) — nada impide que un tenant tenga ambos en curso a la
+    vez para la misma factura, así que la aprobación de uno y la captura
+    del otro deben poder converger sin duplicar cobros ni corromper el
+    saldo (un sobrepago resultante queda como saldo a favor, nunca se
+    pierde ni se rechaza con un error, ver sección 8)."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        self.subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        self.invoice, _creada = invoicing_services.generate_invoice_for_subscription(self.subscription)
+        self.bank_account = BankAccount.objects.create(
+            bank_name="Banco de Prueba", country="RD", currency="USD", account_holder="Budun ERP", account_number="0000",
+        )
+        self.proof = transfer_services.submit_payment_proof(
+            subscription=self.subscription, invoice=self.invoice, bank_account=self.bank_account,
+            declared_amount=self.invoice.total, declared_currency="USD",
+            file=SimpleUploadedFile("comprobante.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf"),
+        )
+
+    def test_aprobar_transferencia_y_capturar_paypal_a_la_vez_nunca_duplica_ni_corrompe(self):
+        with fake_provider():
+            pago_paypal, txn, _approve_url = billing_services.create_checkout_for_invoice(
+                invoice=self.invoice, user=self.owner,
+                return_url="https://example.test/return", cancel_url="https://example.test/cancel",
+            )
+
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def aprobar_transferencia():
+            barrera.wait()
+            try:
+                transfer_services.approve_payment_proof(self.proof)
+                resultados.append("transferencia_ok")
+            except Exception as error:  # noqa: BLE001 -- cualquier resultado se registra, nunca se descarta.
+                resultados.append(f"transferencia_error:{error}")
+            finally:
+                connection.close()
+
+        def capturar_paypal():
+            barrera.wait()
+            try:
+                with fake_provider():
+                    billing_services.capture_checkout(txn, user=self.owner)
+                resultados.append("paypal_ok")
+            except Exception as error:  # noqa: BLE001
+                resultados.append(f"paypal_error:{error}")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=aprobar_transferencia), threading.Thread(target=capturar_paypal)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+
+        self.assertIn("transferencia_ok", resultados)
+        self.assertIn("paypal_ok", resultados)
+
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, "paid")
+        # Los dos pagos (29.00 transferencia + 29.00 PayPal) suman 58.00;
+        # la factura (29.00) queda PAID y el resto (29.00) es saldo a
+        # favor trazable -- nunca se pierde ni duplica la aplicación.
+        from apps.billing.services import credits as credit_services
+
+        saldo = credit_services.get_subscription_credit_balance(tenant=self.tenant, subscription=self.subscription)
+        self.assertEqual(saldo, Decimal("29.00"))
+        self.assertEqual(SaaSPayment.all_objects.filter(tenant=self.tenant, status="confirmed").count(), 2)

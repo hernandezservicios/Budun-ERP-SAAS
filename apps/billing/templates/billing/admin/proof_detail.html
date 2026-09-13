@@ -7,11 +7,19 @@
 <div class="tarjeta" style="max-width: 32rem;">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">{{ proof.reference }} — <span class="badge">{{ proof.get_status_display }}</span></h3>
-        <p>Tenant: {{ proof.tenant }} · Factura: {{ proof.invoice.number }}</p>
+        <p>Tenant: {{ proof.tenant }} · Factura: {{ proof.invoice.number }} ({{ proof.invoice.total }} {{ proof.invoice.currency }}, {{ proof.invoice.get_status_display }})</p>
         <p>Monto declarado: {{ proof.declared_amount }} {{ proof.declared_currency }}</p>
         <p>Cuenta receptora: {{ proof.bank_account }}</p>
         <p>Banco de origen declarado: {{ proof.declared_bank_name|default:"—" }}</p>
-        <p>Archivo: {{ proof.original_filename }}</p>
+        <p>Referencia: {{ proof.reference }} · Enviado: {{ proof.uploaded_at }}</p>
+        <p>Archivo: {{ proof.original_filename }} —
+            <a href="{% url 'billing_admin:proof_download' proof.pk %}">Ver / descargar comprobante</a>
+        </p>
+        {% if proof.status == "rejected" %}
+        <p>Rechazado por: {{ proof.reviewed_by|default:"—" }} el {{ proof.reviewed_at }} · Motivo: {{ proof.rejection_reason }}</p>
+        {% elif proof.status == "approved" %}
+        <p>Aprobado por: {{ proof.reviewed_by|default:"—" }} el {{ proof.reviewed_at }}</p>
+        {% endif %}
 
         {% if proof.status == "submitted" or proof.status == "under_review" %}
         <form method="post" style="display:inline-block; margin-right: var(--espacio-2);">
