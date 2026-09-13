@@ -14,7 +14,7 @@
 <div class="encabezado-pagina">
     <div>
         <h1>Iniciar un cobro de PayPal</h1>
-        <p class="encabezado-pagina__descripcion">Crea una orden real en PayPal (Sandbox o Live, según <code>PAYPAL_ENVIRONMENT</code>) para un tenant y plan existentes. Al enviar, se te redirige a PayPal para aprobar el pago; al volver, el pago se captura automáticamente.</p>
+        <p class="encabezado-pagina__descripcion">Crea una orden de PayPal para un tenant y plan existentes. Se te redirige a PayPal para aprobar el pago; se captura automáticamente al volver.</p>
     </div>
     <div class="encabezado-pagina__acciones">
         <a class="btn btn--fantasma btn--sm" href="{% url 'billing_platform:status' %}">← Volver a PayPal</a>

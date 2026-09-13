@@ -132,6 +132,36 @@
 
 html {
     -webkit-text-size-adjust: 100%;
+    /* Scrollbar fina y discreta (Firefox) — nunca oculta el scroll,
+       solo lo hace menos pesado visualmente. Mejora neutra/segura
+       aplicada a todo el proyecto (ver FASE DE REDISEÑO VISUAL SaaS
+       2.0, sección "No tocar el ERP": esto no altera ninguna
+       identidad visual, es una preferencia de plataforma). */
+    scrollbar-width: thin;
+    scrollbar-color: var(--gris-300) transparent;
+}
+
+/* Scrollbar fina y discreta (WebKit/Chromium/Safari) — mismo criterio
+   que scrollbar-width arriba. */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--gris-300);
+    border-radius: var(--radio-completo);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--gris-400);
+    background-clip: padding-box;
 }
 
 body {
@@ -141,6 +171,12 @@ body {
     line-height: var(--interlineado-normal);
     color: var(--color-texto);
     background-color: var(--color-fondo);
+    /* Nunca scroll horizontal de toda la aplicación — cualquier
+       contenido más ancho que la pantalla (tablas, código) debe
+       desplazarse dentro de su propio contenedor
+       (`.tabla-envoltorio`, ya con overflow-x: auto), nunca la
+       página completa. */
+    overflow-x: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {

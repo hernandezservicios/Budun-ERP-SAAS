@@ -52,7 +52,7 @@ class ShellSaaSSeparadoDelErpTests(TestCase):
         respuesta = self.client.get(reverse("billing_admin:dashboard"))
         # Grupos pedidos en la sección 5 de la fase — solo los que tienen
         # destinos reales (nunca enlaces ficticios).
-        for grupo in ["Clientes / Tenants", "Suscripciones y planes", "Facturación", "Reportes", "Configuración"]:
+        for grupo in ["Clientes y empresas", "Suscripciones y planes", "Facturación", "Reportes", "Configuración"]:
             self.assertContains(respuesta, grupo)
         # Cada destino real listado en admin_urls.py debe estar enlazado.
         for nombre_url in [
@@ -86,10 +86,10 @@ class DashboardTextoHumanoTests(TestCase):
     def test_dashboard_traduce_los_kpis_a_lenguaje_humano(self):
         respuesta = self.client.get(reverse("billing_admin:dashboard"))
         for texto in [
-            "Ingresos recurrentes mensuales", "Ingresos recurrentes anuales", "Ingresos de este mes",
-            "Suscripciones activas", "Nuevas suscripciones este mes", "Pagos atrasados",
-            "Suscripciones suspendidas", "Cancelaciones este mes", "Transferencias pendientes",
-            "Facturas vencidas", "Reembolsos de este mes", "Notas de crédito de este mes",
+            "Ingresos recurrentes mensuales", "Ingresos recurrentes anuales", "Ingresos del mes",
+            "Suscripciones activas", "Altas este mes", "Pagos atrasados",
+            "Suspendidas", "Cancelaciones este mes", "Transferencias pendientes",
+            "Facturas vencidas", "Reembolsos del mes", "Notas de crédito del mes",
         ]:
             self.assertContains(respuesta, texto)
 

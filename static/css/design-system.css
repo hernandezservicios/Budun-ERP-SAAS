@@ -230,8 +230,77 @@
     box-shadow: inset 3px 0 0 0 #fff;
 }
 
+.sidebar--saas .sidebar__enlace {
+    border-radius: var(--radio-md);
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sidebar__icono {
+    display: inline-flex;
+    width: 1.25em;
+    font-size: 0.95em;
+}
+
+/* Scrollbar clara sobre el fondo azul profundo del sidebar SaaS —
+   la versión gris oscura por defecto (heredada de `html`) sería
+   invisible sobre este fondo. */
+.sidebar--saas {
+    scrollbar-color: rgb(255 255 255 / 0.25) transparent;
+}
+
+.sidebar--saas::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.25);
+}
+
+.sidebar--saas::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.4);
+}
+
 .navbar--saas .navbar__marca {
     color: var(--color-saas-sidebar-fondo);
+}
+
+.navbar--saas {
+    padding: 0 var(--espacio-6);
+}
+
+/* Más espacio visual en la plataforma SaaS que en el ERP — el mockup
+   aprobado lo pide explícitamente ("mucho espacio visual"); el ERP
+   conserva su padding original de `.main`. */
+.shell--saas .main {
+    padding: var(--espacio-8);
+}
+
+@media (max-width: 640px) {
+    .shell--saas .main {
+        padding: var(--espacio-4);
+    }
+}
+
+/* ------------------------------------------------------------
+   Tipografía/espaciado propios de la plataforma SaaS, acotados al
+   modificador `.shell--saas` — NUNCA a los selectores h1/h2/h3
+   compartidos con el ERP (`templates/layout_app.html`), que se dejan
+   intactos a propósito. Ver "SaaS Visual Shell Separation".
+   ------------------------------------------------------------ */
+.shell--saas h1 {
+    font-size: var(--texto-2xl);
+}
+
+.shell--saas h2 {
+    font-size: var(--texto-lg);
+}
+
+.shell--saas h3 {
+    font-size: var(--texto-base);
+}
+
+.shell--saas .tarjeta {
+    transition: box-shadow 0.15s ease;
+}
+
+.shell--saas .tarjeta:hover {
+    box-shadow: var(--sombra-md);
 }
 
 .navbar__contexto {
@@ -769,6 +838,15 @@ textarea.input,
 
 .tabla tbody tr:last-child td {
     border-bottom: none;
+}
+
+.demo-scroll {
+    max-height: 120px;
+    max-width: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    padding: var(--espacio-3);
 }
 
 .tabla-envoltorio__nota {
@@ -1339,6 +1417,9 @@ dialog.modal::backdrop {
 }
 
 .kpi__etiqueta {
+    display: flex;
+    align-items: center;
+    gap: var(--espacio-1);
     font-size: var(--texto-sm);
     color: var(--color-texto-tenue);
     margin-bottom: var(--espacio-1);

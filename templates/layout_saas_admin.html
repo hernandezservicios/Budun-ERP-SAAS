@@ -1,19 +1,24 @@
 {% extends "base.html" %}
 {% comment %}
-Shell de la PLATAFORMA SaaS (Super Admin) — FASE DE REDISEÑO VISUAL SaaS.
-Deliberadamente SEPARADO de `layout_app.html` (shell del ERP tenant):
-un Super Admin administrando Tenants/Planes/Facturación/PayPal de la
-plataforma nunca debe ver los menús operativos de un ERP (Inventario,
-Ventas, POS, RRHH, etc.) — ver "SaaS Visual Shell Separation" en
-docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md. Usado únicamente
-por las plantillas de los namespaces `billing_admin` (FASE 17) y
-`billing_platform` (FASE 16, PayPal de plataforma). El Portal del
-tenant (`billing_portal`) NO usa este shell — sigue en `layout_app.html`
-porque ahí el tenant ve su PROPIA facturación dentro de su sesión ERP
-normal, no la plataforma completa.
+Shell de la PLATAFORMA SaaS (Super Admin) — FASE DE REDISEÑO VISUAL SaaS
+2.0. Deliberadamente SEPARADO de `layout_app.html` (shell del ERP
+tenant): un Super Admin administrando Tenants/Planes/Facturación/PayPal
+de la plataforma nunca debe ver los menús operativos de un ERP
+(Inventario, Ventas, POS, RRHH, etc.) — ver "SaaS Visual Shell
+Separation" en docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md.
+Usado únicamente por las plantillas de los namespaces `billing_admin`
+(FASE 17) y `billing_platform` (FASE 16, PayPal de plataforma). El
+Portal del tenant (`billing_portal`) NO usa este shell — sigue en
+`layout_app.html` porque ahí el tenant ve su PROPIA facturación dentro
+de su sesión ERP normal, no la plataforma completa.
+
+El modificador `shell--saas` en el contenedor raíz acota CUALQUIER
+refinamiento visual (tipografía, espaciado) que sería arriesgado
+aplicar a los selectores compartidos con el ERP (h1/h2/h3 genéricos) —
+ver la sección "SaaS Visual Shell Separation" para el porqué.
 {% endcomment %}
 {% block body %}
-<div class="shell">
+<div class="shell shell--saas">
     <div class="sidebar__respaldo" data-sidebar-backdrop></div>
     <aside class="sidebar sidebar--saas" aria-label="Navegación de la plataforma SaaS">
         <a class="sidebar__marca" href="{% url 'billing_admin:dashboard' %}">
@@ -26,25 +31,25 @@ normal, no la plataforma completa.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:dashboard' %}"
                        {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'billing_admin' %}aria-current="page"{% endif %}>
-                        Panel
+                        <span class="sidebar__icono" aria-hidden="true">🏠</span> Panel de control
                     </a>
                 </li>
             </ul>
         </div>
 
         <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Clientes / Tenants</p>
+            <p class="sidebar__grupo-titulo">Clientes y empresas</p>
             <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:tenants_list' %}"
-                       {% if request.resolver_match.url_name == 'tenants_list' or request.resolver_match.url_name == 'tenant_detail' %}aria-current="page"{% endif %}>
-                        Tenants
-                    </a>
-                </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:customers_list' %}"
                        {% if request.resolver_match.url_name == 'customers_list' or request.resolver_match.url_name == 'customer_detail' %}aria-current="page"{% endif %}>
-                        Clientes SaaS
+                        <span class="sidebar__icono" aria-hidden="true">🧑‍💼</span> Clientes
+                    </a>
+                </li>
+                <li>
+                    <a class="sidebar__enlace" href="{% url 'billing_admin:tenants_list' %}"
+                       {% if request.resolver_match.url_name == 'tenants_list' or request.resolver_match.url_name == 'tenant_detail' %}aria-current="page"{% endif %}>
+                        <span class="sidebar__icono" aria-hidden="true">🏢</span> Tenants
                     </a>
                 </li>
             </ul>
@@ -54,15 +59,15 @@ normal, no la plataforma completa.
             <p class="sidebar__grupo-titulo">Suscripciones y planes</p>
             <ul class="sidebar__nav">
                 <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:plans_list' %}"
-                       {% if request.resolver_match.url_name == 'plans_list' or request.resolver_match.url_name == 'plan_version_create' %}aria-current="page"{% endif %}>
-                        Planes
+                    <a class="sidebar__enlace" href="{% url 'billing_admin:subscriptions_list' %}"
+                       {% if request.resolver_match.url_name == 'subscriptions_list' %}aria-current="page"{% endif %}>
+                        <span class="sidebar__icono" aria-hidden="true">🔁</span> Suscripciones
                     </a>
                 </li>
                 <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:subscriptions_list' %}"
-                       {% if request.resolver_match.url_name == 'subscriptions_list' %}aria-current="page"{% endif %}>
-                        Suscripciones
+                    <a class="sidebar__enlace" href="{% url 'billing_admin:plans_list' %}"
+                       {% if request.resolver_match.url_name == 'plans_list' or request.resolver_match.url_name == 'plan_version_create' %}aria-current="page"{% endif %}>
+                        <span class="sidebar__icono" aria-hidden="true">📦</span> Planes
                     </a>
                 </li>
             </ul>
@@ -74,31 +79,31 @@ normal, no la plataforma completa.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:invoices_list' %}"
                        {% if request.resolver_match.url_name == 'invoices_list' or request.resolver_match.url_name == 'invoice_detail' %}aria-current="page"{% endif %}>
-                        Facturas
+                        <span class="sidebar__icono" aria-hidden="true">🧾</span> Facturas
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:payments_list' %}"
                        {% if request.resolver_match.url_name == 'payments_list' %}aria-current="page"{% endif %}>
-                        Pagos
+                        <span class="sidebar__icono" aria-hidden="true">💳</span> Pagos
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:transfers_queue' %}"
                        {% if request.resolver_match.url_name == 'transfers_queue' or request.resolver_match.url_name == 'proof_detail' %}aria-current="page"{% endif %}>
-                        Transferencias
+                        <span class="sidebar__icono" aria-hidden="true">💱</span> Transferencias
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:credit_notes_list' %}"
                        {% if request.resolver_match.url_name == 'credit_notes_list' %}aria-current="page"{% endif %}>
-                        Notas de crédito
+                        <span class="sidebar__icono" aria-hidden="true">📝</span> Notas de crédito
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:refunds_list' %}"
                        {% if request.resolver_match.url_name == 'refunds_list' %}aria-current="page"{% endif %}>
-                        Reembolsos
+                        <span class="sidebar__icono" aria-hidden="true">↩️</span> Reembolsos
                     </a>
                 </li>
             </ul>
@@ -110,7 +115,7 @@ normal, no la plataforma completa.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:reports' %}"
                        {% if request.resolver_match.url_name == 'reports' %}aria-current="page"{% endif %}>
-                        Reportes
+                        <span class="sidebar__icono" aria-hidden="true">📊</span> Reportes
                     </a>
                 </li>
             </ul>
@@ -122,19 +127,19 @@ normal, no la plataforma completa.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:manual_sale' %}"
                        {% if request.resolver_match.url_name == 'manual_sale' %}aria-current="page"{% endif %}>
-                        Venta manual
+                        <span class="sidebar__icono" aria-hidden="true">🛒</span> Venta manual
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:bank_accounts_list' %}"
                        {% if request.resolver_match.url_name == 'bank_accounts_list' %}aria-current="page"{% endif %}>
-                        Cuentas bancarias
+                        <span class="sidebar__icono" aria-hidden="true">🏦</span> Cuentas bancarias
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_platform:status' %}"
                        {% if request.resolver_match.namespace == 'billing_platform' %}aria-current="page"{% endif %}>
-                        PayPal (plataforma)
+                        <span class="sidebar__icono" aria-hidden="true">🅿️</span> PayPal (plataforma)
                     </a>
                 </li>
             </ul>
