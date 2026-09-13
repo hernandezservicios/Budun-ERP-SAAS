@@ -687,14 +687,20 @@ Dos superficies completamente separadas, mismo criterio que FASE 16:
 - **Super Admin** (`apps.billing.admin_views`, exclusivo
   `is_superuser` — `apps.tenants.permissions.require_superuser`, el
   catálogo tenant-scoped de `apps.permissions` no aplica a un recurso
-  de plataforma): Dashboard (MRR/ARR/altas/cancelaciones/transferencias
-  pendientes/ingresos/reembolsos), Clientes SaaS, Tenants (activar/
+  de plataforma): Dashboard (ingresos recurrentes mensuales/anuales,
+  altas/cancelaciones/transferencias pendientes/ingresos/reembolsos —
+  ver "Shell SaaS de plataforma" en `docs/design-system.md` para el
+  shell visual dedicado, deliberadamente distinto del ERP desde la FASE
+  DE REDISEÑO VISUAL SaaS), Clientes SaaS, Tenants (activar/
   suspender/reactivar/cancelar — ver "Alta inicial y activación" más
   abajo para la diferencia real entre activar y reactivar), Venta manual, Planes (crear plan + nueva versión
   de precio), Suscripciones, Facturas (detalle con líneas/pagos
   aplicados/notas de crédito aplicadas), Pagos (solicitar reembolso),
   Transferencias (cola + aprobar/rechazar), Notas de crédito,
-  Reembolsos, Cuentas bancarias, Reportes.
+  Reembolsos, Cuentas bancarias (crear/editar/desactivar — nunca
+  borrado físico: `PaymentProof.bank_account` usa `on_delete=PROTECT`,
+  así que la FASE DE REDISEÑO VISUAL SaaS agregó edición y
+  activar/desactivar, nunca un botón "Eliminar"), Reportes.
 - **Portal del tenant** (`apps.billing.portal_views`, permisos
   `billing.saas.view`/`billing.saas.manage` — nuevos en
   `apps.permissions.catalog`, dominio "billing", excluidos de ADMIN por

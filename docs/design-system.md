@@ -119,6 +119,57 @@ que sí tolera fallos de resolución en cada candidato. Detectado por
 `DesignSystemPageTests.test_modal_usa_dialog_nativo_accesible` (fallaba
 antes de la corrección) y confirmado con el resto de la suite.
 
+## Shell SaaS de plataforma (FASE DE REDISEÑO VISUAL SaaS)
+
+Segundo shell autenticado, deliberadamente separado del ERP —
+`templates/layout_saas_admin.html` (extiende `base.html`, igual que
+`layout_app.html`, nunca lo reemplaza). Usado únicamente por las
+plantillas de `billing_admin` (FASE 17, `/plataforma/billing/admin/`) y
+`billing_platform` (FASE 16, `/plataforma/billing/paypal/`) — el Portal
+del tenant (`billing_portal`, `/facturacion/`) sigue en `layout_app.html`
+a propósito, porque ahí el tenant ve su PROPIA facturación dentro de su
+sesión ERP normal, no la plataforma completa.
+
+Reutiliza literalmente el mismo grid `.shell` y las mismas clases base
+`.sidebar`/`.sidebar__nav`/`.sidebar__enlace`/`.navbar` del ERP (mismo
+`ui.js`, mismo toggle responsive) — solo agrega modificadores:
+
+| Clase | Qué cambia |
+|---|---|
+| `.sidebar--saas` | Fondo azul profundo (`--color-saas-sidebar-fondo`, azul-950) en vez del gris del ERP |
+| `.sidebar__grupo` / `.sidebar__grupo-titulo` | Agrupación por sección (Clientes/Tenants, Suscripciones y planes, Facturación, Reportes, Configuración) — el sidebar del ERP no agrupa, es una lista plana |
+| `.navbar--saas` / `.navbar__contexto` | Marca+contexto ("Plataforma — Super Admin") junto al menú de usuario |
+
+Tokens nuevos en `base.css` (nunca reemplazan los existentes):
+`--color-azul-900`/`--color-azul-950` (paleta ampliada), y
+`--color-saas-sidebar-fondo`/`-borde`/`-texto`/`-texto-tenue`/`-hover`/
+`-activo` (roles semánticos derivados, para que un futuro cambio de tono
+se haga en un solo lugar). Ver "SaaS Visual Shell Separation" y "SaaS
+Design Token Pattern" en `docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md`
+para el problema/causa/solución completos.
+
+### Estados con color semántico: filtro `estado_badge`
+`apps/core/templatetags/ui_extras.py::estado_badge` traduce el CÓDIGO
+CRUDO de cualquier estado de Billing (`tenant.billing_status`,
+`subscription.status`, `invoice.status`, etc. — nunca el texto ya
+traducido de `get_..._display`) a una variante de `.badge`
+(verde/advertencia/peligro/azul/neutro), con un único mapa global
+verificado contra los `TextChoices` reales de cada modelo (nunca
+inventado). Un código no reconocido cae a "neutro" sin romper el render.
+`estado_paypal` hace lo mismo para el vocabulario propio (en inglés) de
+la Subscriptions API de PayPal, mostrado únicamente al tenant en su
+Portal. `monto` formatea cualquier Decimal con separador de miles y dos
+decimales (`1234.5` → `"1,234.50"`) — puramente presentacional, el
+cálculo real siempre usa el Decimal original.
+
+### Utilidades de espaciado/ancho
+`static/css/design-system.css` incluye un conjunto pequeño y deliberado
+(`u-ancho-32`, `u-ancho-40`, `u-mb-2/4/6`, `u-mt-2/4/6`, `u-inline`,
+`u-inline-block`, `u-mr-2/3`, `u-ml-2`, `u-campo-corto`) que reemplaza
+los `style=` inline que existían en casi todas las plantillas de Billing
+antes de esta fase — nunca un sistema de utilidades genérico tipo
+Tailwind, solo los anchos/márgenes que realmente se repetían.
+
 ## Qué NO se construyó en esta fase (deliberado)
 Productos, inventario, ventas, POS, compras, gastos, reportes, API de
 Inventario, PayPal, Billing — todo eso corresponde a fases posteriores.

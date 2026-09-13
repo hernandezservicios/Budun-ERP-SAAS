@@ -4,12 +4,24 @@
 Elegir un estilo SaaS empresarial moderno: limpio, sobrio, profesional, legible y orientado a productividad. La estética debe provenir de jerarquía, spacing, tipografía y consistencia, no de colores excesivos.
 
 ## Colores
-- Azul: primary/action/navigation.
-- Verde: success/secondary/action positiva.
+- Azul: primary/action/navigation — identidad única de TODO el proyecto (ERP y SaaS).
+- Verde: **exclusivamente** success/estado positivo — nunca color estructural/secundario en ninguna vista nueva.
 - Neutrales: fondos, superficies y texto.
 - Rojo/ámbar: exclusivamente para estados semánticos.
 
 Evitar neón, arcoíris, fondos multicolor, gradientes dominantes y tarjetas excesivas.
+
+### Dos identidades, un mismo sistema (FASE DE REDISEÑO VISUAL SaaS)
+El ERP tenant (`templates/layout_app.html`) conserva azul+verde tal como se
+documentó en FASE 5 — `--color-secundario` (verde) sigue siendo un botón
+secundario legítimo ahí (Ventas, Compras), y no se retiró ni se rediseñó.
+La **plataforma SaaS** (Super Admin — `templates/layout_saas_admin.html`,
+namespaces `billing_admin`/`billing_platform`) adoptó una identidad
+deliberadamente distinta: azul + neutrales, con un sidebar azul profundo
+propio (`--color-saas-sidebar-*`, ver `docs/design-system.md`) y **sin
+verde estructural** — verde queda reservado ahí exclusivamente para
+estados de éxito (`badge--verde`, `kpi--exito`). Ningún token existente se
+eliminó; ambos shells comparten `base.css`/`design-system.css`.
 
 ## UX
 Prioridades: experiencia de usuario > legibilidad > claridad > jerarquía > consistencia > estética.

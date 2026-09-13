@@ -1032,6 +1032,188 @@ préstamos u otros sistemas verticales), no solo para este proyecto.
   función con esta misma forma — auditarlas TODAS juntas la primera vez
   que se encuentra una, en vez de una por una en correcciones separadas.
 
+## SAAS VISUAL SHELL PATTERNS (FASE DE REDISEÑO VISUAL SaaS)
+
+Cuatro patrones nuevos, esta vez de identidad visual/navegación en vez
+de lógica financiera — nacen de la misma disciplina de auditoría real
+antes de corregir que el resto de este Knowledge Kit.
+
+### 1. SaaS Visual Shell Separation
+
+- **Problema**: cuando una plataforma SaaS tiene DOS audiencias reales
+  con necesidades completamente distintas — el cliente final operando
+  su propio negocio (tenant) y el equipo que opera la plataforma
+  (Super Admin) — reutilizar el mismo shell de navegación para ambas
+  hace que cada una vea menús que no le pertenecen.
+- **Causa raíz**: las plantillas de administración de plataforma se
+  crearon extendiendo el mismo layout que ya existía (el del tenant),
+  porque funcionaba y ya tenía sidebar/navbar/toasts resueltos — nadie
+  se preguntó si ese sidebar debía mostrar los mismos enlaces para las
+  dos audiencias.
+- **Patrón**: un segundo shell (`layout_saas_admin.html`) que reutiliza
+  la MISMA estructura de grid/JS del primero (mismo `.shell`, mismo
+  `ui.js`, mismo mecanismo de colapso responsive) pero con su propio
+  contenido de navegación — nunca un shell reescrito desde cero, y
+  nunca condicionales `{% if es_super_admin %}` dentro de un único
+  shell compartido (esa alternativa es más frágil: un enlace nuevo del
+  ERP olvidado dentro del `{% if %}` equivocado vuelve a filtrar menús
+  entre audiencias).
+- **Solución**: cada superficie de plataforma (namespaces
+  `billing_admin`/`billing_platform`) extiende el shell nuevo; la
+  superficie que SÍ pertenece al tenant (`billing_portal`, el tenant
+  viendo su propia facturación) se deja intencionalmente en el shell
+  original — la regla no es "toda vista de Billing usa el shell nuevo",
+  es "toda vista de PLATAFORMA usa el shell nuevo".
+- **Reglas**: antes de crear una vista nueva de administración de
+  plataforma, preguntar explícitamente a qué audiencia pertenece
+  (tenant operando su negocio vs. equipo operando la plataforma) y
+  elegir el shell según esa respuesta, nunca por conveniencia de copiar
+  una plantilla existente.
+- **Errores comunes**: verificar la separación solo mirando el CSS/HTML
+  de una página aislada — el bug real solo es visible navegando o
+  inspeccionando la respuesta HTTP completa de una vista de plataforma
+  real (un test que busca la ausencia de textos exclusivos del otro
+  shell, no solo la presencia de los propios, es la única forma de
+  detectar una fuga real).
+- **Prevención**: un test de "smoke de shell" por cada nueva superficie
+  de plataforma que verifique tanto la PRESENCIA de la marca/menú
+  propios como la AUSENCIA de textos exclusivos del shell del tenant.
+- **Aplicabilidad a futuros proyectos**: cualquier SaaS con un panel de
+  operación interna (soporte, ventas, finanzas) además del panel del
+  cliente final — incluida una plataforma de préstamos con un panel de
+  originación/cobranza interno separado del portal del prestatario —
+  debe aplicar esta misma separación de shells desde el primer día,
+  nunca como una fase de "pulido" posterior.
+
+### 2. SaaS Design Token Pattern
+
+- **Problema**: una identidad visual "azul + verde" documentada como
+  regla fija (FASE 5) puede volverse inapropiada para una superficie
+  nueva (una consola de operación de plataforma) sin que eso signifique
+  que la decisión original estuviera mal para su contexto original (el
+  ERP del tenant).
+- **Causa raíz**: los tokens de color (`--color-primario`,
+  `--color-secundario`) se definieron con roles genéricos
+  ("primario"/"secundario") en vez de roles semánticos explícitos
+  ("brand"/"success") — un color con rol "secundario" termina
+  reutilizándose como si fuera parte de la identidad estructural en vez
+  de reservarse para un significado semántico concreto.
+- **Patrón**: mantener TODOS los tokens existentes (nunca romper una
+  superficie que ya depende de ellos) y agregar tokens NUEVOS con un
+  rol semántico explícito y acotado a la superficie nueva
+  (`--color-saas-sidebar-*`), en vez de redefinir el significado de un
+  token ya usado en producción.
+- **Solución**: documentar explícitamente, por token, si su rol es
+  brand/primary/success/warning/danger/info/neutral — y para la
+  superficie nueva, usar SOLO azul+neutrales+semánticos, dejando verde
+  reservado exclusivamente para éxito (nunca un botón "secundario"
+  estructural verde en la superficie nueva).
+- **Reglas**: verde (o cualquier color que solo debería significar
+  "éxito"/"aprobado"/"positivo") nunca se usa como color estructural
+  de marca/navegación — si una superficie necesita un segundo tono de
+  marca, debe ser una variante del color primario (más oscura/clara),
+  nunca el color de éxito.
+- **Errores comunes**: eliminar o redefinir un token existente
+  "para simplificar", sin verificar primero en cuántas plantillas ya
+  vive ese token — romper silenciosamente una superficie que no forma
+  parte del trabajo actual.
+- **Prevención**: antes de tocar cualquier token de color existente,
+  hacer un `grep` de su uso real en todo el proyecto (CSS y templates)
+  y confirmar que ninguna superficie fuera de alcance depende de su
+  significado actual.
+- **Aplicabilidad a futuros proyectos**: cualquier proyecto con más de
+  una superficie de usuario (portal de cliente vs. consola interna,
+  o en una plataforma de préstamos: portal del prestatario vs. consola
+  de originación/cobranza) debe decidir explícitamente, por superficie,
+  si comparte identidad de marca o si cada una necesita su propia
+  variante — y documentar esa decisión como aquí, no dejarla implícita.
+
+### 3. SaaS Navigation Pattern
+
+- **Problema**: una consola de administración con muchas secciones
+  reales (aquí: Tenants, Clientes, Planes, Suscripciones, Facturas,
+  Pagos, Transferencias, Notas de crédito, Reembolsos, Reportes,
+  Configuración) necesita una navegación que escale, no una lista plana
+  ni un menú de botones que solo aparece en una página.
+- **Causa raíz**: la navegación se agregó incrementalmente, una sección
+  a la vez, cada vez añadiendo "un botón más" a una fila que vivía
+  únicamente en la página de inicio — nadie se detuvo a agruparla
+  cuando pasó de 3 a 13 destinos.
+- **Patrón**: sidebar vertical persistente (visible en TODAS las
+  páginas de la superficie, vía el shell compartido, nunca duplicado
+  por plantilla), agrupado por dominio de negocio real —nunca por orden
+  de creación— y con el estado activo resuelto por
+  `request.resolver_match` (mismo mecanismo que el sidebar del ERP,
+  nunca un mecanismo nuevo).
+- **Solución**: grupos derivados de los namespaces/URLs REALES
+  existentes (nunca enlaces a una ruta que no existe todavía) — un
+  grupo sin al menos un destino real no se crea solo para "llenar
+  espacio".
+- **Reglas**: cada nueva vista de administración debe agregarse al
+  grupo del sidebar que le corresponde en el MISMO commit que la crea
+  — un sidebar que se actualiza "después" es la forma más común de que
+  una vista se vuelva inalcanzable salvo escribiendo la URL a mano.
+- **Errores comunes**: agregar una acción de navegación solo en la
+  página desde la que "tiene sentido" llegar hoy, en vez del sidebar
+  persistente — funciona hasta que se agrega una segunda forma real de
+  llegar a esa misma página y la navegación queda inconsistente.
+- **Prevención**: un test que enumere TODOS los nombres de URL
+  reales del namespace de administración y verifique que cada uno
+  aparece enlazado desde el sidebar (o está documentado como
+  intencionalmente no-listado, p. ej. una página de detalle).
+- **Aplicabilidad a futuros proyectos**: cualquier consola
+  administrativa que crecerá por fases (un back-office de préstamos con
+  Solicitudes/Desembolsos/Cobranza/Mora/Reportes) debe adoptar desde el
+  principio un sidebar agrupado por dominio con este mismo mecanismo de
+  estado activo, en vez de una navegación ad-hoc que "ya se ordenará
+  después".
+
+### 4. Human-readable SaaS Status Pattern
+
+- **Problema**: un estado interno del dominio (`past_due`, `suspended`,
+  `void`) es vocabulario de implementación — mostrarlo directo al
+  usuario (o mostrarlo ya traducido pero sin ninguna señal visual de si
+  es bueno o malo) le exige interpretar el sistema en vez de leerlo.
+- **Causa raíz**: el texto SÍ estaba bien resuelto desde el modelo
+  (`TextChoices` con labels en español reales, ver
+  `Tenant.BillingStatus`/`Subscription.Status`/etc.) — el gap real
+  estaba en el COLOR: cada badge de estado se renderizaba con la misma
+  clase neutra sin importar el estado, porque nadie conectó el color al
+  significado del estado de forma sistemática.
+- **Patrón**: separar las dos responsabilidades — el TEXTO lo resuelve
+  siempre `get_..._display()` (una sola fuente de verdad, nunca un
+  texto duplicado a mano por plantilla) y el COLOR lo resuelve un único
+  filtro de presentación (`estado_badge`) con un mapa código-crudo→color
+  verificado contra los `TextChoices` reales de cada modelo del
+  dominio.
+- **Solución**: `{{ objeto.status|estado_badge }}` para la clase +
+  `{{ objeto.get_status_display }}` para el texto, siempre juntos —
+  nunca un estado visible sin las dos partes.
+- **Reglas**: ningún estado interno (`.status`, `.billing_status`) se
+  imprime crudo en una plantilla bajo ninguna circunstancia; un
+  vocabulario externo ajeno al dominio (aquí, los códigos de la
+  Subscriptions API de PayPal) se traduce con su PROPIO filtro
+  (`estado_paypal`), nunca mezclado con el mapa de estados propios del
+  dominio.
+- **Errores comunes**: asumir que "el texto ya está en español" es
+  suficiente y que el color es solo decoración — un estado urgente
+  (pago atrasado, suscripción suspendida) sin ninguna señal de color es
+  fácil de pasar por alto en una lista larga, incluso con el texto
+  correcto.
+- **Prevención**: al agregar un `TextChoices` nuevo a cualquier modelo
+  del dominio, agregar en el MISMO commit su entrada correspondiente al
+  mapa de `estado_badge` — un código no mapeado cae a "neutro" (nunca
+  rompe el render), pero un test que enumere los `TextChoices` reales
+  contra las claves del mapa detecta el olvido antes de que llegue a
+  producción.
+- **Aplicabilidad a futuros proyectos**: cualquier dominio con estados
+  de ciclo de vida (una plataforma de préstamos con
+  `pending`/`approved`/`disbursed`/`delinquent`/`written_off`/`paid_off`)
+  debe aplicar este mismo patrón de dos fuentes de verdad separadas
+  (texto desde el modelo, color desde un mapa único) desde el primer
+  estado que se muestre a un usuario — nunca decidir el color caso por
+  caso en cada plantilla.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -1142,6 +1324,17 @@ las decisiones de esta familia de correcciones:
   propagar — con la mejora de refrescar el saldo disponible tras cada
   fallo para que el resto del barrido en la misma llamada aproveche lo
   que de verdad queda.
+- **#117** (FASE DE REDISEÑO VISUAL SaaS, ver `KNOWN_ISSUES.md` #137):
+  shell nuevo y separado (`layout_saas_admin.html`) en vez de
+  parametrizar el shell del ERP — estructuralmente imposible que un
+  cambio futuro filtre menús entre audiencias. Identidad azul+neutrales
+  para la plataforma (verde reservado a éxito), decisión explícita del
+  usuario que NO se propaga al ERP existente. Color de estado resuelto
+  por un único mapa (`estado_badge`), nunca una clase condicional por
+  plantilla. `BankAccount` gana editar+desactivar, nunca un botón
+  "Eliminar" (protegida por `on_delete=PROTECT` desde FASE 17). Los
+  `style=` inline se reemplazan por un conjunto pequeño y cerrado de
+  utilidades CSS, nunca un framework de utilidades completo.
 
 ## LESSONS LEARNED
 
@@ -1237,6 +1430,23 @@ las decisiones de esta familia de correcciones:
   MISMA forma puede repetirse en otras funciones del mismo dominio que
   nadie volvió a mirar — corregir una instancia no garantiza que se
   haya buscado su gemela estructural en el resto del código.
+- Copiar un shell/layout existente para una superficie nueva porque "ya
+  funciona" es exactamente cómo dos audiencias con necesidades
+  distintas terminan compartiendo la misma navegación — la pregunta
+  correcta antes de copiar un layout no es "¿renderiza bien?" sino
+  "¿a quién le pertenece este menú?".
+- Un texto de estado ya traducido correctamente (`get_..._display()`
+  con labels en español reales desde el modelo) puede seguir siendo un
+  gap de UX real si nunca se le asocia una señal de color — el texto
+  resuelve el idioma, el color resuelve la urgencia, y son dos
+  responsabilidades distintas que hay que verificar por separado.
+- Un modelo con `on_delete=PROTECT` en sus relaciones inversas ya tomó
+  la decisión de "nunca borrado físico" en el momento en que se
+  diseñó — cuando la UI llega después a esa misma entidad, la pregunta
+  no es "¿cómo implemento eliminar?" sino "¿qué patrón ya eligió el
+  modelo?", y la respuesta correcta suele ser activar/desactivar, no
+  un manejo de excepción alrededor de un borrado que se sabe de
+  antemano que puede fallar.
 
 ## COMMON FAILURES
 
@@ -1512,3 +1722,26 @@ las decisiones de esta familia de correcciones:
   había buscado esta gemela estructural al corregir la primera. →
   **Corrección**: mismo `try/except` ya aplicado a `auto_apply_payment`,
   con la mejora de refrescar el saldo disponible tras cada fallo.
+- **Síntoma**: el Super Admin, administrando Tenants/Facturas/PayPal de
+  toda la plataforma, veía el sidebar completo del ERP (Inventario,
+  Ventas, Compras, POS, RRHH, Nómina, Contabilidad...) en cada página
+  de administración. → **Causa real**: las 21 plantillas de
+  `billing_admin`/`billing_platform` extendían `layout_app.html` — el
+  mismo shell del ERP tenant — porque ya existía y funcionaba, sin que
+  nadie se preguntara si ambas audiencias debían compartir la misma
+  navegación. → **Corrección**: shell nuevo y separado
+  (`layout_saas_admin.html`, sidebar azul profundo agrupado por
+  sección); el Portal del tenant se dejó intencionalmente en el shell
+  original.
+- **Síntoma**: el dashboard de Billing SaaS mostraba "MRR"/"ARR"/
+  "PAST_DUE" como etiquetas de KPI, y cada badge de estado
+  (`ACTIVE`/`SUSPENDED`/`PAID`/`PENDING`) se veía idéntico, en gris
+  neutro. → **Causa real**: las etiquetas de KPI eran texto fijo
+  hardcodeado en el template (nunca conectadas a un vocabulario
+  humano); el texto de cada badge SÍ venía correctamente traducido
+  desde `get_..._display()`, pero ningún badge tenía nunca un
+  modificador de color — se renderizaban con `class="badge"` a secas
+  en absolutamente todas las plantillas. → **Corrección**: dashboard
+  reescrito con etiquetas humanas agrupadas en 3 secciones; nuevo
+  filtro `estado_badge` con un único mapa código-crudo→color aplicado
+  de forma consistente en las 21 plantillas de plataforma.
