@@ -254,11 +254,24 @@ def calculate_proration(subscription, *, new_plan_version, change_date=None):
     ver `DECISIONS.md`). Nunca implícito: devuelve el desglose completo
     para que quede registrado en la auditoría/factura.
 
-    fórmula: valor_diario = precio / días_del_período;
-    crédito = valor_diario_actual * días_restantes;
-    cargo = valor_diario_nuevo * días_restantes;
-    monto_neto = cargo - crédito (positivo = se cobra más, negativo =
-    se acredita)."""
+    fórmula: valor_diario = precio / días_NOMINALES_de_la_frecuencia
+    del propio plan (30 para mensual, 365 para anual — ver
+    `_DIAS_POR_FRECUENCIA` — NUNCA los días reales del período vigente,
+    ver `KNOWN_ISSUES.md` sobre "cambio de periodicidad" para el hallazgo
+    real que esto corrige); crédito = valor_diario_actual * días_restantes
+    (días restantes del período VIGENTE, el que se abandona); cargo =
+    valor_diario_nuevo * días_restantes; monto_neto = cargo - crédito
+    (positivo = se cobra más, negativo = se acredita).
+
+    FASE DE CORRECCIÓN 6: antes de esta corrección, AMBOS precios se
+    dividían entre los días del período VIGENTE (`dias_totales`) — una
+    fórmula correcta únicamente cuando el plan anterior y el nuevo
+    comparten la MISMA frecuencia (mensual→mensual, anual→anual). Un
+    cambio que ADEMÁS cambia de periodicidad (mensual→anual o
+    anual→mensual, algo que `ChangePlanForm`/`portal_change_plan.html`
+    permiten sin ninguna restricción de frecuencia) comparaba un precio
+    ANUAL contra un divisor de ~30 días (o viceversa) — un error de
+    magnitud real (~12×), nunca solo de redondeo."""
     hoy = change_date or date.today()
     inicio = subscription.current_period_start or hoy
     fin = subscription.current_period_end or hoy
@@ -267,8 +280,10 @@ def calculate_proration(subscription, *, new_plan_version, change_date=None):
 
     precio_actual = subscription.plan_version.price_amount
     precio_nuevo = new_plan_version.price_amount
-    valor_diario_actual = (precio_actual / Decimal(dias_totales)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    valor_diario_nuevo = (precio_nuevo / Decimal(dias_totales)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    dias_nominales_actual = _DIAS_POR_FRECUENCIA.get(subscription.plan_version.frequency, dias_totales)
+    dias_nominales_nuevo = _DIAS_POR_FRECUENCIA.get(new_plan_version.frequency, dias_totales)
+    valor_diario_actual = (precio_actual / Decimal(dias_nominales_actual)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    valor_diario_nuevo = (precio_nuevo / Decimal(dias_nominales_nuevo)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     credito = (valor_diario_actual * dias_restantes).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     cargo = (valor_diario_nuevo * dias_restantes).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return {

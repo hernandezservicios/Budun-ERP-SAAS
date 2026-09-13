@@ -4,6 +4,7 @@ mismo patrón `TransactionTestCase` + hilos reales que el resto del
 proyecto desde FASE 10."""
 
 import threading
+from datetime import date
 from decimal import Decimal
 
 from django.db import connection
@@ -638,3 +639,68 @@ class TransferAndPayPalRaceConcurrencyTests(TransactionTestCase):
         saldo = credit_services.get_subscription_credit_balance(tenant=self.tenant, subscription=self.subscription)
         self.assertEqual(saldo, Decimal("29.00"))
         self.assertEqual(SaaSPayment.all_objects.filter(tenant=self.tenant, status="confirmed").count(), 2)
+
+
+class AutoApplyCreditNoteConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 6: dos barridos concurrentes de `auto_apply_
+    available_credit_notes` sobre la MISMA suscripción (p. ej. dos
+    facturas generándose casi a la vez -- el cron de renovación y una
+    reconciliación reactiva) pueden intentar aplicar la MISMA nota de
+    crédito a la vez. Antes de esta corrección, la excepción de la
+    carrera (`InvalidCreditOperation`) se propagaba sin atrapar y podía
+    romper la generación de la factura que disparó el barrido."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        from apps.billing.services import credits as credit_services
+
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("15.00"))
+        self.saas_customer = crear_saas_customer()
+        self.subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        self.invoice_a, _creada = invoicing_services.generate_invoice_for_subscription(
+            self.subscription, period_start=date(2026, 1, 1), period_end=date(2026, 1, 31),
+        )
+        self.invoice_b, _creada = invoicing_services.generate_invoice_for_subscription(
+            self.subscription, period_start=date(2026, 2, 1), period_end=date(2026, 2, 28),
+        )
+        self.nota = credit_services.issue_credit_note(
+            tenant=self.tenant, saas_customer=self.saas_customer, subscription=self.subscription,
+            amount=Decimal("20.00"), currency="USD", reason="prueba de concurrencia",
+        )
+
+    def test_dos_barridos_simultaneos_de_la_misma_nota_de_credito_nunca_rompen_ni_sobre_aplican(self):
+        from apps.billing.services import credits as credit_services
+
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def barrer():
+            barrera.wait()
+            try:
+                credit_services.auto_apply_available_credit_notes(self.subscription)
+                resultados.append("ok")
+            except credit_services.InvalidCreditOperation as error:
+                resultados.append(f"error:{error}")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=barrer) for _ in range(2)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+
+        self.assertEqual(resultados, ["ok", "ok"], "Ninguno de los dos barridos debe propagar una excepción sin atrapar.")
+        self.assertEqual(credit_services.get_unapplied_credit_note_amount(self.nota), Decimal("0"))
+        aplicado_total = sum(
+            invoicing_services.get_invoice_balance_due(f) for f in (self.invoice_a, self.invoice_b)
+        )
+        # Las dos facturas (15.00 + 15.00 = 30.00) menos el crédito
+        # aplicado (20.00, nunca más de eso) deben sumar exactamente 10.00
+        # pendiente -- nunca de más ni de menos.
+        self.invoice_a.refresh_from_db()
+        self.invoice_b.refresh_from_db()
+        saldo_restante = invoicing_services.get_invoice_balance_due(self.invoice_a) + invoicing_services.get_invoice_balance_due(self.invoice_b)
+        self.assertEqual(saldo_restante, Decimal("10.00"))

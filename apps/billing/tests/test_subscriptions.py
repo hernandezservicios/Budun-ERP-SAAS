@@ -189,6 +189,25 @@ class ProrationTests(TestCase):
         desglose = services.calculate_proration(self.subscription, new_plan_version=version_nueva, change_date=date(2026, 1, 16))
         self.assertLess(desglose["monto_neto"], 0)
 
+    def test_prorrateo_con_cambio_de_periodicidad_normaliza_por_frecuencia_propia(self):
+        # FASE DE CORRECCIÓN 6: antes de esta corrección, AMBOS precios se
+        # dividían entre los días del período VIGENTE (30, mensual) sin
+        # importar la frecuencia del plan NUEVO — un cambio mensual->anual
+        # comparaba un precio ANUAL contra un divisor de ~30 días. Plan
+        # actual: 30.00/mes (1.00/día, sobre 30 días nominales). Plan
+        # nuevo: 730.00/año (2.00/día, sobre 365 días nominales, NUNCA
+        # sobre los 30 días del período vigente que se abandona). A mitad
+        # de período (15 días restantes de 30): crédito = 1.00*15 = 15.00;
+        # cargo = 2.00*15 = 30.00; neto = 15.00 -- la fórmula previa (con
+        # el bug) habría dado ~349.95 (730/30 ≈ 24.33/día × 15 - 15.00).
+        _plan_anual, version_anual = crear_plan_con_version(slug="anual-c6", precio=Decimal("730.00"), frecuencia="annual")
+        desglose = services.calculate_proration(self.subscription, new_plan_version=version_anual, change_date=date(2026, 1, 16))
+        self.assertEqual(desglose["valor_diario_actual"], Decimal("1.00"))
+        self.assertEqual(desglose["valor_diario_nuevo"], Decimal("2.00"))
+        self.assertEqual(desglose["credito"], Decimal("15.00"))
+        self.assertEqual(desglose["cargo"], Decimal("30.00"))
+        self.assertEqual(desglose["monto_neto"], Decimal("15.00"))
+
     def test_change_plan_downgrade_emite_nota_de_credito(self):
         _plan_nuevo, version_nueva = crear_plan_con_version(slug="basico2", precio=Decimal("5.00"))
         subscription, desglose, nota_credito, factura_cargo = services.change_plan(

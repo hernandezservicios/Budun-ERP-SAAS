@@ -106,7 +106,20 @@ def auto_apply_available_credit_notes(subscription, *, user=None):
     Se llama automáticamente cada vez que se emite una factura NUEVA
     para la suscripción (`invoicing.generate_invoice_for_subscription`/
     `issue_proration_charge_invoice`) — nunca al revisar una factura ya
-    existente, para no reabrir una ya resuelta de otra forma."""
+    existente, para no reabrir una ya resuelta de otra forma.
+
+    FASE DE CORRECCIÓN 6: el plan de aplicación se calcula leyendo el
+    saldo de la nota/factura SIN lock, y el lock real solo se toma
+    dentro de `apply_credit_note_to_invoice` — mismo problema, y misma
+    solución, que el ya corregido en `payments.auto_apply_payment`
+    (Corrección 4): si DOS facturas de la MISMA suscripción se generan
+    casi a la vez (p. ej. el cron de renovación y una reconciliación
+    reactiva de PayPal disparándose juntos), ambas pueden intentar
+    barrer la MISMA nota de crédito a la vez — sin este `try/except`,
+    `InvalidCreditOperation` se propagaría sin atrapar y ROMPERÍA la
+    generación de la factura que disparó el barrido. El crédito nunca
+    se pierde: si esta aplicación puntual falla por la carrera, sigue
+    disponible para la próxima factura que se genere."""
     aplicadas = []
     notas = CreditNote.all_objects.filter(subscription=subscription).order_by("created_at")
     for nota in notas:
@@ -124,7 +137,18 @@ def auto_apply_available_credit_notes(subscription, *, user=None):
             if saldo_factura <= 0:
                 continue
             monto = min(disponible, saldo_factura)
-            aplicadas.append(apply_credit_note_to_invoice(nota, invoice, monto, user=user))
+            try:
+                aplicadas.append(apply_credit_note_to_invoice(nota, invoice, monto, user=user))
+            except InvalidCreditOperation:
+                # Otro hilo/proceso ya consumió parte del saldo de esta
+                # nota (o de esta factura) entre la lectura sin lock de
+                # arriba y el lock real dentro de `apply_credit_note_to_
+                # invoice` — refrescar `disponible` con el saldo REAL
+                # permite que el resto del barrido siga aprovechando lo
+                # que de verdad queda, en vez de seguir intentando montos
+                # ya obsoletos contra cada factura restante.
+                disponible = get_unapplied_credit_note_amount(nota)
+                continue
             disponible -= monto
     return aplicadas
 
