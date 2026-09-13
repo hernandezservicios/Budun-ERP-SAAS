@@ -173,6 +173,90 @@
     }
 }
 
+/* ============================================================
+   SHELL SaaS (Super Admin / Plataforma) — FASE DE REDISEÑO VISUAL SaaS.
+   Reutiliza el mismo grid `.shell` y el mismo `.sidebar`/`.sidebar__nav`/
+   `.sidebar__enlace` del ERP (misma estructura, mismo JS de ui.js), pero
+   con la variante `.sidebar--saas` (azul profundo) y agrupación por
+   secciones (`.sidebar__grupo`). Nunca se mezcla con el `.sidebar` gris
+   del ERP en la misma vista — ver "SaaS Visual Shell Separation" en
+   docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md.
+   ============================================================ */
+
+.sidebar--saas {
+    background: var(--color-saas-sidebar-fondo);
+    border-right: 1px solid var(--color-saas-sidebar-borde);
+}
+
+.sidebar--saas .sidebar__marca {
+    color: #fff;
+    border-bottom-color: var(--color-saas-sidebar-borde);
+}
+
+.sidebar--saas .sidebar__marca__contexto {
+    display: block;
+    font-weight: 400;
+    font-size: var(--texto-xs);
+    color: var(--color-saas-sidebar-texto-tenue);
+    margin-top: 0.1rem;
+}
+
+.sidebar--saas .sidebar__grupo + .sidebar__grupo {
+    margin-top: var(--espacio-2);
+}
+
+.sidebar--saas .sidebar__grupo-titulo {
+    padding: var(--espacio-3) var(--espacio-3) var(--espacio-1);
+    font-size: var(--texto-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-saas-sidebar-texto-tenue);
+}
+
+.sidebar--saas .sidebar__enlace {
+    color: var(--color-saas-sidebar-texto);
+}
+
+.sidebar--saas .sidebar__enlace:hover {
+    background: var(--color-saas-sidebar-hover);
+    color: #fff;
+}
+
+.sidebar--saas .sidebar__enlace[aria-current="page"] {
+    background: var(--color-saas-sidebar-activo);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 0 #fff;
+}
+
+.navbar--saas .navbar__marca {
+    color: var(--color-saas-sidebar-fondo);
+}
+
+.navbar__contexto {
+    display: flex;
+    align-items: center;
+    gap: var(--espacio-2);
+    font-size: var(--texto-sm);
+    color: var(--color-texto-tenue);
+}
+
+.navbar__contexto strong {
+    color: var(--color-texto);
+}
+
+/* Vista previa aislada del sidebar SaaS en /estilo/ — nunca el sidebar
+   real (que es `position: sticky`, altura completa). */
+.sidebar--vista-previa {
+    position: static;
+    height: auto;
+    max-width: 260px;
+    margin-bottom: var(--espacio-6);
+    border-radius: var(--radio-lg);
+    overflow: hidden;
+}
+
 /* --- Navbar público (páginas fuera del shell autenticado) --- */
 .navbar-publico {
     display: flex;
@@ -687,6 +771,12 @@ textarea.input,
     border-bottom: none;
 }
 
+.tabla-envoltorio__nota {
+    padding: 0 var(--espacio-4) var(--espacio-4);
+    font-size: var(--texto-xs);
+    color: var(--color-texto-tenue);
+}
+
 .tabla__vacio td {
     text-align: center;
     padding: var(--espacio-8);
@@ -946,6 +1036,28 @@ dialog.modal::backdrop {
     color: var(--color-primario);
     margin-bottom: var(--espacio-2);
 }
+
+/* ============================================================
+   UTILIDADES DE ESPACIADO/ANCHO (FASE DE REDISEÑO VISUAL SaaS) —
+   conjunto pequeño y deliberado para eliminar los `style=` inline
+   repetidos encontrados en la auditoría de plantillas de Billing.
+   Nunca un sistema de utilidades genérico tipo Tailwind completo,
+   solo los casos reales que existían antes como CSS inline.
+   ============================================================ */
+.u-ancho-32 { max-width: 32rem; }
+.u-ancho-40 { max-width: 40rem; }
+.u-mb-2 { margin-bottom: var(--espacio-2); }
+.u-mb-4 { margin-bottom: var(--espacio-4); }
+.u-mb-6 { margin-bottom: var(--espacio-6); }
+.u-mt-2 { margin-top: var(--espacio-2); }
+.u-mt-4 { margin-top: var(--espacio-4); }
+.u-mt-6 { margin-top: var(--espacio-6); }
+.u-inline-block { display: inline-block; }
+.u-inline { display: inline; }
+.u-mr-2 { margin-right: var(--espacio-2); }
+.u-mr-3 { margin-right: var(--espacio-3); }
+.u-ml-2 { margin-left: var(--espacio-2); }
+.u-campo-corto { width: 5rem; }
 
 /* ============================================================
    LANDING (FASE 6) — reutiliza tokens y componentes existentes,
@@ -1304,6 +1416,42 @@ dialog.modal::backdrop {
     flex-wrap: wrap;
     gap: var(--espacio-3);
 }
+
+/* --- Grupos de KPI (FASE DE REDISEÑO VISUAL SaaS): agrupa métricas
+   relacionadas (Ingresos/Suscripciones/Facturación) en UNA tarjeta por
+   grupo, nunca una tarjeta gigante por número — evita la "colección
+   caótica de tarjetas" explícitamente descartada. --- */
+.kpi-grupo {
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-lg);
+    box-shadow: var(--sombra-sm);
+    padding: var(--espacio-5);
+    margin-bottom: var(--espacio-5);
+}
+
+.kpi-grupo__titulo {
+    display: flex;
+    align-items: center;
+    gap: var(--espacio-2);
+    font-size: var(--texto-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-texto-tenue);
+    margin-bottom: var(--espacio-4);
+}
+
+.kpi__icono {
+    font-size: 1.1em;
+}
+
+.kpi--peligro { border-left-color: var(--color-peligro-700); }
+.kpi--peligro .kpi__valor { color: var(--color-peligro-800); }
+.kpi--advertencia { border-left-color: var(--color-advertencia-700); }
+.kpi--advertencia .kpi__valor { color: var(--color-advertencia-800); }
+.kpi--exito { border-left-color: var(--color-verde-700); }
+.kpi--exito .kpi__valor { color: var(--color-verde-800); }
 
 /* ============================================================
    AUTENTICACIÓN — layout público simple (login, registro, etc.)

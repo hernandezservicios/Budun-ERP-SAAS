@@ -1,8 +1,9 @@
-{% extends "layout_app.html" %}
-{% block title %}Notas de crédito — Billing SaaS — ERP SaaS{% endblock %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
+{% block title %}Notas de crédito — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Notas de crédito</li></ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Notas de crédito</li></ol>
 </nav>
 <div class="encabezado-pagina"><h1>Notas de crédito</h1></div>
 <div class="tabla-envoltorio">
@@ -10,7 +11,7 @@
         <thead><tr><th>Número</th><th>Tenant</th><th>Monto</th><th>Motivo</th></tr></thead>
         <tbody>
             {% for nota in credit_notes %}
-            <tr><td>{{ nota.number }}</td><td>{{ nota.tenant }}</td><td>{{ nota.amount }} {{ nota.currency }}</td><td>{{ nota.reason }}</td></tr>
+            <tr><td>{{ nota.number }}</td><td>{{ nota.tenant }}</td><td>{{ nota.amount|monto }} {{ nota.currency }}</td><td>{{ nota.reason }}</td></tr>
             {% empty %}<tr><td colspan="4">Sin notas de crédito.</td></tr>{% endfor %}
         </tbody>
     </table>

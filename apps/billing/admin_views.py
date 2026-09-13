@@ -453,8 +453,15 @@ class CompleteManualRefundView(LoginRequiredMixin, SuperuserRequiredMixin, View)
 
 class BankAccountsListView(LoginRequiredMixin, SuperuserRequiredMixin, View):
     def get(self, request):
+        cuentas = BankAccount.objects.all()
         return render(request, "billing/admin/bank_accounts_list.html", {
-            "bank_accounts": BankAccount.objects.all(), "form": BankAccountForm(),
+            "bank_accounts": cuentas,
+            "form": BankAccountForm(),
+            # Una fila = (cuenta, formulario de edición ya vinculado a ESA
+            # cuenta) para poder pre-rellenar el modal de edición de cada
+            # fila sin depender de JS/AJAX — mismo patrón de progressive
+            # enhancement que el resto del Design System (ui.js).
+            "filas": [(cuenta, BankAccountForm(instance=cuenta)) for cuenta in cuentas],
         })
 
     def post(self, request):
@@ -464,6 +471,41 @@ class BankAccountsListView(LoginRequiredMixin, SuperuserRequiredMixin, View):
             messages.success(request, "Cuenta bancaria creada.")
         else:
             messages.error(request, "Revisa los datos de la cuenta.")
+        return redirect("billing_admin:bank_accounts_list")
+
+
+class BankAccountUpdateView(LoginRequiredMixin, SuperuserRequiredMixin, View):
+    """Edición visual (FASE DE REDISEÑO VISUAL SaaS) — reutiliza el mismo
+    `BankAccountForm` ya usado para crear, nunca un segundo formulario ni
+    una segunda validación. No existe borrado físico: `BankAccount` es
+    referenciada por `PaymentProof.bank_account` con `on_delete=PROTECT`
+    (comprobantes/pagos históricos reales) — la única acción segura es
+    editar los datos o desactivarla (`BankAccountToggleActiveView`)."""
+
+    def post(self, request, pk):
+        cuenta = get_object_or_404(BankAccount, pk=pk)
+        form = BankAccountForm(request.POST, instance=cuenta)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Cuenta bancaria actualizada.")
+        else:
+            messages.error(request, "Revisa los datos de la cuenta.")
+        return redirect("billing_admin:bank_accounts_list")
+
+
+class BankAccountToggleActiveView(LoginRequiredMixin, SuperuserRequiredMixin, View):
+    """Activar/desactivar es el patrón seguro que reemplaza un borrado
+    físico (ver docstring de `BankAccountUpdateView`) — el campo
+    `is_active` ya existe desde FASE 17 para esto exactamente."""
+
+    def post(self, request, pk):
+        cuenta = get_object_or_404(BankAccount, pk=pk)
+        cuenta.is_active = not cuenta.is_active
+        cuenta.save(update_fields=["is_active"])
+        if cuenta.is_active:
+            messages.success(request, f"Cuenta bancaria «{cuenta}» activada.")
+        else:
+            messages.success(request, f"Cuenta bancaria «{cuenta}» desactivada. Ya no se ofrecerá a los tenants para nuevas transferencias.")
         return redirect("billing_admin:bank_accounts_list")
 
 

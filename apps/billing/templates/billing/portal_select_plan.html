@@ -11,9 +11,14 @@
     </ol>
 </nav>
 
-<div class="encabezado-pagina"><h1>Elegir un plan</h1></div>
+<div class="encabezado-pagina">
+    <div><h1>Elegir un plan</h1></div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_portal:status' %}">← Volver a Mi Facturación</a>
+    </div>
+</div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta u-ancho-32">
     <div class="tarjeta__cuerpo">
         <form method="post" novalidate>
             {% csrf_token %}

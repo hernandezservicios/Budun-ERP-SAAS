@@ -1,4 +1,5 @@
 {% extends "layout_app.html" %}
+{% load ui_extras %}
 
 {% block title %}Transferencia bancaria — ERP SaaS{% endblock %}
 
@@ -14,11 +15,14 @@
 <div class="encabezado-pagina">
     <div>
         <h1>Factura {{ invoice.number }}</h1>
-        <p class="encabezado-pagina__descripcion">Monto: {{ invoice.total }} {{ invoice.currency }} · Vence: {{ invoice.due_date }}</p>
+        <p class="encabezado-pagina__descripcion">Monto: {{ invoice.total|monto }} {{ invoice.currency }} · Vence: {{ invoice.due_date }}</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_portal:status' %}">← Volver a Mi Facturación</a>
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
+<div class="tarjeta u-ancho-32 u-mb-6">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Cuentas para transferir</h3>
         {% for cuenta in bank_accounts %}
@@ -29,7 +33,7 @@
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta u-ancho-32">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Subir comprobante</h3>
         <form method="post" enctype="multipart/form-data" novalidate>

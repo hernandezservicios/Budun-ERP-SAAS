@@ -1,8 +1,8 @@
-{% extends "layout_app.html" %}
-{% block title %}Clientes SaaS — ERP SaaS{% endblock %}
+{% extends "layout_saas_admin.html" %}
+{% block title %}Clientes SaaS — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Clientes SaaS</li></ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Clientes SaaS</li></ol>
 </nav>
 <div class="encabezado-pagina"><h1>Clientes SaaS</h1></div>
 {% if customers %}

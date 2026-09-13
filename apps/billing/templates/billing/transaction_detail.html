@@ -1,23 +1,30 @@
-{% extends "layout_app.html" %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
 
-{% block title %}Transacción PayPal — ERP SaaS{% endblock %}
+{% block title %}Transacción PayPal — Billing SaaS — Budun{% endblock %}
 
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
     <ol>
-        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
-        <li><a href="{% url 'billing_platform:status' %}">Plataforma — PayPal</a></li>
+        <li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li>
+        <li><a href="{% url 'billing_platform:status' %}">PayPal (plataforma)</a></li>
         <li aria-current="page">Transacción #{{ transaccion.pk }}</li>
     </ol>
 </nav>
+<div class="encabezado-pagina">
+    <div><h1>Transacción #{{ transaccion.pk }}</h1></div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_platform:status' %}">← Volver a PayPal</a>
+    </div>
+</div>
 
-<div class="tarjeta" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+<div class="tarjeta u-ancho-40 u-mb-6">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">Transacción #{{ transaccion.pk }} — <span class="badge">{{ transaccion.get_status_display }}</span></h3>
+        <h3 class="panel-seccion__titulo">Transacción #{{ transaccion.pk }} — <span class="badge badge--{{ transaccion.status|estado_badge }}">{{ transaccion.get_status_display }}</span></h3>
         <p>Tenant: {{ transaccion.tenant|default:"—" }} · Plan: {{ transaccion.plan_id }} · Propósito: {{ transaccion.get_purpose_display }}</p>
         <p>Ambiente: {{ transaccion.environment }}</p>
-        <p>Monto interno: {{ transaccion.amount }} {{ transaccion.currency }}</p>
-        {% if transaccion.provider_amount %}<p>Monto reportado por PayPal: {{ transaccion.provider_amount }} {{ transaccion.provider_currency }}</p>{% endif %}
+        <p>Monto interno: {{ transaccion.amount|monto }} {{ transaccion.currency }}</p>
+        {% if transaccion.provider_amount %}<p>Monto reportado por PayPal: {{ transaccion.provider_amount|monto }} {{ transaccion.provider_currency }}</p>{% endif %}
         <p>Orden: <code>{{ transaccion.external_order_id|default:"—" }}</code></p>
         <p>Captura: <code>{{ transaccion.external_capture_id|default:"—" }}</code></p>
         <p>Reembolso: <code>{{ transaccion.external_refund_id|default:"—" }}</code></p>
@@ -26,13 +33,13 @@
 </div>
 
 {% if not tiene_saas_payment %}
-<div class="alerta alerta--advertencia" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+<div class="alerta alerta--advertencia u-ancho-40 u-mb-6">
     Esta transacción <strong>no tiene ningún SaaS Payment asociado</strong> — se creó desde esta herramienta de operación/prueba de PayPal, no desde el Portal de Billing de un tenant. Aunque su estado sea <code>{{ transaccion.get_status_display }}</code>, no activó ninguna Subscription ni Tenant.
 </div>
 {% endif %}
 
 {% if transaccion.status == "confirmed" %}
-<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
+<div class="tarjeta u-ancho-32 u-mb-6">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Reembolsar</h3>
         <form method="post" novalidate>
@@ -55,7 +62,7 @@
             {% for e in eventos %}
             <tr>
                 <td>{{ e.event_type }}</td>
-                <td><span class="badge">{{ e.get_status_display }}</span></td>
+                <td><span class="badge badge--{{ e.status|estado_badge }}">{{ e.get_status_display }}</span></td>
                 <td>{{ e.received_at }}</td>
                 <td>{{ e.processed_at|default:"—" }}</td>
             </tr>

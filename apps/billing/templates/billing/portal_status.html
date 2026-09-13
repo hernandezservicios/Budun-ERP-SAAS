@@ -1,4 +1,5 @@
 {% extends "layout_app.html" %}
+{% load ui_extras %}
 
 {% block title %}Mi Facturación — ERP SaaS{% endblock %}
 
@@ -24,28 +25,28 @@
     <p><a class="btn btn--primario" href="{% url 'billing_portal:select_plan' %}">Elegir un plan</a></p>
 </div>
 {% else %}
-<div class="tarjeta" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+<div class="tarjeta u-ancho-40 u-mb-6">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></h3>
-        <p>Frecuencia: {{ subscription.plan_version.get_frequency_display }} · Precio: {{ subscription.plan_version.price_amount }} {{ subscription.plan_version.price_currency }}</p>
+        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></h3>
+        <p>Frecuencia: {{ subscription.plan_version.get_frequency_display }} · Precio: {{ subscription.plan_version.price_amount|monto }} {{ subscription.plan_version.price_currency }}</p>
         {% if subscription.current_period_end %}<p>Período actual: {{ subscription.current_period_start }} — {{ subscription.current_period_end }} (próximo cobro/factura: {{ subscription.current_period_end }})</p>{% endif %}
-        <p>Estado de facturación del tenant: <span class="badge">{{ tenant.get_billing_status_display }}</span></p>
-        <p>Saldo a favor: {{ credit_balance|default:"0" }}</p>
+        <p>Estado de facturación de tu cuenta: <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></p>
+        <p>Saldo a favor: {{ credit_balance|default:"0"|monto }}</p>
         <p>
             Método de cobro:
             {% if subscription.paypal_subscription_id and subscription.paypal_subscription_status == "ACTIVE" %}
             <span class="badge badge--verde">PayPal — cobro automático activo</span>
             {% elif subscription.paypal_subscription_id %}
-            <span class="badge">PayPal — autorización de cobro automático {{ subscription.paypal_subscription_status|default:"pendiente" }}</span>
+            <span class="badge badge--advertencia">PayPal — autorización de cobro automático {{ subscription.paypal_subscription_status|default:"PENDIENTE"|estado_paypal }}</span>
             {% else %}
-            <span class="badge">Sin cobro automático — pago manual (PayPal o transferencia) cada período</span>
+            <span class="badge badge--neutro">Sin cobro automático — pago manual (PayPal o transferencia) cada período</span>
             {% endif %}
         </p>
 
         {% if subscription.is_effectively_operational %}
-        <p style="margin-top: var(--espacio-4);">
+        <p class="u-mt-4">
             <a class="btn btn--contorno" href="{% url 'billing_portal:change_plan' %}">Cambiar de plan</a>
-            <form method="post" action="{% url 'billing_portal:cancel' %}" style="display:inline-block; margin-left: var(--espacio-2);">
+            <form method="post" action="{% url 'billing_portal:cancel' %}" class="u-inline-block u-ml-2">
                 {% csrf_token %}
                 <button type="submit" class="btn btn--peligro">Cancelar al finalizar el período</button>
             </form>
@@ -65,8 +66,8 @@
                 <td>{{ invoice.number }}</td>
                 <td>{{ invoice.period_start }} — {{ invoice.period_end }}</td>
                 <td>{{ invoice.due_date }}</td>
-                <td>{{ invoice.total }} {{ invoice.currency }}</td>
-                <td><span class="badge">{{ invoice.get_status_display }}</span></td>
+                <td>{{ invoice.total|monto }} {{ invoice.currency }}</td>
+                <td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
                 <td>
                     {% if invoice.status == "open" or invoice.status == "partially_paid" %}
                     {% if paypal_disponible and not subscription.paypal_subscription_id %}
@@ -79,7 +80,7 @@
                     <a class="btn btn--contorno btn--sm" href="{% url 'billing_portal:transfer_instructions' invoice.pk %}">Pagar mediante transferencia bancaria</a>
                     {% endif %}
                     {% if not paypal_disponible and not transferencia_disponible %}
-                    <span class="badge">Sin métodos de pago disponibles</span>
+                    <span class="badge badge--neutro">Sin métodos de pago disponibles</span>
                     {% endif %}
                     {% endif %}
                 </td>
@@ -102,18 +103,8 @@
             <tr>
                 <td>{{ comprobante.invoice.number }}</td>
                 <td>{{ comprobante.uploaded_at }}</td>
-                <td>{{ comprobante.declared_amount }} {{ comprobante.declared_currency }}</td>
-                <td>
-                    {% if comprobante.status == "submitted" or comprobante.status == "under_review" %}
-                    <span class="badge">Pendiente de revisión</span>
-                    {% elif comprobante.status == "approved" %}
-                    <span class="badge badge--verde">Aprobado</span>
-                    {% elif comprobante.status == "rejected" %}
-                    <span class="badge badge--peligro">Rechazado</span>
-                    {% else %}
-                    <span class="badge">{{ comprobante.get_status_display }}</span>
-                    {% endif %}
-                </td>
+                <td>{{ comprobante.declared_amount|monto }} {{ comprobante.declared_currency }}</td>
+                <td><span class="badge badge--{{ comprobante.status|estado_badge }}">{{ comprobante.get_status_display }}</span></td>
                 <td>
                     {% if comprobante.status == "rejected" %}
                     Motivo: {{ comprobante.rejection_reason }}

@@ -1,14 +1,21 @@
-{% extends "layout_app.html" %}
-{% block title %}Comprobante {{ proof.reference }} — ERP SaaS{% endblock %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
+{% block title %}Comprobante {{ proof.reference }} — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:transfers_queue' %}">Transferencias</a></li><li aria-current="page">{{ proof.reference }}</li></ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:transfers_queue' %}">Transferencias</a></li><li aria-current="page">{{ proof.reference }}</li></ol>
 </nav>
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="encabezado-pagina">
+    <div><h1>Comprobante {{ proof.reference }}</h1></div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:transfers_queue' %}">← Volver a transferencias</a>
+    </div>
+</div>
+<div class="tarjeta u-ancho-32">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">{{ proof.reference }} — <span class="badge">{{ proof.get_status_display }}</span></h3>
-        <p>Tenant: {{ proof.tenant }} · Factura: {{ proof.invoice.number }} ({{ proof.invoice.total }} {{ proof.invoice.currency }}, {{ proof.invoice.get_status_display }})</p>
-        <p>Monto declarado: {{ proof.declared_amount }} {{ proof.declared_currency }}</p>
+        <h3 class="panel-seccion__titulo">{{ proof.reference }} — <span class="badge badge--{{ proof.status|estado_badge }}">{{ proof.get_status_display }}</span></h3>
+        <p>Tenant: {{ proof.tenant }} · Factura: {{ proof.invoice.number }} ({{ proof.invoice.total|monto }} {{ proof.invoice.currency }}, {{ proof.invoice.get_status_display }})</p>
+        <p>Monto declarado: {{ proof.declared_amount|monto }} {{ proof.declared_currency }}</p>
         <p>Cuenta receptora: {{ proof.bank_account }}</p>
         <p>Banco de origen declarado: {{ proof.declared_bank_name|default:"—" }}</p>
         <p>Referencia: {{ proof.reference }} · Enviado: {{ proof.uploaded_at }}</p>
@@ -22,11 +29,11 @@
         {% endif %}
 
         {% if proof.status == "submitted" or proof.status == "under_review" %}
-        <form method="post" style="display:inline-block; margin-right: var(--espacio-2);">
+        <form method="post" class="u-inline-block u-mr-2">
             {% csrf_token %}
             <button type="submit" class="btn btn--primario" name="accion" value="aprobar">Aprobar</button>
         </form>
-        <form method="post" style="display:inline-block;">
+        <form method="post" class="u-inline-block">
             {% csrf_token %}
             <input type="text" name="reason" placeholder="Motivo del rechazo" required>
             <button type="submit" class="btn btn--peligro" name="accion" value="rechazar">Rechazar</button>

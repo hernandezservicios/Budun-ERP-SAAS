@@ -1,27 +1,25 @@
-{% extends "layout_app.html" %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
 
-{% block title %}Plataforma — PayPal — ERP SaaS{% endblock %}
+{% block title %}PayPal (plataforma) — Billing SaaS — Budun{% endblock %}
 
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol>
-        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
-        <li aria-current="page">Plataforma — PayPal</li>
-    </ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">PayPal (plataforma)</li></ol>
 </nav>
 
 <div class="encabezado-pagina">
     <div>
-        <h1>Billing SaaS — PayPal</h1>
+        <h1>PayPal — herramienta de plataforma</h1>
         <p class="encabezado-pagina__descripcion">Herramienta exclusiva del Super Admin de la plataforma (nunca visible a un tenant): estado del gateway, prueba de conexión, y transacciones de PayPal (Orders API v2) usadas para probar/operar el mecanismo de pago de la suscripción de un tenant al SaaS.</p>
     </div>
 </div>
 
-<div class="alerta alerta--advertencia" style="margin-bottom: var(--espacio-6);">
+<div class="alerta alerta--advertencia u-mb-6">
     <strong>Esta herramienta es para operación/prueba de PayPal</strong> y no crea ni activa automáticamente un SaaS Payment de Billing. Una captura hecha aquí queda registrada como <code>PayPalTransaction</code> únicamente — nunca activa ninguna Subscription ni Tenant. Para cobrar la factura real de un tenant, usa su Portal de Billing (<code>/facturacion/</code>) o aprueba su comprobante de transferencia.
 </div>
 
-<div class="tarjeta" style="max-width: 40rem; margin-bottom: var(--espacio-6);">
+<div class="tarjeta u-ancho-40 u-mb-6">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Estado del gateway</h3>
         <p>
@@ -37,18 +35,18 @@
         <p>Todavía no se ha probado la conexión.</p>
         {% endif %}
 
-        <form method="post" style="display:inline-block; margin-right: var(--espacio-3);">
+        <form method="post" class="u-inline-block u-mr-3">
             {% csrf_token %}
             <input type="hidden" name="accion" value="probar_conexion">
             <button type="submit" class="btn btn--primario">Probar conexión</button>
         </form>
-        <form method="post" style="display:inline-block;">
+        <form method="post" class="u-inline-block">
             {% csrf_token %}
             <input type="hidden" name="accion" value="alternar_habilitado">
             <button type="submit" class="btn btn--contorno">{% if status.is_enabled %}Deshabilitar checkout{% else %}Habilitar checkout{% endif %}</button>
         </form>
 
-        <p style="margin-top: var(--espacio-4);"><a class="btn btn--contorno" href="{% url 'billing_platform:checkout_create' %}">Iniciar un cobro de prueba</a></p>
+        <p class="u-mt-4"><a class="btn btn--contorno" href="{% url 'billing_platform:checkout_create' %}">Iniciar un cobro de prueba</a></p>
     </div>
 </div>
 
@@ -63,8 +61,8 @@
                 <td>{{ t.tenant|default:"—" }}</td>
                 <td>{{ t.plan_id }}</td>
                 <td>{{ t.get_purpose_display }}</td>
-                <td>{{ t.amount }} {{ t.currency }}</td>
-                <td><span class="badge">{{ t.get_status_display }}</span></td>
+                <td>{{ t.amount|monto }} {{ t.currency }}</td>
+                <td><span class="badge badge--{{ t.status|estado_badge }}">{{ t.get_status_display }}</span></td>
                 <td>{{ t.created_at }}</td>
                 <td><a class="btn btn--contorno" href="{% url 'billing_platform:transaction_detail' t.pk %}">Ver</a></td>
             </tr>

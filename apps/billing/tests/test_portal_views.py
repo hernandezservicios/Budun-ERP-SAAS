@@ -360,7 +360,13 @@ class TransferInstructionsViewTests(TestCase):
         })
         respuesta = self.client.get(reverse("billing_portal:status"))
         self.assertContains(respuesta, "Historial de comprobantes")
-        self.assertContains(respuesta, "Pendiente de revisión")
+        # FASE DE REDISEÑO VISUAL SaaS: el historial ahora muestra siempre
+        # `get_status_display()` (única fuente de verdad para el texto del
+        # estado, con su color vía el filtro `estado_badge`) en vez del
+        # texto ad-hoc que existía solo en esta plantilla — un comprobante
+        # recién enviado queda en SUBMITTED, cuya etiqueta real es "Enviado".
+        self.assertContains(respuesta, "Enviado")
+        self.assertContains(respuesta, "badge--advertencia")
 
     def test_un_miembro_sin_permiso_de_gestionar_billing_no_puede_subir_comprobante(self):
         miembro = self._crear_miembro_admin()

@@ -1,12 +1,12 @@
-{% extends "layout_app.html" %}
+{% extends "layout_saas_admin.html" %}
 
-{% block title %}Iniciar cobro PayPal — ERP SaaS{% endblock %}
+{% block title %}Iniciar cobro PayPal — Billing SaaS — Budun{% endblock %}
 
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
     <ol>
-        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
-        <li><a href="{% url 'billing_platform:status' %}">Plataforma — PayPal</a></li>
+        <li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li>
+        <li><a href="{% url 'billing_platform:status' %}">PayPal (plataforma)</a></li>
         <li aria-current="page">Iniciar cobro</li>
     </ol>
 </nav>
@@ -16,13 +16,16 @@
         <h1>Iniciar un cobro de PayPal</h1>
         <p class="encabezado-pagina__descripcion">Crea una orden real en PayPal (Sandbox o Live, según <code>PAYPAL_ENVIRONMENT</code>) para un tenant y plan existentes. Al enviar, se te redirige a PayPal para aprobar el pago; al volver, el pago se captura automáticamente.</p>
     </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_platform:status' %}">← Volver a PayPal</a>
+    </div>
 </div>
 
-<div class="alerta alerta--advertencia" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
+<div class="alerta alerta--advertencia u-ancho-32 u-mb-6">
     <strong>Esta herramienta es para operación/prueba de PayPal</strong> y no crea ni activa automáticamente un SaaS Payment de Billing — la captura queda solo en <code>PayPalTransaction</code>, sin ningún efecto sobre la Subscription/Tenant del tenant elegido.
 </div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta u-ancho-32">
     <div class="tarjeta__cuerpo">
         <form method="post" novalidate>
             {% csrf_token %}

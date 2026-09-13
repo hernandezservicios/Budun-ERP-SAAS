@@ -1,22 +1,31 @@
-{% extends "layout_app.html" %}
-{% block title %}{{ customer.name }} — ERP SaaS{% endblock %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
+{% block title %}{{ customer.name }} — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:customers_list' %}">Clientes SaaS</a></li><li aria-current="page">{{ customer.name }}</li></ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:customers_list' %}">Clientes SaaS</a></li><li aria-current="page">{{ customer.name }}</li></ol>
 </nav>
-<div class="encabezado-pagina"><h1>{{ customer.name }}</h1><p class="encabezado-pagina__descripcion">{{ customer.email }}</p></div>
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ customer.name }}</h1>
+        <p class="encabezado-pagina__descripcion">{{ customer.email }}</p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:customers_list' %}">← Volver a clientes SaaS</a>
+    </div>
+</div>
 
 <div class="encabezado-pagina"><h2>Tenants</h2></div>
 {% for tenant in tenants %}
-<p><a href="{% url 'billing_admin:tenant_detail' tenant.pk %}">{{ tenant.name }}</a> — <span class="badge">{{ tenant.get_billing_status_display }}</span></p>
+<p><a href="{% url 'billing_admin:tenant_detail' tenant.pk %}">{{ tenant.name }}</a> — <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></p>
 {% empty %}<p>Sin tenants asociados.</p>{% endfor %}
 
 <div class="encabezado-pagina"><h2>Suscripciones</h2></div>
 {% for subscription in subscriptions %}
-<p>{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></p>
+<p>{{ subscription.plan_version.plan.name }} — <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></p>
 {% empty %}<p>Sin suscripciones.</p>{% endfor %}
 
-<div class="tarjeta" style="max-width: 32rem; margin-top: var(--espacio-6);">
+<div class="tarjeta u-ancho-32 u-mt-6">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Emitir nota de crédito</h3>
         <form method="post" action="{% url 'billing_admin:issue_credit_note' customer.pk %}" novalidate>

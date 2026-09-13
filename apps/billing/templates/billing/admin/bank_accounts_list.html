@@ -1,21 +1,63 @@
-{% extends "layout_app.html" %}
-{% block title %}Cuentas bancarias — Billing SaaS — ERP SaaS{% endblock %}
+{% extends "layout_saas_admin.html" %}
+{% block title %}Cuentas bancarias — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Cuentas bancarias</li></ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Cuentas bancarias</li></ol>
 </nav>
 <div class="encabezado-pagina"><h1>Cuentas bancarias de la plataforma</h1></div>
-<div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
+<div class="tabla-envoltorio u-mb-6">
     <table class="tabla">
-        <thead><tr><th>Banco</th><th>País</th><th>Moneda</th><th>Titular</th><th>Cuenta</th><th>Activa</th></tr></thead>
+        <thead><tr><th>Banco</th><th>País</th><th>Moneda</th><th>Titular</th><th>Cuenta</th><th>Estado</th><th></th></tr></thead>
         <tbody>
-            {% for cuenta in bank_accounts %}
-            <tr><td>{{ cuenta.bank_name }}</td><td>{{ cuenta.country }}</td><td>{{ cuenta.currency }}</td><td>{{ cuenta.account_holder }}</td><td>{{ cuenta.account_number }}</td><td>{{ cuenta.is_active|yesno:"Sí,No" }}</td></tr>
-            {% empty %}<tr><td colspan="6">Sin cuentas configuradas.</td></tr>{% endfor %}
+            {% for cuenta, form_editar in filas %}
+            <tr>
+                <td>{{ cuenta.bank_name }}</td><td>{{ cuenta.country }}</td><td>{{ cuenta.currency }}</td><td>{{ cuenta.account_holder }}</td><td>{{ cuenta.account_number }}</td>
+                <td><span class="badge {% if cuenta.is_active %}badge--verde{% else %}badge--neutro{% endif %}">{{ cuenta.is_active|yesno:"Activa,Inactiva" }}</span></td>
+                <td>
+                    <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-editar-cuenta-{{ cuenta.pk }}">Editar</button>
+                    <form method="post" action="{% url 'billing_admin:bank_account_toggle_active' cuenta.pk %}" class="u-inline">
+                        {% csrf_token %}
+                        {% if cuenta.is_active %}
+                        <button type="submit" class="btn btn--peligro btn--sm">Desactivar</button>
+                        {% else %}
+                        <button type="submit" class="btn btn--contorno btn--sm">Activar</button>
+                        {% endif %}
+                    </form>
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="7">Sin cuentas configuradas.</td></tr>{% endfor %}
         </tbody>
     </table>
+    <p class="tabla-envoltorio__nota">
+        No existe un botón "Eliminar": una cuenta bancaria referenciada por comprobantes o pagos históricos reales no puede
+        borrarse físicamente sin comprometer la integridad de esos registros (protección a nivel de base de datos). Para
+        retirarla de circulación sin perder el historial, usa "Desactivar" — deja de ofrecerse a los tenants para nuevas
+        transferencias, pero los comprobantes ya asociados a ella se conservan intactos.
+    </p>
 </div>
-<div class="tarjeta" style="max-width: 32rem;">
+
+{% for cuenta, form_editar in filas %}
+<dialog class="modal" id="modal-editar-cuenta-{{ cuenta.pk }}">
+    <form method="post" action="{% url 'billing_admin:bank_account_update' cuenta.pk %}">
+        {% csrf_token %}
+        <div class="modal__encabezado">
+            <h2>Editar cuenta bancaria</h2>
+            <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal__cuerpo">
+            {% for field in form_editar %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+        </div>
+        <div class="modal__pie">
+            <button type="button" class="btn btn--contorno" data-modal-close>Cancelar</button>
+            <button type="submit" class="btn btn--primario">Guardar cambios</button>
+        </div>
+    </form>
+</dialog>
+{% endfor %}
+
+<div class="tarjeta u-ancho-32">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Nueva cuenta</h3>
         <form method="post" novalidate>

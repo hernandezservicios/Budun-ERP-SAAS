@@ -16,9 +16,12 @@
         <h1>Cambiar de plan</h1>
         <p class="encabezado-pagina__descripcion">Plan actual: {{ subscription.plan_version.plan.name }} ({{ subscription.plan_version.get_frequency_display }}). El cambio se prorratea por los días restantes del período actual.</p>
     </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_portal:status' %}">← Volver a Mi Facturación</a>
+    </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta u-ancho-32">
     <div class="tarjeta__cuerpo">
         <form method="post" novalidate>
             {% csrf_token %}

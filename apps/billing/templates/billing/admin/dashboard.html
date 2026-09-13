@@ -1,53 +1,90 @@
-{% extends "layout_app.html" %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
 
-{% block title %}Billing SaaS — Dashboard — ERP SaaS{% endblock %}
+{% block title %}Panel — Billing SaaS — Budun{% endblock %}
 
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol>
-        <li><a href="{% url 'dashboard:panel' %}">Panel</a></li>
-        <li aria-current="page">Billing SaaS — Dashboard</li>
-    </ol>
-</nav>
-
 <div class="encabezado-pagina">
     <div>
-        <h1>Billing SaaS</h1>
-        <p class="encabezado-pagina__descripcion">Administración de plataforma — exclusiva del Super Admin.</p>
+        <h1>Panel de Billing SaaS</h1>
+        <p class="encabezado-pagina__descripcion">Resumen de facturación de la plataforma — exclusivo del Super Admin.</p>
     </div>
 </div>
 
-<nav style="margin-bottom: var(--espacio-6);">
-    <a class="btn btn--contorno" href="{% url 'billing_admin:customers_list' %}">Clientes SaaS</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:tenants_list' %}">Tenants</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:plans_list' %}">Planes</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:subscriptions_list' %}">Suscripciones</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:invoices_list' %}">Facturas</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:payments_list' %}">Pagos</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:transfers_queue' %}">Transferencias</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:credit_notes_list' %}">Notas de crédito</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:refunds_list' %}">Reembolsos</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:bank_accounts_list' %}">Cuentas bancarias</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:reports' %}">Reportes</a>
-    <a class="btn btn--contorno" href="{% url 'billing_admin:manual_sale' %}">Venta manual</a>
-    <a class="btn btn--contorno" href="{% url 'billing_platform:status' %}">PayPal (FASE 16)</a>
-</nav>
+<section class="panel-seccion" aria-labelledby="titulo-kpis-ingresos">
+    <div class="kpi-grupo">
+        <h2 class="kpi-grupo__titulo" id="titulo-kpis-ingresos"><span class="kpi__icono" aria-hidden="true">💰</span> Ingresos</h2>
+        <div class="kpi-grid">
+            <div class="kpi kpi--exito">
+                <p class="kpi__etiqueta">Ingresos recurrentes mensuales</p>
+                <p class="kpi__valor">{{ resumen.mrr|monto }}</p>
+                <p class="kpi__ayuda">MRR — suma de todas las suscripciones activas, normalizada a un mes.</p>
+            </div>
+            <div class="kpi kpi--exito">
+                <p class="kpi__etiqueta">Ingresos recurrentes anuales</p>
+                <p class="kpi__valor">{{ resumen.arr|monto }}</p>
+                <p class="kpi__ayuda">ARR — ingresos recurrentes mensuales proyectados a 12 meses.</p>
+            </div>
+            <div class="kpi">
+                <p class="kpi__etiqueta">Ingresos de este mes</p>
+                <p class="kpi__valor">{{ resumen.revenue_this_month|monto }}</p>
+                <p class="kpi__ayuda">Cobrado realmente en el mes en curso (PayPal + transferencias).</p>
+            </div>
+        </div>
+    </div>
+</section>
 
-<section class="panel-seccion" aria-labelledby="titulo-kpis-billing">
-    <h2 class="panel-seccion__titulo" id="titulo-kpis-billing">Resumen</h2>
-    <div class="kpi-grid">
-        <div class="kpi"><p class="kpi__etiqueta">MRR</p><p class="kpi__valor">{{ resumen.mrr }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">ARR</p><p class="kpi__valor">{{ resumen.arr }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Suscripciones activas</p><p class="kpi__valor">{{ resumen.active_subscriptions }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">PAST_DUE</p><p class="kpi__valor">{{ resumen.past_due_subscriptions }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Suspendidas</p><p class="kpi__valor">{{ resumen.suspended_subscriptions }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Altas este mes</p><p class="kpi__valor">{{ resumen.new_signups_this_month }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Cancelaciones este mes</p><p class="kpi__valor">{{ resumen.cancellations_this_month }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Transferencias pendientes</p><p class="kpi__valor">{{ resumen.pending_transfers }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Ingresos del mes</p><p class="kpi__valor">{{ resumen.revenue_this_month }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Reembolsos del mes</p><p class="kpi__valor">{{ resumen.refunds_this_month }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Notas de crédito del mes</p><p class="kpi__valor">{{ resumen.credit_notes_this_month }}</p></div>
-        <div class="kpi"><p class="kpi__etiqueta">Facturas vencidas</p><p class="kpi__valor">{{ resumen.overdue_invoices }}</p></div>
+<section class="panel-seccion" aria-labelledby="titulo-kpis-suscripciones">
+    <div class="kpi-grupo">
+        <h2 class="kpi-grupo__titulo" id="titulo-kpis-suscripciones"><span class="kpi__icono" aria-hidden="true">📈</span> Suscripciones</h2>
+        <div class="kpi-grid">
+            <div class="kpi kpi--exito">
+                <p class="kpi__etiqueta">Suscripciones activas</p>
+                <p class="kpi__valor">{{ resumen.active_subscriptions }}</p>
+            </div>
+            <div class="kpi kpi--exito">
+                <p class="kpi__etiqueta">Nuevas suscripciones este mes</p>
+                <p class="kpi__valor">{{ resumen.new_signups_this_month }}</p>
+            </div>
+            <div class="kpi kpi--advertencia">
+                <p class="kpi__etiqueta">Pagos atrasados</p>
+                <p class="kpi__valor">{{ resumen.past_due_subscriptions }}</p>
+                <p class="kpi__ayuda">Suscripciones en período de gracia.</p>
+            </div>
+            <div class="kpi kpi--peligro">
+                <p class="kpi__etiqueta">Suscripciones suspendidas</p>
+                <p class="kpi__valor">{{ resumen.suspended_subscriptions }}</p>
+            </div>
+            <div class="kpi kpi--peligro">
+                <p class="kpi__etiqueta">Cancelaciones este mes</p>
+                <p class="kpi__valor">{{ resumen.cancellations_this_month }}</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="panel-seccion" aria-labelledby="titulo-kpis-facturacion">
+    <div class="kpi-grupo">
+        <h2 class="kpi-grupo__titulo" id="titulo-kpis-facturacion"><span class="kpi__icono" aria-hidden="true">🧾</span> Facturación</h2>
+        <div class="kpi-grid">
+            <div class="kpi {% if resumen.pending_transfers %}kpi--advertencia{% endif %}">
+                <p class="kpi__etiqueta">Transferencias pendientes</p>
+                <p class="kpi__valor">{{ resumen.pending_transfers }}</p>
+                <p class="kpi__ayuda">Comprobantes de transferencia esperando revisión.</p>
+            </div>
+            <div class="kpi {% if resumen.overdue_invoices %}kpi--peligro{% endif %}">
+                <p class="kpi__etiqueta">Facturas vencidas</p>
+                <p class="kpi__valor">{{ resumen.overdue_invoices }}</p>
+            </div>
+            <div class="kpi">
+                <p class="kpi__etiqueta">Reembolsos de este mes</p>
+                <p class="kpi__valor">{{ resumen.refunds_this_month|monto }}</p>
+            </div>
+            <div class="kpi">
+                <p class="kpi__etiqueta">Notas de crédito de este mes</p>
+                <p class="kpi__valor">{{ resumen.credit_notes_this_month|monto }}</p>
+            </div>
+        </div>
     </div>
 </section>
 {% endblock %}

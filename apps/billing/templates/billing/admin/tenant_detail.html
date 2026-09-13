@@ -1,15 +1,24 @@
-{% extends "layout_app.html" %}
-{% block title %}{{ tenant.name }} — Billing SaaS — ERP SaaS{% endblock %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
+{% block title %}{{ tenant.name }} — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:tenants_list' %}">Tenants</a></li><li aria-current="page">{{ tenant.name }}</li></ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:tenants_list' %}">Tenants</a></li><li aria-current="page">{{ tenant.name }}</li></ol>
 </nav>
-<div class="encabezado-pagina"><h1>{{ tenant.name }}</h1><p class="encabezado-pagina__descripcion">Estado de facturación: <span class="badge">{{ tenant.get_billing_status_display }}</span></p></div>
+<div class="encabezado-pagina">
+    <div>
+        <h1>{{ tenant.name }}</h1>
+        <p class="encabezado-pagina__descripcion">Estado de facturación: <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></p>
+    </div>
+    <div class="encabezado-pagina__acciones">
+        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:tenants_list' %}">← Volver a tenants</a>
+    </div>
+</div>
 
 {% if subscription %}
-<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-6);">
+<div class="tarjeta u-ancho-32 u-mb-6">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge">{{ subscription.get_status_display }}</span></h3>
+        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></h3>
         {% if subscription.current_period_start %}
         <p>Período: {{ subscription.current_period_start }} — {{ subscription.current_period_end }} (próxima cobranza/factura: {{ subscription.current_period_end }})</p>
         {% else %}
@@ -18,17 +27,17 @@
         <p>
             Cobro recurrente PayPal:
             {% if subscription.paypal_subscription_id %}
-            <span class="badge">{{ subscription.paypal_subscription_status|default:"desconocido" }}</span>
+            <code>{{ subscription.paypal_subscription_status|default:"desconocido" }}</code>
             — referencia externa: <code>{{ subscription.paypal_subscription_id }}</code>
             {% else %}
-            <span class="badge">Sin autorización de cobro automático (pago manual)</span>
+            <span class="badge badge--neutro">Sin autorización de cobro automático (pago manual)</span>
             {% endif %}
         </p>
     </div>
 </div>
 {% endif %}
 
-<form method="post" style="margin-bottom: var(--espacio-6);">
+<form method="post" class="u-mb-6">
     {% csrf_token %}
     {% if subscription and subscription.status == "pending" %}
     <button type="submit" class="btn btn--primario" name="accion" value="activar">Activar</button>
@@ -50,7 +59,7 @@
         <thead><tr><th>Número</th><th>Total</th><th>Estado</th><th></th></tr></thead>
         <tbody>
             {% for invoice in invoices %}
-            <tr><td>{{ invoice.number }}</td><td>{{ invoice.total }} {{ invoice.currency }}</td><td><span class="badge">{{ invoice.get_status_display }}</span></td>
+            <tr><td>{{ invoice.number }}</td><td>{{ invoice.total|monto }} {{ invoice.currency }}</td><td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
                 <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td></tr>
             {% empty %}<tr><td colspan="4">Sin facturas.</td></tr>{% endfor %}
         </tbody>

@@ -1,8 +1,9 @@
-{% extends "layout_app.html" %}
-{% block title %}Tenants — Billing SaaS — ERP SaaS{% endblock %}
+{% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
+{% block title %}Tenants — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'dashboard:panel' %}">Panel</a></li><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Tenants</li></ol>
+    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Tenants</li></ol>
 </nav>
 <div class="encabezado-pagina"><h1>Tenants</h1></div>
 <div class="tabla-envoltorio">
@@ -10,9 +11,9 @@
         <thead><tr><th>Nombre</th><th>Estado de facturación</th><th>Activo</th><th></th></tr></thead>
         <tbody>
             {% for tenant in tenants %}
-            <tr><td>{{ tenant.name }}</td><td><span class="badge">{{ tenant.get_billing_status_display }}</span></td><td>{{ tenant.is_active|yesno:"Sí,No" }}</td>
+            <tr><td>{{ tenant.name }}</td><td><span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></td><td>{{ tenant.is_active|yesno:"Sí,No" }}</td>
                 <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:tenant_detail' tenant.pk %}">Ver</a></td></tr>
-            {% endfor %}
+            {% empty %}<tr><td colspan="4">Sin tenants.</td></tr>{% endfor %}
         </tbody>
     </table>
 </div>

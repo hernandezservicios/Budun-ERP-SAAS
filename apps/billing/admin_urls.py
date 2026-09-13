@@ -26,5 +26,7 @@ urlpatterns = [
     path("reembolsos/", views.RefundsListView.as_view(), name="refunds_list"),
     path("reembolsos/<int:pk>/completar/", views.CompleteManualRefundView.as_view(), name="complete_refund"),
     path("cuentas-bancarias/", views.BankAccountsListView.as_view(), name="bank_accounts_list"),
+    path("cuentas-bancarias/<int:pk>/editar/", views.BankAccountUpdateView.as_view(), name="bank_account_update"),
+    path("cuentas-bancarias/<int:pk>/estado/", views.BankAccountToggleActiveView.as_view(), name="bank_account_toggle_active"),
     path("reportes/", views.ReportsView.as_view(), name="reports"),
 ]

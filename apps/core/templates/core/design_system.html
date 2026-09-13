@@ -3,6 +3,7 @@
 {% block title %}Design System — ERP SaaS{% endblock %}
 
 {% block app_content %}
+{% load ui_extras %}
 <nav class="migas" aria-label="Ruta de navegación">
     <ol>
         <li><a href="{% url 'core:home' %}">Inicio</a></li>
@@ -14,11 +15,78 @@
     <div>
         <h1>Design System</h1>
         <p class="encabezado-pagina__descripcion">
-            Página de referencia interna (FASE 5): todos los componentes reutilizables del ERP,
-            con datos de ejemplo. No es una página de negocio.
+            Página de referencia interna (FASE 5, actualizada en la FASE DE REDISEÑO VISUAL SaaS):
+            todos los componentes reutilizables del proyecto, con datos de ejemplo. No es una
+            página de negocio.
         </p>
     </div>
 </div>
+
+<section aria-labelledby="titulo-identidad">
+    <h2 id="titulo-identidad">Dos identidades, un mismo sistema</h2>
+    <p>
+        El ERP tenant (este shell — sidebar gris claro, marca en <code>--color-primario</code>) conserva
+        azul+verde exactamente como en FASE 5: verde sigue siendo <code>.btn--secundario</code> y aparece
+        en módulos como Ventas/Compras. La <strong>plataforma SaaS</strong> (Super Admin — Tenants, Planes,
+        Facturación, PayPal, <code>/plataforma/billing/*</code>) usa un shell separado
+        (<code>templates/layout_saas_admin.html</code>) con sidebar azul profundo y <strong>nunca</strong> usa
+        verde como color estructural — verde queda reservado exclusivamente para éxito. Ningún token existente
+        se eliminó: ambas identidades comparten el mismo <code>base.css</code>/<code>design-system.css</code>.
+    </p>
+    <div class="tabla-envoltorio u-mb-6">
+        <table class="tabla">
+            <thead><tr><th>Token</th><th>Rol</th><th>Dónde se usa</th></tr></thead>
+            <tbody>
+                <tr><td><code>--color-primario</code> (azul-700)</td><td>brand / primary / acción / navegación</td><td>Todo el proyecto</td></tr>
+                <tr><td><code>--color-saas-sidebar-fondo</code> (azul-950)</td><td>brand SaaS (solo plataforma)</td><td><code>.sidebar--saas</code></td></tr>
+                <tr><td><code>--color-secundario</code> (verde-700)</td><td>acción secundaria (legado ERP)</td><td>Ventas, Compras — nunca en vistas SaaS nuevas</td></tr>
+                <tr><td><code>--color-verde-*</code></td><td>success / estado positivo</td><td><code>badge--verde</code>, <code>alerta--exito</code>, <code>kpi--exito</code></td></tr>
+                <tr><td><code>--color-advertencia-*</code></td><td>warning</td><td><code>badge--advertencia</code>, <code>alerta--advertencia</code></td></tr>
+                <tr><td><code>--color-peligro-*</code></td><td>danger</td><td><code>badge--peligro</code>, <code>alerta--peligro</code>, <code>btn--peligro</code></td></tr>
+                <tr><td><code>--gris-*</code></td><td>neutral (superficies, texto secundario)</td><td>Todo el proyecto</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section aria-labelledby="titulo-sidebar-saas">
+    <h2 id="titulo-sidebar-saas">Sidebar SaaS (plataforma)</h2>
+    <p>Vista previa aislada del sidebar de la plataforma — agrupado por sección, fondo azul profundo, nunca mezclado con el sidebar gris del ERP.</p>
+    <aside class="sidebar sidebar--saas sidebar--vista-previa" aria-label="Ejemplo de sidebar SaaS">
+        <a class="sidebar__marca" href="#">Budun SaaS<span class="sidebar__marca__contexto">Plataforma — Super Admin</span></a>
+        <div class="sidebar__grupo">
+            <p class="sidebar__grupo-titulo">Facturación</p>
+            <ul class="sidebar__nav">
+                <li><a class="sidebar__enlace" href="#" aria-current="page">Facturas</a></li>
+                <li><a class="sidebar__enlace" href="#">Pagos</a></li>
+                <li><a class="sidebar__enlace" href="#">Transferencias</a></li>
+            </ul>
+        </div>
+    </aside>
+</section>
+
+<section aria-labelledby="titulo-estados">
+    <h2 id="titulo-estados">Estados con color semántico</h2>
+    <p>
+        El filtro <code>{% templatetag openvariable %} codigo|estado_badge {% templatetag closevariable %}</code>
+        (<code>apps/core/templatetags/ui_extras.py</code>) traduce el código crudo de cualquier estado de
+        Billing (<code>Tenant.billing_status</code>, <code>Subscription.status</code>,
+        <code>SaaSInvoice.status</code>, etc.) a una variante de color — nunca un estado interno se muestra
+        sin color ni sin texto humano (<code>get_..._display</code> ya da el texto en español).
+    </p>
+    <div class="tabla-envoltorio u-mb-6">
+        <table class="tabla">
+            <thead><tr><th>Variante</th><th>Significado</th><th>Ejemplos de código</th></tr></thead>
+            <tbody>
+                <tr><td><span class="badge badge--verde">Verde</span></td><td>vigente / exitoso</td><td><code>active</code>, <code>paid</code>, <code>approved</code></td></tr>
+                <tr><td><span class="badge badge--advertencia">Ámbar</span></td><td>requiere atención, en curso</td><td><code>past_due</code>, <code>pending</code>, <code>submitted</code></td></tr>
+                <tr><td><span class="badge badge--peligro">Rojo</span></td><td>terminal negativo</td><td><code>suspended</code>, <code>cancelled</code>, <code>rejected</code></td></tr>
+                <tr><td><span class="badge badge--azul">Azul</span></td><td>informativo</td><td><code>refunded</code></td></tr>
+                <tr><td><span class="badge badge--neutro">Gris</span></td><td>administrativo/histórico</td><td><code>draft</code>, <code>void</code>, <code>reversed</code></td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
 
 <section aria-labelledby="titulo-botones">
     <h2 id="titulo-botones">Botones</h2>

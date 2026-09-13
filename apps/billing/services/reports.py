@@ -129,7 +129,7 @@ def get_subscriptions_report():
         "rows": [
             {
                 "tenant": str(s.tenant), "plan": s.plan_version.plan.name, "frecuencia": s.plan_version.get_frequency_display(),
-                "estado": s.get_status_display(), "periodo_fin": s.current_period_end,
+                "estado": s.get_status_display(), "estado_codigo": s.status, "periodo_fin": s.current_period_end,
             }
             for s in Subscription.all_objects.select_related("tenant", "plan_version__plan").order_by("-created_at")
         ],
