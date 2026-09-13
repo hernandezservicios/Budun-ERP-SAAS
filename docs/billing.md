@@ -80,7 +80,22 @@ de verdad.
 - **`BillingRefund`**: registro de NEGOCIO "este pago SaaS fue
   reembolsado" — nombre deliberado (no "Refund" a secas) para nunca
   confundirse con `apps.sales.Refund` ni con el seguimiento interno de
-  refund de `PayPalTransaction` (FASE 16).
+  refund de `PayPalTransaction` (FASE 16). El reembolso automático vía
+  API de PayPal (`request_refund`, Orders API v2) solo aplica a pagos
+  con `PayPalTransaction` asociado (checkout de pago ÚNICO) — un pago
+  de **cobro recurrente** (`SaaSPayment.method=PAYPAL` sin
+  `paypal_transaction`, cargado vía Subscriptions API/webhook) nunca
+  tiene una captura de Orders API que reembolsar por esa vía. Para ese
+  caso, `RefundsListView`/`complete_manual_refund` (mismo camino que un
+  reembolso de transferencia bancaria) ya permiten al Super Admin
+  marcarlo completado tras procesarlo manualmente (p. ej. desde el
+  panel de PayPal) — auditado y confirmado correcto en FASE DE
+  CORRECCIÓN 5; automatizarlo requeriría un método nuevo del provider
+  (el endpoint de reembolso de la API de Pagos clásica sobre el ID de
+  cobro individual, `POST /v1/payments/sale/{sale_id}/refund`) que
+  todavía no existe en este proyecto — pendiente real, documentado
+  como decisión arquitectónica a evaluar explícitamente si el negocio
+  lo requiere, nunca construido sin esa autorización.
 - **`BankAccount`** (plataforma, NO tenant-scoped) / **`PaymentProof`**
   (tenant-scoped, archivo en `media-private/`, mismo mecanismo que
   `apps.customers` — nombre de archivo generado, nunca público, nunca
@@ -90,7 +105,19 @@ de verdad.
   implementación real en FASE 20 (ver `docs/backup-recovery.md`).
 - **`Coupon`**: estructura simple (sin tabla de redención separada,
   `times_redeemed` incrementado atómicamente) — "no crear un motor
-  innecesariamente complejo si el proyecto no lo necesita".
+  innecesariamente complejo si el proyecto no lo necesita". Vigencia
+  real = `is_active` (interruptor manual) + `valid_from`/`valid_until`
+  (fecha) — `coupons.is_coupon_currently_valid`, reutilizada tanto por
+  `generate_invoice_for_subscription` (cada renovación) como por
+  `services.reports._mrr_de_suscripcion` (MRR/ARR reportado). **Hallazgo
+  real de FASE DE CORRECCIÓN 5**: antes de esta corrección,
+  `generate_invoice_for_subscription` solo comprobaba `is_active` —
+  nunca las fechas — así que un cupón por tiempo limitado (p. ej. una
+  promoción de 3 meses) seguía descontando indefinidamente en cada
+  renovación posterior a su `valid_until`, y el MRR/ARR del dashboard de
+  Super Admin tampoco descontaba el cupón (usaba siempre el precio de
+  lista), sobreestimando el ingreso recurrente real de cualquier
+  suscripción con un cupón activo.
 - **`BillingPolicy`**: fila única — días de gracia, días para
   suspender, días de anticipación de factura — NUNCA hardcodeados en
   código (sección 31 de la fase).
@@ -293,6 +320,12 @@ tabla nueva:
 - **Refund convertido a crédito**: `convert_payment_to_credit` reversa
   las asignaciones activas del pago — el monto vuelve a quedar sin
   aplicar (saldo a favor), sin crear ningún modelo nuevo.
+- **Notificaciones (FASE DE CORRECCIÓN 5)**: emitir una nota de crédito
+  (`credits.issue_credit_note`) y completar un reembolso (`refunds.
+  _complete_refund`, ambos caminos — manual y vía PayPal) ahora avisan
+  por correo al tenant — antes de esta corrección, ninguno de los dos
+  eventos notificaba nada; el tenant solo se enteraba si entraba por su
+  cuenta a revisar su Portal de Facturación.
 
 ## Cambio de plan y prorrateo
 
@@ -430,6 +463,23 @@ reutilizan todos los tenants que la contraten):
    `CANCELLED`/`EXPIRED`) nunca genera una factura nueva — se registra
    como pago sin aplicar (nunca se pierde, mismo criterio que un
    sobrepago) y se audita como anomalía para revisión humana.
+
+   **Hallazgo real de FASE DE CORRECCIÓN 5** (el más severo de esa
+   corrección): `CancelSubscriptionView` (Portal del tenant) y
+   `TenantDetailView.post()` (Super Admin, acción "cancelar") llamaban
+   a `subscriptions.cancel_subscription` DIRECTO — ninguna de las dos
+   superficies reales de cancelación pasaba nunca por
+   `recurring.cancel_recurring_subscription`, así que cancelar una
+   suscripción con cobro recurrente de PayPal ya autorizado marcaba
+   `Subscription.status=CANCELLED` en Budun mientras PayPal seguía
+   cobrando automáticamente cada período — la función coordinada
+   existía y estaba probada desde FASE DE CORRECCIÓN 2C, pero ningún
+   camino real de la aplicación la invocaba jamás (solo los tests
+   unitarios la llamaban directo). Corregido apuntando ambas vistas a
+   `cancel_recurring_subscription`, que es un superset seguro de
+   `cancel_subscription` (si la suscripción nunca autorizó cobro
+   recurrente, se comporta exactamente igual) — nunca hace falta
+   distinguir el caso en el llamador.
 
 **Transferencia bancaria** sigue siendo, deliberadamente, un método
 distinto y NO automático — nunca hay una autorización de cobro

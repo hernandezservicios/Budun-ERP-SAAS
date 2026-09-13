@@ -811,6 +811,119 @@ comunes/Prevención.
   relevante — nunca asumir transitividad sin probarla ("si A quedó
   validado contra B, y B contra C, ¿alguien comparó A contra C?").
 
+## GATE LOCAL SAAS PATTERNS (Corrección 5)
+
+Agregado durante "FASE DE CORRECCIÓN 5 — Gate Local SaaS" (ver
+`KNOWN_ISSUES.md` #135, `DECISIONS.md` #115). Tres patrones más,
+encontrados auditando las INTERACCIONES entre subsistemas ya
+individualmente correctos — el tipo de gap que solo aparece al revisar
+cómo dos piezas correctas se combinan, nunca auditando cada una por
+separado.
+
+### 1. Cross-Surface Service Reuse for Coordinated Actions
+
+- **Problema**: una operación de negocio "peligrosa si se hace a
+  medias" (cancelar un pago recurrente externo Y el registro interno,
+  en este orden) se resuelve UNA vez con la función correcta — pero
+  nada garantiza que TODAS las superficies reales que exponen esa
+  acción (Portal del tenant, Panel de Super Admin, un futuro API)
+  terminen usándola.
+- **Patrón**: la función coordinada (`recurring.cancel_recurring_
+  subscription`) se diseña como un SUPERSET seguro de la función simple
+  (`subscriptions.cancel_subscription`) — cuando la condición externa
+  no aplica (nunca hubo cobro recurrente autorizado), se comporta
+  IDÉNTICO a la simple. Esto permite que CUALQUIER llamador use siempre
+  la coordinada sin necesitar lógica condicional propia para decidir
+  cuál usar.
+- **Solución real de esta corrección**: `recurring.cancel_recurring_
+  subscription` ya existía, ya estaba probada, y ya seguía el patrón
+  "Safe Cancellation" documentado desde la Corrección 3 — pero NINGUNA
+  vista real (`CancelSubscriptionView` del Portal, `TenantDetailView`
+  del Super Admin) la llamaba jamás; ambas llamaban a la función simple
+  directo. El código "correcto" existía; el código REALMENTE
+  ALCANZABLE desde la UI no lo usaba.
+- **Reglas**: cuando una acción tiene una versión "coordinada" y una
+  "simple", la simple debe quedar como un detalle de implementación
+  INTERNO de la coordinada — nunca expuesta como una alternativa que un
+  llamador nuevo pueda elegir por error.
+- **Errores comunes**: auditar la función coordinada, confirmar que es
+  correcta, y detenerse ahí — sin verificar `grep`-eando quién la llama
+  realmente en producción (vistas, comandos, señales), no solo en
+  pruebas unitarias.
+- **Prevención**: para toda función que coordina múltiples sistemas
+  (interno + externo), buscar EXPLÍCITAMENTE cada punto de entrada real
+  de la acción que representa (cada vista, cada botón) y confirmar que
+  TODOS pasan por la versión coordinada — nunca asumirlo por la
+  existencia de la función ni por su cobertura de tests unitarios.
+
+### 2. Coupon/Discount Expiration Enforcement
+
+- **Problema**: una condición de vigencia con MÚLTIPLES componentes
+  (un interruptor manual + un rango de fechas) puede validarse
+  completa en el punto de ENTRADA (la primera vez que algo se aplica) y
+  solo parcialmente en cada punto de RENOVACIÓN posterior.
+- **Patrón**: una única función booleana de vigencia (`coupons.
+  is_coupon_currently_valid`) que evalúa TODOS los componentes de la
+  condición — reutilizada tanto en la generación de cada factura
+  (`generate_invoice_for_subscription`) como en cualquier reporte que
+  necesite saber si un descuento sigue aplicando (`reports.
+  _mrr_de_suscripcion`).
+- **Solución real de esta corrección**: antes, `generate_invoice_for_
+  subscription` solo comprobaba `coupon.is_active` (el interruptor
+  manual) en cada renovación — nunca `valid_from`/`valid_until` (las
+  fechas) — así que un cupón de duración limitada seguía descontando
+  indefinidamente después de su fecha de vencimiento real.
+  `_mrr_de_suscripcion` tampoco aplicaba ningún descuento nunca,
+  sobreestimando el ingreso recurrente reportado.
+- **Reglas**: si una condición de vigencia tiene N componentes,
+  CUALQUIER punto del código que decida "¿esto sigue vigente?" debe
+  evaluar los N, nunca un subconjunto — y esa evaluación vive en UNA
+  función reutilizada, nunca reimplementada en cada punto de uso.
+- **Errores comunes**: validar la vigencia completa solo en el
+  formulario/acción de aplicación INICIAL (donde el usuario ve un
+  mensaje de error si falla) y olvidar que un valor ya persistido
+  (`Subscription.coupon`) sigue leyéndose en cada ciclo posterior sin
+  pasar por esa misma validación.
+- **Prevención**: para cualquier campo que "engancha" una condición de
+  negocio a un registro persistente (un cupón, una promoción, un
+  descuento), preguntar explícitamente "¿en qué otros puntos del código
+  se lee este campo después del momento en que se aplicó, y esos puntos
+  revalidan la condición completa?".
+
+### 3. Financial Event Notification Completeness
+
+- **Problema**: un dominio de Billing con varios tipos de eventos
+  financieros (pago, factura, nota de crédito, reembolso, cambio de
+  estado) puede tener notificaciones bien construidas para ALGUNOS
+  eventos y ninguna para otros, sin que ningún test lo detecte (las
+  pruebas verifican el efecto en la base de datos, no necesariamente
+  que se avisó a alguien).
+- **Patrón**: una función de notificación por cada evento financiero
+  que afecta directamente el dinero/saldo del tenant — nunca asumir que
+  "ya se nota en el Portal" sustituye un aviso proactivo, sobre todo
+  para eventos que el tenant no está mirando activamente cuando ocurren
+  (una nota de crédito emitida, un reembolso completado).
+- **Solución real de esta corrección**: `notify_credit_note_issued`/
+  `notify_refund_completed` (nuevas, mismo patrón `_enviar`/
+  `_tenant_owner_email` que el resto de `notifications.py`) — antes de
+  esta corrección, emitir una nota de crédito o completar un reembolso
+  no notificaba absolutamente nada al tenant.
+- **Reglas**: toda función de servicio que representa un evento
+  financiero real (dinero entra, sale, se acredita, se revierte) evalúa
+  explícitamente "¿el tenant necesita enterarse de esto ahora, o le
+  basta con verlo la próxima vez que entre?" — la respuesta correcta
+  para "recibiste dinero/crédito/reembolso" casi siempre es notificar.
+- **Errores comunes**: dar por completo un dominio de notificaciones
+  revisando solo la lista de funciones YA escritas en `notifications.py`
+  — sin comparar esa lista contra el catálogo REAL de eventos
+  financieros del dominio (`apps.billing.models`) para encontrar los
+  que nunca tuvieron una función dedicada.
+- **Prevención**: mantener (aunque sea informalmente, en la
+  documentación) una tabla de "evento financiero → notificación
+  correspondiente" y revisarla explícitamente cada vez que se audita el
+  dominio — nunca inferir cobertura completa de la sola existencia del
+  módulo `notifications.py`.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -896,6 +1009,18 @@ las decisiones de esta familia de correcciones:
   lado de PayPal. Se descartó agregar un nuevo estado `PENDING_REVIEW`
   explícito: `SUBMITTED`/`UNDER_REVIEW` ya cubren exactamente ese
   significado, y el enum ya lo distingue de los estados terminales.
+- **#115** (FASE DE CORRECCIÓN 5 — Gate Local SaaS, ver `KNOWN_ISSUES.md`
+  #135): `cancel_recurring_subscription` se convirtió en el ÚNICO
+  camino real de cancelación desde las vistas (Portal y Super Admin) —
+  se descartó mantener `cancel_subscription` como opción alternativa en
+  algún caso, precisamente porque es un superset seguro y no hay ningún
+  escenario real donde la versión simple sea preferible desde una
+  vista. El reembolso automático de un cobro recurrente de PayPal vía
+  API se deja explícitamente SIN construir (requeriría un método nuevo
+  del provider, `POST /v1/payments/sale/{sale_id}/refund` de la API de
+  Pagos clásica) — el camino manual ya existente (`complete_manual_
+  refund`) cubre el caso real sin necesitar esa decisión arquitectónica
+  todavía; documentado como pendiente real, no como omisión silenciosa.
 
 ## LESSONS LEARNED
 
@@ -1187,3 +1312,45 @@ las decisiones de esta familia de correcciones:
   recalcular ya no queda ninguna factura con saldo real, el pago
   simplemente queda sin aplicar (saldo a favor), nunca rompe la
   operación del llamador.
+- **Síntoma** (el hallazgo más severo de "FASE DE CORRECCIÓN 5 — Gate
+  Local SaaS"): un tenant con cobro recurrente de PayPal ya autorizado
+  que cancelaba su suscripción — desde su propio Portal, o desde el
+  Panel de Super Admin — seguía siendo cobrado automáticamente cada
+  período, pese a que `Subscription.status` ya mostraba `CANCELLED` en
+  Budun. → **Causa real**: `CancelSubscriptionView` (Portal) y
+  `TenantDetailView.post()` (Super Admin, acción "cancelar") llamaban a
+  `subscriptions.cancel_subscription` directo — la función coordinada
+  `recurring.cancel_recurring_subscription` (que SÍ cancela también el
+  lado de PayPal) ya existía y ya estaba probada desde FASE DE
+  CORRECCIÓN 2C, pero ningún camino real de la aplicación la invocaba
+  jamás, solo los tests unitarios la llamaban de forma directa. →
+  **Corrección**: ambas vistas ahora llaman a `cancel_recurring_
+  subscription`, que se comporta exactamente igual que la función
+  simple cuando nunca hubo autorización de PayPal — nunca hace falta
+  distinguir el caso en el llamador.
+- **Síntoma**: un cupón de duración limitada (p. ej. una promoción de 3
+  meses) seguía descontando indefinidamente en cada renovación
+  posterior a su fecha de vencimiento real, y el MRR/ARR del dashboard
+  de Super Admin nunca reflejaba ningún descuento por cupón. → **Causa
+  real**: `generate_invoice_for_subscription` solo comprobaba `coupon.
+  is_active` (un interruptor manual) en cada renovación — nunca
+  `valid_from`/`valid_until` (las fechas reales de vigencia); `reports.
+  _mrr_de_suscripcion` nunca aplicaba ningún descuento de cupón en
+  absoluto, usando siempre el precio de lista. → **Corrección**: nueva
+  `coupons.is_coupon_currently_valid` (fecha + interruptor manual),
+  reutilizada por ambos puntos.
+- **Síntoma**: emitir una nota de crédito o completar un reembolso
+  nunca notificaba nada al tenant — se enteraba solo si entraba por su
+  cuenta a revisar su Portal de Facturación. → **Causa real**:
+  `notifications.py` nunca tuvo funciones dedicadas para estos dos
+  eventos financieros, a diferencia de pago/factura/PAST_DUE/
+  suspensión/reactivación/renovación, que ya estaban cubiertos. →
+  **Corrección**: `notify_credit_note_issued`/`notify_refund_completed`,
+  mismo patrón que el resto del módulo.
+- **Síntoma**: emitir una nota de crédito para un `SaaSCustomer` sin
+  ningún `Tenant` asociado todavía producía un `IntegrityError` sin
+  manejar (500) — el formulario nunca lo impedía. → **Causa real**:
+  `IssueCreditNoteView` pasaba `tenant=customer.tenants.first()`
+  (potencialmente `None`) directo a `issue_credit_note`, cuyo campo
+  `tenant` no es nulo (`CreditNote` hereda `TenantScopedModel`). →
+  **Corrección**: guard explícito en la vista con un mensaje claro.
