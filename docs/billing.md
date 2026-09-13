@@ -217,18 +217,66 @@ factura de la cual tomar un snapshot.
 archivo con `apps.customers.file_validation`, genera una referencia
 única, marca el tenant `PENDING_PAYMENT` — nunca activa nada) →
 `approve_payment_proof` (Super Admin, crea el `SaaSPayment` CONFIRMED,
-lo aplica automáticamente, activa suscripción/tenant) o
-`reject_payment_proof` (nunca activa). Validaciones agregadas en la
-Corrección de Gate Local #2 (antes ausentes): rechaza un comprobante
-para una factura que ya no está `OPEN`/`PARTIALLY_PAID` (pagada,
-anulada o en borrador), rechaza un segundo comprobante mientras uno
-sigue `SUBMITTED`/`UNDER_REVIEW` para la misma factura, exige un monto
-declarado positivo, y exige que la moneda declarada coincida con la de
-la cuenta bancaria receptora seleccionada. Notificaciones por correo
-(`apps.billing.services.notifications`, reutiliza `EMAIL_BACKEND`
-existente desde FASE 4 — no existe todavía ningún centro de
-notificaciones in-app en el proyecto, construir uno sería un
-subsistema nuevo fuera del alcance de esta fase).
+lo aplica automáticamente, activa/reactiva suscripción/tenant según
+corresponda) o `reject_payment_proof` (nunca activa). Estados reales de
+`PaymentProof.Status`: `SUBMITTED`/`UNDER_REVIEW` (equivalentes de
+"pendiente de revisión", ambos aceptan aprobar/rechazar),
+`APPROVED`/`REJECTED` (terminales), `REVERSED` (reservado, sin
+disparador todavía). `PENDING` existe en el enum como valor por
+defecto del campo pero ningún flujo real lo produce (`submit_payment_
+proof` siempre crea directamente en `SUBMITTED`) — documentado, nunca
+"limpiado" innecesariamente vía migración.
+
+Validaciones (servicio, nunca solo el formulario): rechaza un
+comprobante para una factura que ya no está `OPEN`/`PARTIALLY_PAID`
+(pagada, anulada o en borrador), rechaza un segundo comprobante
+mientras uno sigue `SUBMITTED`/`UNDER_REVIEW` para la misma factura,
+exige un monto declarado positivo, exige que la cuenta receptora siga
+activa (defensa en profundidad — el formulario ya solo lista cuentas
+activas), y exige que la moneda declarada coincida EXACTAMENTE con la
+de la cuenta receptora Y con la de la factura (FASE DE CORRECCIÓN 4,
+sección 9 — sin motor de tipos de cambio, `docs/currency.md`, nunca una
+conversión implícita; mismo criterio reforzado en el núcleo del ledger,
+`apps.billing.services.payments.apply_payment_to_invoices`/
+`auto_apply_payment`, que nunca aplican un pago a una factura en otra
+moneda). Notificaciones por correo (`apps.billing.services.
+notifications`, reutiliza `EMAIL_BACKEND` existente desde FASE 4 — no
+existe todavía ningún centro de notificaciones in-app en el proyecto,
+construir uno sería un subsistema nuevo fuera del alcance de esta
+fase).
+
+**Consultar el comprobante (FASE DE CORRECCIÓN 4, hallazgo real)**: antes
+de esta corrección, NINGUNA vista (ni Super Admin ni tenant) podía ver
+el contenido real del archivo subido — `proof_detail.html` solo
+mostraba el nombre de archivo como texto plano, así que aprobar/
+rechazar una transferencia se decidía completamente a ciegas. Nuevas
+vistas protegidas `apps.billing.admin_views.ProofDownloadView`
+(`/plataforma/billing/admin/transferencias/<id>/descargar/`, exclusivo
+Super Admin, cualquier tenant) y `apps.billing.portal_views.
+PaymentProofDownloadView` (`/facturacion/comprobantes/<id>/descargar/`,
+filtrada por `tenant=request.tenant`) sirven el archivo vía
+`FileResponse` (mismo patrón que `apps.customers.
+_ContactDocumentDownloadView`) — nunca por `MEDIA_URL` estático
+(`PaymentProof.file` vive en `media-private/`).
+
+**Historial del tenant (FASE DE CORRECCIÓN 4)**: `/facturacion/` ahora
+muestra "Historial de comprobantes de transferencia" (factura, fecha,
+monto, moneda, estado, motivo de rechazo cuando corresponde, enlace de
+descarga) — antes de esta corrección, un comprobante rechazado solo se
+comunicaba por correo, sin ninguna vista consultable en el propio
+Portal.
+
+**Concurrencia (FASE DE CORRECCIÓN 4, dos gaps reales corregidos)**:
+(1) `submit_payment_proof` ahora bloquea (`select_for_update()`) la
+propia `SaaSInvoice` antes de comprobar "sin comprobante pendiente" —
+antes, dos envíos concurrentes del mismo formulario podían crear dos
+`PaymentProof` `SUBMITTED` para la misma factura (la comprobación era
+un `.exists()` sin ningún lock). (2) `reject_payment_proof` ahora
+rechaza rechazar un comprobante que ya está `APPROVED` — antes no
+existía ese guard, así que la carrera real "aprobar + rechazar el mismo
+comprobante a la vez" podía dejar un `PaymentProof` `REJECTED` con un
+`SaaSPayment`/`Allocation`/`Subscription ACTIVE` ya generados por la
+aprobación, un estado contradictorio.
 
 ## Anticipo, saldo a favor, sobrepago
 
@@ -582,7 +630,13 @@ Separación estricta Platform Super Admin / Tenant User verificada con
 tests: un tenant normal recibe 403 en cualquier vista
 `/plataforma/billing/admin/...`; el Portal siempre filtra por
 `request.tenant` (nunca un ID enviado por el cliente); los archivos de
-comprobante nunca se sirven públicamente. `all_objects` explícito en
+comprobante nunca se sirven públicamente — desde FASE DE CORRECCIÓN 4
+sí son consultables (antes, ni siquiera el Super Admin podía verlos),
+pero exclusivamente vía `FileResponse` a través de
+`ProofDownloadView`/`PaymentProofDownloadView`, cada una con su propio
+filtro de pertenencia (Super Admin: cualquier tenant; Portal: solo
+`tenant=request.tenant`), nunca por `MEDIA_URL` estático. `all_objects`
+explícito en
 TODO acceso a relación inversa sobre un modelo `TenantScopedModel`
 dentro de `apps.billing.services` — nunca `instancia.relacion_inversa`
 (que usa el manager tenant-scoped por defecto, dependiente de un
@@ -607,11 +661,34 @@ suscripción (una gana), dos solicitudes de reembolso simultáneas sobre
 el mismo pago (nunca comprometen juntas más de lo disponible — FASE DE
 CORRECCIÓN 3), dos emisiones simultáneas de la factura de cargo por
 prorrateo de un mismo upgrade (nunca duplica, mismo
-`UniqueConstraint(subscription, period_start)`). Idempotencia real
-(constraints de base de datos, nunca solo "el código no se llama dos
-veces") en: generación de factura por período, factura de cargo por
-prorrateo, aprobación de comprobante (`select_for_update` sobre
-`PaymentProof`), renovación recurrente, reactivación.
+`UniqueConstraint(subscription, period_start)`), dos envíos
+simultáneos del mismo comprobante de transferencia (uno gana — FASE DE
+CORRECCIÓN 4), aprobación y rechazo simultáneos del mismo comprobante
+(una única transición consistente, nunca un estado contradictorio),
+y una transferencia aprobándose a la vez que un pago de PayPal se
+captura sobre la MISMA factura (ambos convergen sin duplicar ni
+romperse mutuamente — ver más abajo). Idempotencia real (constraints
+de base de datos, nunca solo "el código no se llama dos veces") en:
+generación de factura por período, factura de cargo por prorrateo,
+aprobación de comprobante (`select_for_update` sobre `PaymentProof`
+y, desde FASE DE CORRECCIÓN 4, sobre la propia `SaaSInvoice` antes de
+aceptar un comprobante nuevo), renovación recurrente, reactivación.
+
+**Hallazgo real de FASE DE CORRECCIÓN 4**: `auto_apply_payment`
+calculaba su plan de asignación leyendo el saldo de cada factura SIN
+lock, tomando el lock real recién dentro de `apply_payment_to_invoices`
+— si OTRO método de pago independiente cubría la misma factura entre
+esas dos lecturas (el caso real: una transferencia aprobándose a la
+vez que se captura un pago de PayPal sobre la misma factura, en hilos
+distintos), `apply_payment_to_invoices` lanzaba `InvalidPaymentOperation`
+sin atrapar — y como `auto_apply_payment` se invoca típicamente desde
+dentro de la transacción de OTRA operación (una captura de PayPal, un
+webhook), esa excepción revertía la transacción COMPLETA del llamador,
+deshaciendo incluso una captura de PayPal ya exitosa. Corregido con un
+reintento acotado (una sola vez, recalculando con datos frescos) — si
+tras recalcular ya no queda ninguna factura con saldo real, el pago
+simplemente queda sin aplicar (saldo a favor), nunca rompe la
+operación del llamador.
 
 ## Reportes
 

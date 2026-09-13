@@ -538,6 +538,279 @@ reintentos si lo ofrece, nunca un scheduler propio en paralelo.
   del proveedor, confirmando que el estado cancelado nunca se revierte
   y que el dinero, si llega de todas formas, nunca se pierde.
 
+## BANK TRANSFER & PAYMENT PROOF PATTERNS
+
+Agregado durante "FASE DE CORRECCIÓN 4 — Transferencias, Comprobantes,
+Verificación y Notificaciones" (ver `KNOWN_ISSUES.md` #134,
+`DECISIONS.md` #114, `docs/billing.md` sección "Transferencia
+bancaria"). Ocho patrones reutilizables para cualquier flujo futuro de
+"pago manual verificado por un humano" (no solo transferencia bancaria
+— el mismo esqueleto sirve para cheques, depósitos, criptomonedas
+verificadas manualmente, etc.), cada uno con
+Problema/Arquitectura/Solución/Estados/Seguridad/Concurrencia/Errores
+comunes/Prevención.
+
+### 1. Bank Transfer Payment Pattern
+
+- **Problema**: un método de pago sin API de confirmación automática
+  (nadie nos "avisa" que el dinero llegó) necesita un mecanismo
+  completo de evidencia → verificación humana → aplicación, sin
+  convertirse en una segunda fuente de verdad de Billing.
+- **Arquitectura**: `PaymentProof` (evidencia declarada por el tenant)
+  es un documento INTERMEDIO, nunca el pago en sí — el pago real
+  (`SaaSPayment`) solo existe después de que un humano (Super Admin)
+  confirma la evidencia. `BankAccount` (cuentas de PLATAFORMA, no de
+  tenant) es el catálogo de destinos válidos.
+- **Solución**: `submit_payment_proof` (tenant) → `approve_payment_
+  proof`/`reject_payment_proof` (Super Admin) — dos servicios,
+  responsabilidades separadas, ninguno duplica al otro.
+- **Estados**: ver "Payment Proof Verification" abajo.
+- **Seguridad**: el tenant nunca puede aprobarse a sí mismo (acción
+  exclusiva `is_superuser`); el archivo nunca se sirve públicamente.
+- **Concurrencia**: ver "Payment Verification Idempotency" abajo.
+- **Errores comunes**: activar la suscripción/tenant directamente
+  dentro de `submit_payment_proof` "para simplificar" — nunca: la
+  activación es SIEMPRE una consecuencia de la APROBACIÓN, jamás de la
+  sola existencia de un archivo subido.
+- **Prevención**: un test explícito que sube un comprobante y verifica
+  que la suscripción/tenant NO cambiaron de estado todavía.
+
+### 2. Payment Proof Verification
+
+- **Problema**: un comprobante de pago necesita un ciclo de vida propio
+  (recibido → en revisión → resuelto) sin inventar un estado nuevo por
+  cada matiz.
+- **Arquitectura**: `PaymentProof.Status` — `SUBMITTED`/`UNDER_REVIEW`
+  (dos sabores de "pendiente de revisión", ambos aceptan aprobar/
+  rechazar — no hay necesidad de un tercer estado `PENDING_REVIEW`
+  genérico), `APPROVED`/`REJECTED` (terminales), `REVERSED` (reservado
+  para una reversión administrativa futura, sin disparador todavía).
+- **Solución**: el Super Admin ve TODOS los metadatos declarados
+  (monto, moneda, cuenta, banco de origen, referencia) Y el archivo
+  real (ver "Private Financial Uploads") antes de decidir — nunca una
+  decisión basada solo en metadatos sin poder verificar el documento.
+- **Estados**: un campo `status` único de `TextChoices` — nunca un
+  booleano `is_approved` + otro `is_rejected` (que permitiría el
+  estado imposible "ambos true").
+- **Seguridad**: `reviewed_by`/`reviewed_at` siempre se registran —
+  nunca una aprobación/rechazo anónimo.
+- **Concurrencia**: ver "Payment Verification Idempotency".
+- **Errores comunes**: mostrar solo el nombre del archivo como texto
+  plano sin ningún enlace para verlo — exactamente el hallazgo real de
+  esta corrección (ver COMMON FAILURES abajo): el Super Admin decidía
+  a ciegas.
+- **Prevención**: un test que verifica que la vista de revisión
+  Y la de descarga del archivo responden 200 con el contenido real.
+
+### 3. Approval Workflow
+
+- **Problema**: "aprobar" un comprobante en realidad dispara una cadena
+  completa de efectos (pago → asignación → factura → suscripción →
+  tenant) — hacerlo todo en la vista, o en el modelo, dispersaría esa
+  lógica y la haría imposible de reutilizar/probar de forma aislada.
+- **Arquitectura**: un único servicio (`approve_payment_proof`)
+  orquesta TODA la cadena en una transacción — la vista solo llama al
+  servicio y traduce el resultado/excepción a un mensaje.
+- **Solución**: `PaymentProof` → `SaaSPayment` (CONFIRMED) →
+  `auto_apply_payment` (ledger) → `_recompute_invoice_status` → (si
+  corresponde) `activate_subscription`/`reactivate_subscription` →
+  `Tenant.billing_status`. Cada paso reutiliza servicios YA existentes
+  de otros dominios de Billing — nunca reimplementados aquí.
+- **Estados**: el guard de entrada exige `SUBMITTED`/`UNDER_REVIEW` —
+  aprobar algo ya `APPROVED` es un no-op idempotente; aprobar algo
+  `REJECTED` es un error explícito (nunca "resucita" un rechazo).
+- **Seguridad**: exclusivo `is_superuser`, nunca el catálogo de
+  `apps.permissions` (que es tenant-scoped, no aplica a un recurso de
+  plataforma).
+- **Concurrencia**: `select_for_update()` sobre el propio
+  `PaymentProof` serializa cualquier operación concurrente sobre el
+  mismo comprobante (aprobar dos veces, aprobar+rechazar a la vez).
+- **Errores comunes**: no envolver la llamada al servicio en un
+  `try/except` en la vista — una transición inválida (comprobante ya
+  resuelto por otra pestaña/hilo) produce un 500 sin manejar en vez de
+  un mensaje claro (hallazgo real de esta corrección, ver COMMON
+  FAILURES).
+- **Prevención**: un test HTTP de extremo a extremo (no solo a nivel de
+  servicio) que verifica el mensaje de error, no un código 500.
+
+### 4. Rejection + Resubmission
+
+- **Problema**: rechazar un pago no puede ser un callejón sin salida —
+  el tenant necesita poder corregir y reenviar, pero el rechazo
+  original nunca debe desaparecer ni volverse ambiguo con el reenvío.
+- **Arquitectura**: cada envío es un `PaymentProof` NUEVO — nunca se
+  edita ni se reutiliza el rechazado. El guard de "un comprobante
+  pendiente a la vez" solo mira `SUBMITTED`/`UNDER_REVIEW`, así que un
+  `REJECTED` deja de "bloquear" la factura automáticamente.
+- **Solución**: `reject_payment_proof` guarda `rejection_reason`
+  (texto libre, nunca un código cerrado que limite la explicación real)
+  y notifica al tenant por correo con el motivo — la única vía real por
+  la que el tenant se entera hoy (sin centro de notificaciones in-app).
+- **Estados**: `REJECTED` es terminal para ESE `PaymentProof` — nunca
+  transiciona a otro estado; el "reenvío" siempre crea una fila
+  distinta con su propia máquina de estados desde cero.
+- **Seguridad**: el motivo de rechazo nunca contiene información
+  sensible de otro tenant (texto libre escrito por el propio Super
+  Admin sobre ESTE comprobante).
+- **Concurrencia**: dos reenvíos simultáneos para la misma factura se
+  serializan por el mismo lock de "Payment Verification Idempotency".
+- **Errores comunes**: permitir "reactivar"/"editar" un comprobante
+  rechazado en vez de exigir uno nuevo — reintroduce ambigüedad sobre
+  qué evidencia corresponde a qué intento de pago real.
+- **Prevención**: un test que rechaza, reenvía, y verifica que EXISTEN
+  DOS filas (`REJECTED` + `SUBMITTED`), nunca una sola editada.
+
+### 5. Private Financial Uploads
+
+- **Problema**: un comprobante de transferencia es un documento
+  financiero sensible (puede contener datos bancarios del tenant) —
+  nunca debe quedar accesible por URL adivinable ni servido como
+  contenido estático público.
+- **Arquitectura**: `MEDIA_ROOT="media-private/"` (fuera del árbol
+  servido por `MEDIA_URL`), nombre de archivo en disco generado
+  (`uuid4().hex`, nunca el original ni el ID secuencial), servido
+  EXCLUSIVAMENTE por una vista protegida (`FileResponse`) que verifica
+  pertenencia (tenant o `is_superuser`) antes de abrir el archivo —
+  mismo patrón ya establecido por `apps.customers.
+  _ContactDocumentDownloadView` desde FASE 9, reutilizado sin
+  reinventar nada.
+- **Solución**: dos vistas de descarga (una por tenant, filtrada por
+  `tenant=request.tenant`; una para Super Admin, `all_objects` sin
+  filtro de tenant) — nunca una sola vista con lógica condicional de
+  permisos mezclada, mismo criterio de separación Portal/Super Admin
+  de todo el proyecto.
+- **Estados**: N/A (el archivo no tiene estados propios, solo el
+  `PaymentProof` que lo referencia).
+- **Seguridad**: validación de archivo (extensión + firma binaria +
+  tamaño + lista negra, ver `apps.customers.file_validation`) ANTES de
+  guardar nada; el nombre original solo se usa para MOSTRARSE (nunca
+  para la ruta real en disco) — defensa contra path traversal.
+- **Concurrencia**: N/A (lectura de archivo, sin escritura concurrente).
+- **Errores comunes**: implementar el modelo/servicio de subida
+  completo y olvidar la vista de DESCARGA — exactamente el hallazgo
+  real más grave de esta corrección: `PaymentProof` funcionaba
+  perfectamente de punta a punta, pero nadie podía ver el archivo
+  jamás.
+- **Prevención**: para todo modelo con un `FileField`/`ImageField`
+  sensible, verificar explícitamente que existe una vista de descarga
+  protegida — nunca asumir que "subir" implica "también se puede ver".
+
+### 6. Payment Verification Idempotency
+
+- **Problema**: verificar un pago manual involucra al menos dos
+  actores humanos potencialmente concurrentes (el tenant reenviando,
+  el Super Admin aprobando/rechazando) — sin las garantías correctas,
+  un doble clic o dos pestañas pueden duplicar dinero o corromper el
+  estado.
+- **Arquitectura**: `select_for_update()` sobre la fila que la
+  operación en curso NECESITA bloquear — la `SaaSInvoice` para "puedo
+  aceptar un comprobante nuevo" (constraint entre FILAS distintas que
+  todavía no existen, el clásico problema de "insert race"), el propio
+  `PaymentProof` para "puedo transicionar este comprobante".
+- **Solución**: nunca un `.exists()` desnudo como única defensa contra
+  un duplicado — siempre dentro de un `transaction.atomic()` con el
+  lock correcto tomado ANTES de la comprobación.
+- **Estados**: cada guard de transición re-verifica el estado ACTUAL
+  (post-lock) antes de escribir — un duplicado nunca es un error
+  fatal, es un no-op idempotente o un rechazo claro, según corresponda.
+- **Seguridad**: N/A (esto es integridad de datos, no autorización).
+- **Concurrencia**: verificado con `TransactionTestCase` + hilos reales
+  y `threading.Barrier` — nunca solo argumentado, siempre reproducido.
+- **Errores comunes** (tres hallazgos reales de esta corrección): (1) el
+  guard de "sin comprobante pendiente" en `submit_payment_proof` era un
+  `.exists()` sin ningún lock — dos envíos concurrentes podían pasar la
+  comprobación antes de que cualquiera comprometiera su fila. (2)
+  `reject_payment_proof` no tenía ningún guard contra un comprobante ya
+  `APPROVED` — la carrera "aprobar + rechazar a la vez" podía dejar un
+  estado contradictorio. (3) `auto_apply_payment` calculaba su plan de
+  asignación leyendo el saldo de cada factura SIN lock, y solo tomaba el
+  lock real dentro de `apply_payment_to_invoices` — si otro método de
+  pago totalmente independiente (transferencia aprobada vs. captura de
+  PayPal sobre la MISMA factura, en hilos distintos) cubría la factura
+  entre esas dos lecturas, `apply_payment_to_invoices` lanzaba
+  `InvalidPaymentOperation` SIN atrapar, y como `auto_apply_payment`
+  suele llamarse desde dentro de la transacción de OTRA operación (una
+  captura de PayPal, un webhook), esa excepción revertía la transacción
+  COMPLETA del llamador — deshaciendo incluso una captura de PayPal ya
+  exitosa, solo porque una transferencia ganó la carrera por cubrir la
+  misma factura.
+- **Prevención**: para cada acción que "crea algo si no existe ya"
+  sobre un recurso compartido, preguntar explícitamente "¿qué fila
+  bloqueo para que dos intentos concurrentes se serialicen?" antes de
+  escribir el `.exists()`/`.filter()` — nunca asumir que alcanza con
+  comprobar antes de crear. Para una función que planifica una acción
+  leyendo datos SIN lock y luego los aplica CON lock en otra función,
+  preguntar explícitamente "¿qué pasa si el plan quedó obsoleto para
+  cuando se aplica?" — la respuesta correcta casi nunca es "propagar la
+  excepción tal cual" cuando la función existe precisamente para hacer
+  "lo mejor posible" (best-effort) en nombre de OTRO llamador que no
+  tiene por qué fallar por una carrera ajena y legítima.
+
+### 7. Manual Payment → Billing State Transition
+
+- **Problema**: un pago confirmado MANUALMENTE (por un humano, no por
+  un webhook de proveedor) necesita disparar exactamente la misma
+  cadena de transiciones que un pago automático — sin un camino
+  paralelo que pueda divergir del automático con el tiempo.
+- **Arquitectura**: `approve_payment_proof` reutiliza LITERALMENTE los
+  mismos servicios que el camino de PayPal (`record_payment`/
+  `auto_apply_payment`/`activate_subscription`/`reactivate_
+  subscription`) — la única diferencia real es QUIÉN confirma el
+  pago (un humano vs. un webhook), nunca QUÉ pasa después.
+- **Solución**: la distinción `ACTIVATE != REACTIVATE` (ver "Activation
+  vs Reactivation" arriba) se respeta IGUAL en el camino manual que en
+  los automáticos — el estado de PARTIDA de la suscripción decide qué
+  función llamar, nunca el método de pago usado.
+- **Estados**: `PENDING_PAYMENT → proof submitted → SUBMITTED →
+  APPROVED → Payment → Allocation → Invoice PAID → Subscription ACTIVE
+  → Tenant ACTIVE` es la única cadena válida — nunca "upload →
+  ACTIVE" directo.
+- **Seguridad**: la confirmación manual exige `is_superuser`
+  explícitamente — nunca se automatiza "para simplificar" (la
+  verificación humana ES el control de seguridad de este método de
+  pago, al no existir una API de confirmación del banco).
+- **Concurrencia**: ver "Payment Verification Idempotency".
+- **Errores comunes**: crear un camino de activación "simplificado"
+  específico para pagos manuales que se salte pasos que el camino
+  automático sí hace (p. ej. no restaurar el período al reactivar).
+- **Prevención**: cada vez que se agrega un nuevo camino de
+  confirmación de pago, auditar explícitamente contra los YA
+  existentes — mismo criterio ya aplicado en "Activation vs
+  Reactivation".
+
+### 8. Multi-Currency Payment Validation
+
+- **Problema**: sin un motor de conversión de divisas, aceptar un pago
+  en una moneda y aplicarlo a una obligación en otra es, en el mejor
+  caso, un error de cálculo silencioso, y en el peor, dinero perdido o
+  inventado.
+- **Arquitectura**: TRES puntos deben coincidir exactamente para un
+  pago por transferencia — la moneda de la factura, la de la cuenta
+  bancaria receptora, y la declarada por el tenant en el comprobante —
+  nunca una conversión implícita entre ellas (mismo criterio ya
+  establecido para Cuentas por Cobrar del ERP,
+  `apps.sales.services.allocate_payment`, `docs/currency.md`).
+- **Solución**: la validación vive en DOS capas — el punto de entrada
+  (`submit_payment_proof`, falla rápido, antes de crear ningún
+  registro) Y el núcleo del ledger (`apply_payment_to_invoices`/
+  `auto_apply_payment`, nunca confía solo en que el punto de entrada
+  ya validó) — defensa en profundidad real, no redundancia accidental.
+- **Estados**: N/A (esto es una validación de datos, no una máquina de
+  estados).
+- **Seguridad**: N/A.
+- **Concurrencia**: N/A (validación de datos, no de escritura
+  concurrente).
+- **Errores comunes**: validar la moneda solo contra la cuenta
+  bancaria y asumir que eso implica que también coincide con la
+  factura — hallazgo real de esta corrección: antes, una cuenta EUR
+  real podía "pagar" una factura USD sin ningún rechazo, porque nunca
+  se comparaban esas dos monedas entre sí directamente.
+- **Prevención**: cuando existan N campos de moneda relacionados
+  (factura, comprobante, cuenta, pago...), listarlos TODOS
+  explícitamente y verificar que el código realmente compara cada par
+  relevante — nunca asumir transitividad sin probarla ("si A quedó
+  validado contra B, y B contra C, ¿alguien comparó A contra C?").
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -608,6 +881,21 @@ las decisiones de esta familia de correcciones:
   dejarlo manual equivalía a nunca aplicarla). `EXPIRED` se deja sin
   disparador explícitamente — existe en el enum pero ningún flujo real
   lo pide todavía.
+- **#114**: la moneda de una transferencia debe coincidir EXACTAMENTE
+  con la factura Y con la cuenta receptora (nunca conversión implícita,
+  mismo criterio ya usado en Cuentas por Cobrar del ERP) — validado en
+  dos capas (punto de entrada + núcleo del ledger), nunca solo una. Las
+  dos nuevas vistas de descarga de comprobante (Portal/Super Admin) se
+  implementaron como vistas SEPARADAS, nunca una sola con lógica
+  condicional de permisos — mismo criterio de separación Portal/Super
+  Admin ya aplicado en todo `apps.billing`. El guard de "sin
+  comprobante pendiente" se movió detrás de un `select_for_update()`
+  sobre la `SaaSInvoice` (no sobre `PaymentProof`, que todavía no
+  existe en el momento de la comprobación) — el mismo patrón ya usado
+  por `create_checkout_for_invoice` para el problema equivalente del
+  lado de PayPal. Se descartó agregar un nuevo estado `PENDING_REVIEW`
+  explícito: `SUBMITTED`/`UNDER_REVIEW` ya cubren exactamente ese
+  significado, y el enum ya lo distingue de los estados terminales.
 
 ## LESSONS LEARNED
 
@@ -675,6 +963,23 @@ las decisiones de esta familia de correcciones:
   permite llegar aquí, y qué garantías adicionales (auditoría,
   notificación, restauración de estado relacionado) solo tiene la
   función más específica?".
+- Un modelo puede estar "completo" en su servicio de escritura (crear,
+  aprobar, rechazar, todas las validaciones correctas) y aun así ser
+  COMPLETAMENTE inútil en la práctica si nadie construyó la vía de
+  LECTURA correspondiente — un `FileField` sensible sin ninguna vista
+  de descarga es la forma más severa de este gap, porque el flujo
+  "funciona" de punta a punta en las pruebas (que llaman al servicio
+  directamente) sin que nadie note que la UI real nunca expuso el
+  archivo. Antes de dar por completo un dominio con archivos adjuntos,
+  preguntar explícitamente "¿cómo se ve/descarga esto después de
+  subirlo?", nunca asumir que "se guarda" implica "se puede consultar".
+- Un guard de "no permitir un duplicado" implementado como
+  `.filter(...).exists()` sin ningún `select_for_update()` es
+  correcto para el caso SECUENCIAL (dos llamadas una tras otra) pero
+  tiene una ventana de carrera real para el caso CONCURRENTE (dos
+  llamadas literalmente al mismo tiempo) — los tests secuenciales
+  (`TestCase`, sin hilos) nunca la detectan; hace falta una prueba de
+  concurrencia real (`TransactionTestCase` + hilos) para exponerla.
 
 ## COMMON FAILURES
 
@@ -818,3 +1123,67 @@ las decisiones de esta familia de correcciones:
   veían igualmente "0 ya reembolsado" uno después del otro. →
   **Corrección**: sumar también `PENDING` al cálculo del monto ya
   comprometido.
+- **Síntoma** (hallazgo más grave de "FASE DE CORRECCIÓN 4 —
+  Transferencias, Comprobantes, Verificación y Notificaciones"): el
+  Super Admin no tenía NINGUNA forma de ver el contenido real de un
+  comprobante de transferencia subido — la pantalla de revisión solo
+  mostraba el nombre de archivo como texto plano, sin ningún enlace. →
+  **Causa real**: `proof_detail.html` se construyó mostrando metadatos
+  (monto, moneda, cuenta, referencia) pero nunca se agregó una vista de
+  descarga del archivo — el modelo/servicio de subida estaba completo,
+  la vía de lectura del archivo real simplemente nunca se construyó. →
+  **Corrección**: dos vistas nuevas de descarga protegida (`FileResponse`,
+  mismo patrón que `apps.customers._ContactDocumentDownloadView`) — una
+  para el Super Admin (cualquier tenant) y otra para el propio tenant
+  (filtrada por `tenant=request.tenant`), enlazadas desde ambas
+  pantallas de revisión/historial.
+- **Síntoma**: una transferencia declarada en una moneda que coincidía
+  con la cuenta bancaria receptora, pero NO con la factura que
+  supuestamente pagaba, se aceptaba sin ningún rechazo. → **Causa
+  real**: `submit_payment_proof` solo comparaba la moneda declarada
+  contra la de la cuenta receptora — nunca contra la de la factura. →
+  **Corrección**: validación adicional exigiendo que las tres
+  coincidan exactamente, reforzada también en el núcleo del ledger
+  (`apply_payment_to_invoices`/`auto_apply_payment`, que ahora nunca
+  aplican un pago a una factura en otra moneda, sin importar por qué
+  camino haya entrado ese pago al sistema).
+- **Síntoma**: dos envíos concurrentes del mismo formulario de subida
+  de comprobante (doble clic, dos pestañas) podían crear DOS
+  `PaymentProof` `SUBMITTED` para la misma factura, pese a que una
+  prueba secuencial ya verificaba que un segundo envío se rechazaba. →
+  **Causa real**: el guard de "sin comprobante pendiente" era un
+  `.filter(...).exists()` sin ningún `select_for_update()` — dos
+  transacciones concurrentes podían pasar esa comprobación ANTES de que
+  cualquiera comprometiera su propia fila. → **Corrección**:
+  `select_for_update()` sobre la `SaaSInvoice` (mismo patrón ya usado
+  por `create_checkout_for_invoice`) antes de comprobar/crear.
+- **Síntoma**: rechazar un comprobante que YA había sido aprobado (una
+  carrera real entre dos acciones del Super Admin, o dos pestañas)
+  dejaba un estado contradictorio — `PaymentProof` `REJECTED` con un
+  `SaaSPayment` `CONFIRMED`/`Subscription ACTIVE` ya generados por la
+  aprobación previa, sin revertir nada. → **Causa real**:
+  `reject_payment_proof` solo comprobaba "¿ya está `REJECTED`?" (no-op
+  idempotente) pero nunca "¿ya está `APPROVED`?" (transición inválida).
+  → **Corrección**: guard explícito que rechaza intentar rechazar
+  cualquier estado que no sea `SUBMITTED`/`UNDER_REVIEW`, con su propio
+  mensaje de error atrapado en la vista (nunca un 500 sin manejar).
+- **Síntoma** (encontrado por la propia prueba de concurrencia nueva
+  escrita para probar que "transferencia + PayPal sobre la misma
+  factura" converge de forma segura, no por auditoría de código): una
+  captura de PayPal exitosa quedaba REVERTIDA por completo (el
+  `PayPalTransaction` volvía a su estado previo, ni siquiera quedaba
+  `CONFIRMED`) cuando, al mismo tiempo, una transferencia distinta
+  terminaba de cubrir la MISMA factura primero. → **Causa real**:
+  `auto_apply_payment` calculaba cuánto aplicar a cada factura leyendo
+  el saldo SIN ningún lock, y recién tomaba el lock real dentro de
+  `apply_payment_to_invoices` — si la factura ya estaba cubierta para
+  cuando ese lock se obtenía, `apply_payment_to_invoices` lanzaba
+  `InvalidPaymentOperation` sin que nadie la atrapara, y esa excepción
+  se propagaba hacia arriba a través de la señal `payment_confirmed`
+  hasta la propia transacción de `capture_checkout`, revirtiéndola
+  entera. → **Corrección**: `auto_apply_payment` ahora recalcula su
+  plan de asignación UNA vez más si la primera aplicación falla por
+  esta razón (reintento acotado, nunca indefinido) — si tras
+  recalcular ya no queda ninguna factura con saldo real, el pago
+  simplemente queda sin aplicar (saldo a favor), nunca rompe la
+  operación del llamador.
