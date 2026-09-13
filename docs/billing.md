@@ -332,9 +332,24 @@ tabla nueva:
 `apps.billing.services.subscriptions.change_plan` — el período NO
 cambia, solo la `PlanVersion` referenciada. Prorrateo lineal por DÍA
 (`calculate_proration`, fórmula explícita y documentada, ver
-`DECISIONS.md`): `valor_diario = precio / días_del_período`; `crédito
-= valor_diario_actual × días_restantes`; `cargo = valor_diario_nuevo ×
-días_restantes`; `neto = cargo − crédito`.
+`DECISIONS.md`): `valor_diario = precio / días_NOMINALES_de_la_
+frecuencia_del_propio_plan` (30 para mensual, 365 para anual —
+`_DIAS_POR_FRECUENCIA`); `crédito = valor_diario_actual × días_
+restantes`; `cargo = valor_diario_nuevo × días_restantes`; `neto =
+cargo − crédito`. `días_restantes` siempre se calcula sobre el período
+VIGENTE que se abandona (el que se está cambiando), nunca sobre el
+nuevo.
+
+**Hallazgo real de FASE DE CORRECCIÓN 6**: antes de esta corrección,
+AMBOS precios (actual y nuevo) se dividían entre los días del período
+VIGENTE — correcto únicamente cuando el plan anterior y el nuevo
+comparten la MISMA frecuencia. Un cambio que ADEMÁS cambia de
+periodicidad (mensual→anual o anual→mensual — que `ChangePlanForm`/
+`portal_change_plan.html` permiten sin ninguna restricción de
+frecuencia) comparaba un precio ANUAL contra un divisor de ~30 días (o
+viceversa), un error de magnitud real (~12×), nunca solo de redondeo.
+Corregido dividiendo cada precio entre los días NOMINALES de SU PROPIA
+frecuencia.
 
 - **Neto negativo (downgrade)**: emite una `CreditNote` automáticamente
   (`credit_services.issue_credit_note`).
@@ -356,6 +371,21 @@ AUTOMÁTICAMENTE a la próxima factura que se genere para esa suscripción
 antes de FASE DE CORRECCIÓN 3, `apply_credit_note_to_invoice` existía
 pero solo se ejercitaba desde pruebas; ninguna vista ni proceso
 automático la invocaba nunca.
+
+**Hallazgo real de FASE DE CORRECCIÓN 6**: `auto_apply_available_
+credit_notes` calculaba su plan de aplicación leyendo el saldo de la
+nota/factura SIN lock (el lock real solo se toma dentro de
+`apply_credit_note_to_invoice`) — mismo problema, y misma solución, que
+el ya corregido en `payments.auto_apply_payment` (Corrección 4): si dos
+facturas de la MISMA suscripción se generan casi a la vez (el cron de
+renovación y una reconciliación reactiva disparándose juntos), ambas
+podían intentar barrer la MISMA nota de crédito a la vez —
+`InvalidCreditOperation` se propagaba sin atrapar y podía romper la
+generación de la factura que disparó el barrido. Corregido con un
+`try/except` que, al fallar una aplicación puntual por la carrera,
+refresca el saldo REAL disponible antes de seguir con la siguiente
+factura — nunca deja el crédito "atascado" más de lo estrictamente
+necesario, y nunca rompe la operación del llamador.
 
 ## PAST_DUE / Suspensión / Reactivación
 
@@ -717,7 +747,9 @@ CORRECCIÓN 4), aprobación y rechazo simultáneos del mismo comprobante
 (una única transición consistente, nunca un estado contradictorio),
 y una transferencia aprobándose a la vez que un pago de PayPal se
 captura sobre la MISMA factura (ambos convergen sin duplicar ni
-romperse mutuamente — ver más abajo). Idempotencia real (constraints
+romperse mutuamente — ver más abajo), y dos barridos simultáneos de
+`auto_apply_available_credit_notes` sobre la misma nota de crédito
+(FASE DE CORRECCIÓN 6 — ninguno rompe, ninguno sobre-aplica). Idempotencia real (constraints
 de base de datos, nunca solo "el código no se llama dos veces") en:
 generación de factura por período, factura de cargo por prorrateo,
 aprobación de comprobante (`select_for_update` sobre `PaymentProof`

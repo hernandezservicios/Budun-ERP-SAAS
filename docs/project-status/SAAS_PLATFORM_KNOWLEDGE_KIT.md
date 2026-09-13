@@ -924,6 +924,114 @@ separado.
   dominio — nunca inferir cobertura completa de la sola existencia del
   módulo `notifications.py`.
 
+## FINAL GATE LOCAL PATTERNS (Corrección 6 — última auditoría antes del cierre)
+
+Agregado durante "FASE DE CORRECCIÓN 6 — Gate Local SaaS, última
+auditoría funcional antes del cierre integral" (ver `KNOWN_ISSUES.md`
+#136, `DECISIONS.md` #116). Dos patrones más, cada uno documentado con
+el campo adicional pedido explícitamente para esta corrección —
+**Aplicabilidad a futuros proyectos** — porque este Kit debe servir
+como base para construir otros SaaS (incluidas plataformas de
+préstamos u otros sistemas verticales), no solo para este proyecto.
+
+### 1. Multi-Frequency Proration Normalization
+
+- **Problema**: prorratear un cambio entre dos "planes" que se
+  facturan en frecuencias distintas (mensual vs. anual, semanal vs.
+  mensual, etc.) exige comparar dos precios que NO son directamente
+  comparables entre sí sin normalizarlos primero a una unidad común.
+- **Causa raíz**: la fórmula original normalizaba dividiendo AMBOS
+  precios entre los días del período VIGENTE (el del plan que se
+  abandona) — una simplificación válida solo cuando ambos planes
+  comparten esa misma frecuencia; nadie se preguntó explícitamente
+  "¿y si el formulario permite además cambiar la frecuencia al mismo
+  tiempo?" al escribir la fórmula original.
+- **Patrón**: cada precio se normaliza dividiéndolo entre los días
+  NOMINALES de SU PROPIA frecuencia (no los del período vigente, no los
+  de la frecuencia del otro plan) — el mismo catálogo de "días por
+  frecuencia" que ya existe en el sistema para calcular períodos
+  (nunca una segunda tabla de conversión).
+- **Solución**: `valor_diario_X = precio_X / dias_nominales(frecuencia_X)`
+  para cada uno de los dos precios por separado, ANTES de multiplicar
+  por los días restantes del período que se abandona.
+- **Reglas**: cualquier fórmula que compare dos "tarifas periódicas"
+  debe declarar explícitamente en qué UNIDAD normaliza cada una, y esa
+  unidad debe derivarse de la frecuencia de CADA tarifa individualmente
+  — nunca asumir que ambas comparten la misma frecuencia solo porque
+  eso fue cierto en los casos probados hasta ahora.
+- **Errores comunes**: probar la fórmula solo con pares del mismo tipo
+  (mensual→mensual, anual→anual) porque son los casos "obvios" de
+  upgrade/downgrade, y nunca ejercitar el caso donde el formulario real
+  permite ADEMÁS cambiar la frecuencia — el bug pasó 3 correcciones
+  completas sin detectarse porque ningún test cruzaba frecuencias.
+- **Prevención**: para cualquier formulario de "cambiar de X a otro X"
+  donde X tiene un atributo variable (aquí, frecuencia), preguntar
+  explícitamente "¿el formulario permite que ese atributo también
+  cambie a la vez?", y si la respuesta es sí, escribir al menos un test
+  que ejercite ese cambio combinado con un valor numérico fácil de
+  verificar a mano.
+- **Aplicabilidad a futuros proyectos**: cualquier dominio con
+  "planes"/"tarifas"/"tasas" periódicas en más de una frecuencia
+  (una plataforma de préstamos con cuotas semanales/quincenales/
+  mensuales, un SaaS con planes mensuales/anuales/trimestrales) debe
+  aplicar este mismo principio de normalización — nunca comparar dos
+  tarifas periódicas directamente sin normalizar cada una a su propia
+  unidad de tiempo nominal primero.
+
+### 2. Best-Effort Sweep Resilience Under Concurrency
+
+- **Problema**: una función de "barrido automático" (aplicar lo que se
+  pueda de un recurso compartido — saldo de un pago, saldo de una nota
+  de crédito — contra una lista de obligaciones abiertas) calcula su
+  plan de acción leyendo datos SIN lock, y solo toma el lock real en el
+  momento de aplicar cada paso individual — dejando una ventana real
+  donde el plan calculado puede quedar obsoleto antes de ejecutarse.
+- **Causa raíz**: el mismo patrón (leer sin lock para planificar, lockear
+  solo para ejecutar) se implementó DOS veces en este proyecto
+  (`payments.auto_apply_payment` en la Corrección 4,
+  `credits.auto_apply_available_credit_notes` en la Corrección 3) sin
+  que la primera corrección hiciera evidente que la segunda tenía
+  exactamente el mismo problema — cada función se auditó de forma
+  aislada, nunca comparándola contra otras funciones con la misma FORMA
+  estructural.
+- **Patrón**: toda función de "barrido best-effort" que se invoca desde
+  DENTRO de la transacción de otra operación (una captura de pago, la
+  generación de una factura) debe considerarse una función que "nunca
+  debe fallar de forma que rompa a su llamador" — cualquier excepción
+  de una carrera real en un paso individual se atrapa y el barrido
+  continúa (o termina limpio), nunca se propaga hacia arriba.
+- **Solución**: `try/except` alrededor de cada aplicación individual
+  dentro del bucle del barrido, capturando específicamente la excepción
+  de "ya no hay suficiente saldo/cupo" (nunca un `except Exception`
+  genérico) — y, cuando sea barato hacerlo, refrescar el dato que causó
+  el fallo (releer el saldo real) antes de continuar con el siguiente
+  paso, para que el resto del barrido en la misma llamada aproveche lo
+  que de verdad quede disponible.
+- **Reglas**: un barrido best-effort NUNCA deja que el recurso se
+  pierda — si un paso falla por una carrera, el recurso permanece
+  disponible para el PRÓXIMO barrido (nunca se descarta, nunca se
+  marca como "ya intentado y fallido" de forma permanente).
+- **Errores comunes**: corregir esta clase de bug una vez y no volver a
+  revisar el resto del código en busca de la MISMA forma estructural
+  (leer-sin-lock-para-planificar + lockear-solo-para-ejecutar) en otras
+  funciones — exactamente lo que pasó aquí: la Corrección 4 arregló
+  `auto_apply_payment` sin que nadie buscara su gemelo estructural
+  (`auto_apply_available_credit_notes`) hasta la Corrección 6.
+- **Prevención**: cuando se corrija un bug de concurrencia con una
+  FORMA reconocible (plan sin lock + ejecución con lock, en un bucle),
+  buscar explícitamente (`grep` por la firma del problema: bucles que
+  llaman a una función con su propio `transaction.atomic()`/
+  `select_for_update()` interno) otras funciones del mismo dominio con
+  la misma forma, en la MISMA corrección — nunca asumir que el problema
+  era exclusivo de la función recién arreglada.
+- **Aplicabilidad a futuros proyectos**: cualquier sistema financiero
+  con más de un "ledger de saldo disponible" que se reparte
+  automáticamente contra obligaciones abiertas (pagos anticipados,
+  créditos, garantías, líneas de crédito parcialmente desembolsadas en
+  una plataforma de préstamos) tendrá, casi con certeza, más de una
+  función con esta misma forma — auditarlas TODAS juntas la primera vez
+  que se encuentra una, en vez de una por una en correcciones separadas.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -1021,6 +1129,19 @@ las decisiones de esta familia de correcciones:
   Pagos clásica) — el camino manual ya existente (`complete_manual_
   refund`) cubre el caso real sin necesitar esa decisión arquitectónica
   todavía; documentado como pendiente real, no como omisión silenciosa.
+- **#116** (FASE DE CORRECCIÓN 6 — Gate Local SaaS, última auditoría
+  antes del cierre, ver `KNOWN_ISSUES.md` #136): el prorrateo normaliza
+  cada precio con los días nominales de SU PROPIA frecuencia
+  (reutilizando `_DIAS_POR_FRECUENCIA`) en vez de "convertir" un precio
+  a un equivalente en la otra frecuencia antes de comparar — misma
+  matemática, más simple de leer y de auditar. `días_restantes` se
+  mantiene sobre el período vigente que se abandona, nunca sobre el
+  nuevo. La corrección de concurrencia de `auto_apply_available_
+  credit_notes` reutiliza el mismo criterio ya decidido para
+  `auto_apply_payment` (Corrección 4) — capturar y continuar, nunca
+  propagar — con la mejora de refrescar el saldo disponible tras cada
+  fallo para que el resto del barrido en la misma llamada aproveche lo
+  que de verdad queda.
 
 ## LESSONS LEARNED
 
@@ -1105,6 +1226,17 @@ las decisiones de esta familia de correcciones:
   llamadas literalmente al mismo tiempo) — los tests secuenciales
   (`TestCase`, sin hilos) nunca la detectan; hace falta una prueba de
   concurrencia real (`TransactionTestCase` + hilos) para exponerla.
+- Un formulario que ofrece "elegir cualquier valor vigente de X" (aquí,
+  cualquier `PlanVersion` actual) hereda implícitamente TODAS las
+  combinaciones posibles del atributo variable de X (aquí, la
+  frecuencia) — una fórmula escrita pensando solo en el caso "obvio"
+  (mismo tipo de X) puede llevar 3 correcciones completas sin que nadie
+  note que también acepta silenciosamente el caso cruzado.
+- Cuando se corrige un bug de concurrencia con una FORMA reconocible
+  (planificar sin lock + ejecutar con lock, dentro de un bucle), esa
+  MISMA forma puede repetirse en otras funciones del mismo dominio que
+  nadie volvió a mirar — corregir una instancia no garantiza que se
+  haya buscado su gemela estructural en el resto del código.
 
 ## COMMON FAILURES
 
@@ -1354,3 +1486,29 @@ las decisiones de esta familia de correcciones:
   (potencialmente `None`) directo a `issue_credit_note`, cuyo campo
   `tenant` no es nulo (`CreditNote` hereda `TenantScopedModel`). →
   **Corrección**: guard explícito en la vista con un mensaje claro.
+- **Síntoma** (el hallazgo financiero más significativo de "FASE DE
+  CORRECCIÓN 6 — Gate Local SaaS"): cambiar de un plan mensual a uno
+  anual (o viceversa) a mitad de período producía un cargo o crédito
+  varias veces mayor al correcto (~12× de magnitud). → **Causa real**:
+  `calculate_proration` dividía TANTO el precio actual COMO el precio
+  nuevo entre los días del período VIGENTE (p. ej. 30, mensual) sin
+  importar que el plan NUEVO tuviera una frecuencia distinta (365 días,
+  anual) — `ChangePlanForm`/`portal_change_plan.html` permiten elegir
+  cualquier `PlanVersion` vigente sin ninguna restricción de
+  frecuencia, así que el caso era completamente alcanzable desde el
+  propio Portal del tenant. → **Corrección**: cada precio se divide
+  entre los días NOMINALES de SU PROPIA frecuencia
+  (`_DIAS_POR_FRECUENCIA`), nunca entre los días del período vigente.
+- **Síntoma** (encontrado por la propia prueba de concurrencia nueva
+  escrita para el hallazgo anterior, no por auditoría de código): dos
+  facturas de la MISMA suscripción generándose casi a la vez (el cron
+  de renovación y una reconciliación reactiva de PayPal disparándose
+  juntos) podían hacer que la generación de una de ellas fallara con
+  una excepción sin atrapar. → **Causa real**: `credits.auto_apply_
+  available_credit_notes` tenía EXACTAMENTE el mismo problema
+  estructural que `payments.auto_apply_payment` (ya corregido en la
+  Corrección 4) — calculaba su plan de aplicación sin lock y solo
+  tomaba el lock real dentro de `apply_credit_note_to_invoice`; nadie
+  había buscado esta gemela estructural al corregir la primera. →
+  **Corrección**: mismo `try/except` ya aplicado a `auto_apply_payment`,
+  con la mejora de refrescar el saldo disponible tras cada fallo.
