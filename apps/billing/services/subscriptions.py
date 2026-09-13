@@ -17,6 +17,7 @@ from apps.audit.models import AuditLog
 from apps.core.pricing import get_plan
 
 from ..models import PlanVersion, Subscription
+from . import notifications
 from . import tenants as tenant_services
 from ._saas_audit import audit_event
 
@@ -160,7 +161,14 @@ def mark_past_due(subscription, *, user=None):
         tenant_services.mark_tenant_past_due(subscription.tenant, user=user)
         audit_event(subscription.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="subscription", object_id=subscription.pk,
                     after={"status": "past_due"})
-        return subscription
+    # FASE DE CORRECCIÓN 3 (Lifecycle integral): `notifications.py` ya
+    # tenía esta función construida desde FASE 17 pero NUNCA se llamaba
+    # desde ninguna transición real — exactamente el caso que la propia
+    # corrección pide detectar ("no asumir que porque existe una función
+    # el flujo está conectado"). Fuera de la transacción: una notificación
+    # nunca debe poder retrasar/bloquear el commit de la transición real.
+    notifications.notify_subscription_past_due(subscription)
+    return subscription
 
 
 def suspend_subscription(subscription, *, user=None, reason=""):
@@ -173,20 +181,46 @@ def suspend_subscription(subscription, *, user=None, reason=""):
         tenant_services.suspend_tenant(subscription.tenant, user=user, reason=reason)
         audit_event(subscription.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="subscription", object_id=subscription.pk,
                     after={"status": "suspended"}, reason=reason)
-        return subscription
+    notifications.notify_subscription_suspended(subscription)
+    return subscription
 
 
-def reactivate_subscription(subscription, *, user=None):
+def reactivate_subscription(subscription, *, user=None, change_date=None):
+    """Reactivación de una `Subscription` `SUSPENDED`/`PAST_DUE` — NUNCA
+    reutiliza `activate_subscription`/`activate_pending_subscription`
+    (exclusivas de la activación INICIAL desde `PENDING`, ver su propio
+    docstring): `ACTIVATE != REACTIVATE` es una distinción de negocio
+    real, no solo cosmética (auditoría/notificación distintas, y desde
+    esta corrección también el manejo del período — ver abajo).
+
+    FASE DE CORRECCIÓN 3 (Lifecycle integral, sección "SUSPENDED"): si
+    el período vigente ya terminó mientras la suscripción estaba
+    suspendida/en mora (`current_period_end` en el pasado), reactivar
+    le da un período NUEVO a partir de HOY — nunca reanuda un período ya
+    vencido, que generaría de inmediato una factura de renovación
+    retroactiva por fechas en las que el tenant no pudo operar (ver
+    `DECISIONS.md` #113 para la política completa). Si el período
+    vigente todavía no terminó (reactivación rápida, antes de que
+    venciera), se conserva intacto — nunca se le "regala" un período
+    adicional que no corresponde."""
     with transaction.atomic():
         subscription = Subscription.all_objects.select_for_update().get(pk=subscription.pk)
         if subscription.status not in (Subscription.Status.SUSPENDED, Subscription.Status.PAST_DUE):
             raise InvalidSubscriptionOperation("Solo se puede reactivar una suscripción suspendida o en PAST_DUE.")
+        campos_a_guardar = ["status", "updated_at"]
+        hoy = change_date or date.today()
+        if subscription.current_period_end is not None and subscription.current_period_end <= hoy:
+            inicio, fin = _periodo_para_frecuencia(subscription.plan_version.frequency, start=hoy)
+            subscription.current_period_start = inicio
+            subscription.current_period_end = fin
+            campos_a_guardar += ["current_period_start", "current_period_end"]
         subscription.status = Subscription.Status.ACTIVE
-        subscription.save(update_fields=["status", "updated_at"])
+        subscription.save(update_fields=campos_a_guardar)
         tenant_services.reactivate_tenant(subscription.tenant, user=user)
         audit_event(subscription.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="subscription", object_id=subscription.pk,
-                    after={"status": "active"})
-        return subscription
+                    after={"status": "active", "periodo_restaurado": "current_period_start" in campos_a_guardar})
+    notifications.notify_subscription_reactivated(subscription)
+    return subscription
 
 
 def cancel_subscription(subscription, *, immediate=False, reason="", user=None):
@@ -249,29 +283,49 @@ def change_plan(subscription, *, new_plan_version, user=None, prorate=True, chan
     (mismo `current_period_start`/`current_period_end`), solo la
     versión de plan referenciada; el efecto económico se resuelve con
     una nota de crédito (si el prorrateo da un neto negativo, se
-    acredita) o una línea de cargo en la próxima factura (si da un neto
-    positivo) — nunca editando una factura ya emitida. `change_date`
+    acredita) o una factura inmediata por el cargo prorrateado (si da un
+    neto positivo — FASE DE CORRECCIÓN 3, ver `issue_proration_charge_
+    invoice`) — nunca editando una factura ya emitida. `change_date`
     (por defecto hoy) es explícito, mismo criterio que
     `generate_due_renewal_invoices`, para que el cálculo sea
-    determinístico en pruebas."""
-    from . import credits as credit_services  # import diferido: evita un ciclo (credits.py no importa subscriptions.py)
+    determinístico en pruebas.
 
+    Antes de esta corrección, un neto positivo (upgrade) no generaba
+    ningún cargo real — la diferencia quedaba únicamente en el
+    `metadata` de auditoría, nunca cobrada (ver `KNOWN_ISSUES.md` #133).
+    La nota de crédito del caso negativo se aplica automáticamente a la
+    PRÓXIMA factura que se genere para esta suscripción (`invoicing.
+    generate_invoice_for_subscription` -> `credits.
+    auto_apply_available_credit_notes`), nunca requiere una acción
+    manual adicional del Super Admin ni del tenant."""
+    from . import credits as credit_services  # import diferido: evita un ciclo (credits.py no importa subscriptions.py)
+    from . import invoicing as invoicing_services  # import diferido: mismo motivo (invoicing.py no importa subscriptions.py)
+
+    hoy = change_date or date.today()
     with transaction.atomic():
         subscription = Subscription.all_objects.select_for_update().get(pk=subscription.pk)
         if subscription.status not in (Subscription.Status.ACTIVE, Subscription.Status.PAST_DUE):
             raise InvalidSubscriptionOperation("Solo se puede cambiar el plan de una suscripción activa.")
 
-        desglose = calculate_proration(subscription, new_plan_version=new_plan_version, change_date=change_date) if prorate else None
+        desglose = calculate_proration(subscription, new_plan_version=new_plan_version, change_date=hoy) if prorate else None
         plan_anterior = subscription.plan_version
         subscription.plan_version = new_plan_version
         subscription.save(update_fields=["plan_version", "updated_at"])
 
         nota_credito = None
+        factura_cargo = None
         if desglose is not None and desglose["monto_neto"] < 0:
             nota_credito = credit_services.issue_credit_note(
                 tenant=subscription.tenant, saas_customer=subscription.saas_customer, subscription=subscription,
                 amount=abs(desglose["monto_neto"]), currency=new_plan_version.price_currency,
                 reason=f"Prorrateo por cambio de plan ({plan_anterior.plan.name} → {new_plan_version.plan.name})",
+                user=user,
+            )
+        elif desglose is not None and desglose["monto_neto"] > 0:
+            factura_cargo, _creada = invoicing_services.issue_proration_charge_invoice(
+                subscription, amount=desglose["monto_neto"], currency=new_plan_version.price_currency,
+                change_date=hoy,
+                description=f"Prorrateo por cambio de plan ({plan_anterior.plan.name} → {new_plan_version.plan.name})",
                 user=user,
             )
 
@@ -280,4 +334,4 @@ def change_plan(subscription, *, new_plan_version, user=None, prorate=True, chan
             before={"plan": plan_anterior.plan.slug}, after={"plan": new_plan_version.plan.slug},
             metadata={"prorrateo": {k: str(v) for k, v in (desglose or {}).items()}},
         )
-        return subscription, desglose, nota_credito
+        return subscription, desglose, nota_credito, factura_cargo

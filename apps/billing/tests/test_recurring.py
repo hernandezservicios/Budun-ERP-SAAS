@@ -168,6 +168,26 @@ class ReconcileAndConfirmRecurringChargeTests(TestCase):
         self.assertEqual(segunda_factura.status, SaaSInvoice.Status.PAID)
         self.assertEqual(SaaSPayment.all_objects.filter(tenant=self.tenant).count(), 2)
 
+    def test_confirmar_cobro_sobre_suscripcion_suspendida_reactiva_no_activa(self):
+        # FASE DE CORRECCIÓN 3: `ACTIVATE != REACTIVATE` — un cobro
+        # recurrente confirmado sobre una suscripción SUSPENDED debe
+        # usar `reactivate_subscription`, nunca el primitivo de
+        # activación INICIAL.
+        from datetime import date
+
+        subscription_services.activate_subscription(self.subscription, user=self.owner)
+        self.subscription.current_period_start = date(2026, 1, 1)
+        self.subscription.current_period_end = date(2026, 1, 31)
+        self.subscription.save(update_fields=["current_period_start", "current_period_end"])
+        subscription_services.suspend_subscription(self.subscription)
+
+        recurring_services.confirm_recurring_charge(
+            self.subscription, amount=Decimal("29.00"), currency="USD", external_reference="SALE-REACT", user=self.owner,
+        )
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.ACTIVE)
+        self.assertNotEqual(self.subscription.current_period_end, date(2026, 1, 31))
+
 
 class PriceChangeDuringRecurringLifecycleTests(TestCase):
     """Sección 6 de la corrección: factura mes 1 en USD 29, el plan sube

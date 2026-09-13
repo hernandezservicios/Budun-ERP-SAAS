@@ -16,7 +16,7 @@ from django.db import transaction
 
 from apps.audit.models import AuditLog
 
-from ..models import BillingRefund, SaaSPayment
+from ..models import BillingRefund, SaaSPayment, SaaSPaymentAllocation
 from ._saas_audit import audit_event
 
 
@@ -27,9 +27,34 @@ class InvalidRefundOperation(ValidationError):
 def _reembolsado_total(payment):
     """`all_objects` explícito — nunca `payment.refunds` (relación
     inversa tenant-scoped, ver
-    `apps.billing.services.invoicing.get_invoice_balance_due`)."""
+    `apps.billing.services.invoicing.get_invoice_balance_due`). Cuenta
+    SOLO reembolsos COMPLETADOS — refleja lo que el pago YA devolvió de
+    verdad (usado para decidir `REFUNDED` vs `PARTIALLY_REFUNDED`, nunca
+    para el guard de "cuánto queda disponible para solicitar", ver
+    `_comprometido_total` abajo)."""
     return sum(
         (r.amount for r in BillingRefund.all_objects.filter(payment=payment, status=BillingRefund.Status.COMPLETED)), Decimal("0"),
+    )
+
+
+def _comprometido_total(payment):
+    """FASE DE CORRECCIÓN 3 (Lifecycle integral, sección "concurrencia"):
+    antes de esta corrección, `request_billing_refund` validaba el monto
+    disponible contra `_reembolsado_total` (solo COMPLETADOS) — dos
+    solicitudes de reembolso simultáneas sobre el MISMO pago, ninguna
+    todavía completada, leían ambas "0 ya reembolsado" (el
+    `select_for_update()` de `SaaSPayment` las serializa, pero un
+    `BillingRefund` recién creado queda en `PENDING`, no `COMPLETED`) y
+    juntas podían comprometer más de lo que el pago tenía disponible.
+    Suma PENDING + COMPLETED — un reembolso `FAILED` libera de nuevo su
+    monto (nunca cuenta aquí), igual que un reembolso todavía sin
+    resolver del lado de PayPal (`REFUND_PENDING`, que en `BillingRefund`
+    sigue siendo `PENDING` hasta que el webhook/reconciliación lo mueva
+    a un estado terminal)."""
+    return sum(
+        (r.amount for r in BillingRefund.all_objects.filter(
+            payment=payment, status__in=[BillingRefund.Status.PENDING, BillingRefund.Status.COMPLETED],
+        )), Decimal("0"),
     )
 
 
@@ -38,9 +63,9 @@ def request_billing_refund(payment, *, amount=None, reason="", user=None):
         payment = SaaSPayment.all_objects.select_for_update().get(pk=payment.pk)
         if payment.status != SaaSPayment.Status.CONFIRMED and payment.status != SaaSPayment.Status.PARTIALLY_REFUNDED:
             raise InvalidRefundOperation("Solo se puede reembolsar un pago confirmado.")
-        ya_reembolsado = _reembolsado_total(payment)
-        monto = Decimal(amount) if amount is not None else (payment.amount - ya_reembolsado)
-        if monto <= 0 or ya_reembolsado + monto > payment.amount:
+        ya_comprometido = _comprometido_total(payment)
+        monto = Decimal(amount) if amount is not None else (payment.amount - ya_comprometido)
+        if monto <= 0 or ya_comprometido + monto > payment.amount:
             raise InvalidRefundOperation("El monto del reembolso excede lo disponible para reembolsar.")
 
         refund = BillingRefund.all_objects.create(
@@ -64,17 +89,54 @@ def request_billing_refund(payment, *, amount=None, reason="", user=None):
         return refund
 
 
+def _reverse_allocations_for_refund(payment, amount, *, user=None, reason=""):
+    """FASE DE CORRECCIÓN 3 (Lifecycle integral, sección "refund"): antes
+    de esta corrección, completar un reembolso nunca tocaba
+    `SaaSPaymentAllocation` — la(s) factura(s) que ese pago había
+    cubierto quedaban `PAID`/`PARTIALLY_PAID` para siempre aunque el
+    dinero ya hubiera vuelto al cliente. Revierte las asignaciones
+    ACTIVAS de `payment` (más recientes primero) hasta liberar `amount`
+    — nunca "parte" una asignación in-place (append-only, mismo
+    principio que todo el ledger de Billing): si la asignación revertida
+    era mayor que lo efectivamente reembolsado, el remanente se
+    re-asigna como una asignación NUEVA a la misma factura (reverso +
+    reasignación, nunca una edición), así que solo el monto realmente
+    devuelto deja de estar cubierto."""
+    from . import payments as payment_services
+
+    restante = amount
+    allocations = list(SaaSPaymentAllocation.all_objects.filter(
+        payment=payment, status=SaaSPaymentAllocation.Status.ACTIVE,
+    ).order_by("-created_at"))
+    for allocation in allocations:
+        if restante <= 0:
+            break
+        invoice = allocation.invoice
+        monto_original = allocation.amount
+        a_liberar = min(monto_original, restante)
+        payment_services.reverse_allocation(allocation, user=user, reason=reason or "Reembolso")
+        remanente = monto_original - a_liberar
+        if remanente > 0:
+            payment_services.apply_payment_to_invoices(payment, [(invoice, remanente)], user=user)
+        restante -= a_liberar
+
+
 def _complete_refund(refund, payment, *, user=None):
     from django.utils import timezone
 
-    refund.status = BillingRefund.Status.COMPLETED
-    refund.completed_at = timezone.now()
-    refund.save(update_fields=["status", "completed_at", "paypal_transaction"])
-    nuevo_total_reembolsado = _reembolsado_total(payment)
-    payment.status = SaaSPayment.Status.REFUNDED if nuevo_total_reembolsado >= payment.amount else SaaSPayment.Status.PARTIALLY_REFUNDED
-    payment.save(update_fields=["status"])
-    audit_event(refund.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="billing_refund", object_id=refund.pk,
-                after={"status": "completed"})
+    with transaction.atomic():
+        refund.status = BillingRefund.Status.COMPLETED
+        refund.completed_at = timezone.now()
+        refund.save(update_fields=["status", "completed_at", "paypal_transaction"])
+        # Revertir las asignaciones ANTES de cambiar `payment.status`:
+        # `apply_payment_to_invoices` (usado para reasignar el remanente,
+        # ver arriba) exige un pago todavía CONFIRMADO.
+        _reverse_allocations_for_refund(payment, refund.amount, user=user, reason=f"Reembolso {refund.pk}")
+        nuevo_total_reembolsado = _reembolsado_total(payment)
+        payment.status = SaaSPayment.Status.REFUNDED if nuevo_total_reembolsado >= payment.amount else SaaSPayment.Status.PARTIALLY_REFUNDED
+        payment.save(update_fields=["status"])
+        audit_event(refund.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="billing_refund", object_id=refund.pk,
+                    after={"status": "completed"})
 
 
 def _fail_refund(refund, *, user=None):

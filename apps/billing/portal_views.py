@@ -244,11 +244,17 @@ class ChangePlanView(LoginRequiredMixin, TenantRequiredMixin, View):
         if subscription is None or not form.is_valid():
             messages.error(request, "Revisa el plan seleccionado.")
             return redirect("billing_portal:change_plan")
-        subscription, desglose, nota = subscription_services.change_plan(
+        subscription, desglose, nota, factura_cargo = subscription_services.change_plan(
             subscription, new_plan_version=form.cleaned_data["plan_version"], user=request.user,
         )
         if nota is not None:
             messages.success(request, f"Cambio realizado — se emitió una nota de crédito de {nota.amount} {nota.currency}.")
+        elif factura_cargo is not None:
+            messages.success(
+                request,
+                f"Cambio realizado — se generó la factura {factura_cargo.number} por {factura_cargo.total} "
+                f"{factura_cargo.currency} correspondiente al prorrateo.",
+            )
         else:
             messages.success(request, "Cambio de plan realizado.")
         return redirect("billing_portal:status")

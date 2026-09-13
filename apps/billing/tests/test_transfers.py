@@ -142,3 +142,29 @@ class PaymentProofFlowTests(TestCase):
         self.assertIn(proof, list(services.list_pending_proofs()))
         services.approve_payment_proof(proof)
         self.assertNotIn(proof, list(services.list_pending_proofs()))
+
+    def test_aprobar_comprobante_sobre_suscripcion_suspendida_reactiva_no_activa(self):
+        # FASE DE CORRECCIÓN 3: `ACTIVATE != REACTIVATE` — aprobar un
+        # comprobante de transferencia sobre una suscripción SUSPENDED
+        # debe usar `reactivate_subscription` (restaura el período si ya
+        # venció), nunca el primitivo de activación INICIAL.
+        from datetime import date
+
+        subscription_services.activate_subscription(self.subscription)
+        self.subscription.current_period_start = date(2026, 1, 1)
+        self.subscription.current_period_end = date(2026, 1, 31)
+        self.subscription.save(update_fields=["current_period_start", "current_period_end"])
+        subscription_services.suspend_subscription(self.subscription)
+        vencida, _creada = invoicing_services.generate_invoice_for_subscription(
+            self.subscription, period_start=date(2026, 1, 1), period_end=date(2026, 1, 31),
+        )
+
+        proof = services.submit_payment_proof(
+            subscription=self.subscription, invoice=vencida, bank_account=self.bank_account,
+            declared_amount=vencida.total, declared_currency="USD", file=_comprobante_pdf(),
+        )
+        services.approve_payment_proof(proof)
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "active")
+        # El período se restauró a partir de hoy — ya no es el vencido de enero 2026.
+        self.assertNotEqual(self.subscription.current_period_end, date(2026, 1, 31))

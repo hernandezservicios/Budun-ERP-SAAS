@@ -45,6 +45,39 @@ class BillingStatusMiddlewareTests(TestCase):
         respuesta = self.client.get(reverse("accounts:perfil"))
         self.assertEqual(respuesta.status_code, 200)
 
+    def test_tenant_pending_setup_es_redirigido(self):
+        # FASE DE CORRECCIÓN 3 (Lifecycle integral, sección "BillingStatusMiddleware"):
+        # probar CADA estado explícitamente, no solo un subconjunto —
+        # PENDING_SETUP nunca se había probado antes de esta corrección.
+        self.tenant.billing_status = Tenant.BillingStatus.PENDING_SETUP
+        self.tenant.save(update_fields=["billing_status"])
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertRedirects(respuesta, reverse("billing_portal:status"))
+
+    def test_tenant_cancelado_es_redirigido(self):
+        self.tenant.billing_status = Tenant.BillingStatus.CANCELLED
+        self.tenant.save(update_fields=["billing_status"])
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertRedirects(respuesta, reverse("billing_portal:status"))
+
+    def test_tenant_expirado_es_redirigido(self):
+        self.tenant.billing_status = Tenant.BillingStatus.EXPIRED
+        self.tenant.save(update_fields=["billing_status"])
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertRedirects(respuesta, reverse("billing_portal:status"))
+
+    def test_tenant_bloqueado_puede_ver_el_formulario_de_cambio_de_plan(self):
+        # Ningún estado debe dejar al tenant sin poder pagar/gestionar su
+        # Billing — el propio Portal siempre queda accesible.
+        self.tenant.billing_status = Tenant.BillingStatus.PAST_DUE
+        self.tenant.save(update_fields=["billing_status"])
+        respuesta = self.client.get(reverse("billing_portal:status"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.tenant.billing_status = Tenant.BillingStatus.SUSPENDED
+        self.tenant.save(update_fields=["billing_status"])
+        respuesta = self.client.get(reverse("billing_portal:status"))
+        self.assertEqual(respuesta.status_code, 200)
+
     def test_usuario_sin_tenant_nunca_es_redirigido_por_este_middleware(self):
         client = self.client_class()
         from django.contrib.auth import get_user_model

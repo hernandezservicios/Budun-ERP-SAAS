@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from django.test import TestCase
@@ -54,6 +55,51 @@ class CreditNoteTests(TestCase):
         services.reverse_credit_note_application(application, reason="corrección")
         self.invoice.refresh_from_db()
         self.assertEqual(self.invoice.status, SaaSInvoice.Status.OPEN)
+
+
+class AutoApplyCreditNoteOnNewInvoiceTests(TestCase):
+    """FASE DE CORRECCIÓN 3 (Lifecycle integral, sección "crédito"): antes
+    de esta corrección, `apply_credit_note_to_invoice` solo se ejercitaba
+    desde pruebas — ninguna factura nueva consumía automáticamente una
+    nota de crédito existente."""
+
+    def setUp(self):
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("30.00"))
+        self.saas_customer = crear_saas_customer()
+        subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        self.subscription = subscription_services.activate_subscription(subscription)
+        self.subscription.current_period_start = date(2026, 1, 1)
+        self.subscription.current_period_end = date(2026, 1, 31)
+        self.subscription.save(update_fields=["current_period_start", "current_period_end"])
+
+    def test_downgrade_aplica_la_nota_de_credito_a_la_siguiente_factura_de_renovacion(self):
+        _plan_nuevo, version_basica = crear_plan_con_version(slug="basico-auto", precio=Decimal("10.00"))
+        _subscription, desglose, nota_credito, _factura_cargo = subscription_services.change_plan(
+            self.subscription, new_plan_version=version_basica, change_date=date(2026, 1, 16),
+        )
+        self.assertIsNotNone(nota_credito)
+        self.assertEqual(services.get_unapplied_credit_note_amount(nota_credito), nota_credito.amount)
+
+        siguiente_factura, creada = invoicing_services.ensure_next_renewal_invoice(self.subscription)
+        self.assertTrue(creada)
+        siguiente_factura.refresh_from_db()
+        self.assertEqual(services.get_unapplied_credit_note_amount(nota_credito), Decimal("0.00"))
+        self.assertLess(invoicing_services.get_invoice_balance_due(siguiente_factura), siguiente_factura.total)
+
+    def test_nota_de_credito_de_otra_suscripcion_nunca_se_aplica(self):
+        otra_subscription = subscription_services.create_subscription(
+            self.tenant.__class__.objects.create(name="Otro Tenant Billing", slug="otro-tenant-billing"),
+            saas_customer=self.saas_customer, plan_version=self.version,
+        )
+        services.issue_credit_note(
+            tenant=otra_subscription.tenant, saas_customer=self.saas_customer, subscription=otra_subscription,
+            amount=Decimal("10.00"), currency="USD", reason="ajuste de otra suscripción",
+        )
+        factura_de_esta_suscripcion, _creada = invoicing_services.generate_invoice_for_subscription(
+            self.subscription, period_start=date(2026, 2, 1), period_end=date(2026, 3, 3),
+        )
+        self.assertEqual(invoicing_services.get_invoice_balance_due(factura_de_esta_suscripcion), factura_de_esta_suscripcion.total)
 
 
 class CreditBalanceTests(TestCase):

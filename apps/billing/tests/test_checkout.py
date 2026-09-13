@@ -216,4 +216,43 @@ class CreateCheckoutForInvoiceTests(TestCase):
     def test_g_este_flujo_nunca_crea_un_apps_sales_payment(self):
         with fake_provider():
             self._iniciar()
+
+
+class PayPalOneOffCheckoutReactivationTests(TestCase):
+    """FASE DE CORRECCIÓN 3 (Lifecycle integral): `ACTIVATE != REACTIVATE`
+    — confirmar un pago único de PayPal (`services.capture_checkout` ->
+    señal `payment_confirmed` -> `paypal_integration._on_payment_confirmed`)
+    sobre una suscripción PAST_DUE/SUSPENDED debe reactivar (restaurando
+    el período si ya venció), nunca reutilizar el primitivo de
+    activación INICIAL."""
+
+    def setUp(self):
+        from datetime import date
+
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        subscription = subscription_services.activate_subscription(subscription)
+        subscription.current_period_start = date(2026, 1, 1)
+        subscription.current_period_end = date(2026, 1, 31)
+        subscription.save(update_fields=["current_period_start", "current_period_end"])
+        subscription_services.mark_past_due(subscription)
+        self.subscription = subscription
+        self.invoice, _creada = invoicing_services.generate_invoice_for_subscription(
+            self.subscription, period_start=date(2026, 1, 1), period_end=date(2026, 1, 31),
+        )
+
+    def test_pagar_factura_vencida_con_paypal_reactiva_y_restaura_el_periodo(self):
+        from datetime import date
+
+        with fake_provider():
+            pago, txn, _approve_url = services.create_checkout_for_invoice(
+                invoice=self.invoice, user=self.owner, return_url="https://example.test/return", cancel_url="https://example.test/cancel",
+            )
+            services.capture_checkout(txn, user=self.owner)
+
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "active")
+        self.assertNotEqual(self.subscription.current_period_end, date(2026, 1, 31))
         self.assertEqual(SalesPayment.all_objects.filter(tenant=self.tenant).count(), 0)

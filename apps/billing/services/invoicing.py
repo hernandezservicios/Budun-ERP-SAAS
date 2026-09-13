@@ -17,6 +17,7 @@ from apps.sales.models import DocumentSequence
 from apps.sales.services import generate_document_number
 
 from ..models import CreditNoteApplication, SaaSInvoice, SaaSInvoiceLine, SaaSPaymentAllocation
+from . import notifications
 from ._saas_audit import audit_event
 
 
@@ -100,6 +101,57 @@ def generate_invoice_for_subscription(subscription, *, period_start=None, period
 
     audit_event(subscription.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="saas_invoice", object_id=invoice.pk,
                 after={"number": numero, "total": str(total)})
+    # FASE DE CORRECCIÓN 3 (Lifecycle integral, sección "crédito"): antes
+    # de esta corrección, `apply_credit_note_to_invoice` solo se ejercitaba
+    # desde pruebas — ninguna vista ni proceso automático la llamaba
+    # nunca, así que una nota de crédito emitida (p. ej. por un downgrade,
+    # `subscriptions.change_plan`) nunca llegaba a "aplicarse a la
+    # próxima factura" salvo que un humano lo hiciera a mano (y no existe
+    # ninguna pantalla para eso). Toda factura NUEVA barre automáticamente
+    # el saldo disponible de notas de crédito de la misma suscripción —
+    # mismo principio que `auto_apply_payment` para pagos, nunca una
+    # segunda fuente de verdad (`credits.py` sigue siendo la única dueña
+    # del cálculo de saldo/aplicación).
+    from . import credits as credit_services  # import diferido: evita un ciclo (credits.py importa de este módulo)
+
+    credit_services.auto_apply_available_credit_notes(subscription, user=user)
+    return invoice, True
+
+
+def issue_proration_charge_invoice(subscription, *, amount, currency, change_date, description, user=None):
+    """Factura inmediata y aparte del ciclo normal de renovación, para el
+    cargo neto de un upgrade a mitad de período (FASE DE CORRECCIÓN 3,
+    sección "upgrade") — `change_plan` nunca edita la factura del
+    período vigente (inmutable, ya emitida) ni espera a la siguiente
+    renovación para cobrar la diferencia (eso dejaría sin cobrar el
+    resto del período actual al precio nuevo). `change_date` cumple el
+    mismo rol que `period_start` en `generate_invoice_for_subscription`:
+    el `UniqueConstraint(subscription, period_start)` de siempre es la
+    garantía real de que un doble envío del formulario de cambio de plan
+    (o un reintento) nunca duplica el cargo — un segundo upgrade
+    genuinamente distinto el mismo día calendario queda documentado como
+    fuera de alcance de esta corrección (`KNOWN_ISSUES.md` #133)."""
+    try:
+        with transaction.atomic():
+            numero = generate_document_number(subscription.tenant, DocumentSequence.DocumentType.SAAS_INVOICE)
+            invoice = SaaSInvoice.all_objects.create(
+                tenant=subscription.tenant, subscription=subscription, number=numero,
+                period_start=change_date, period_end=subscription.current_period_end or change_date,
+                issue_date=change_date, due_date=change_date,
+                currency=currency, subtotal=amount, discount_total=Decimal("0"), tax_total=Decimal("0"), total=amount,
+                status=SaaSInvoice.Status.OPEN,
+            )
+            SaaSInvoiceLine.all_objects.create(
+                tenant=subscription.tenant, invoice=invoice, description=description, quantity=Decimal("1"), amount=amount,
+            )
+    except IntegrityError:
+        return SaaSInvoice.all_objects.get(subscription=subscription, period_start=change_date), False
+
+    audit_event(subscription.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="saas_invoice", object_id=invoice.pk,
+                after={"number": numero, "total": str(amount)}, reason="Cargo por prorrateo de upgrade")
+    from . import credits as credit_services  # import diferido: mismo motivo que en generate_invoice_for_subscription
+
+    credit_services.auto_apply_available_credit_notes(subscription, user=user)
     return invoice, True
 
 
@@ -135,6 +187,13 @@ def ensure_next_renewal_invoice(subscription):
         subscription.current_period_start = siguiente_inicio
         subscription.current_period_end = siguiente_fin
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
+        # FASE DE CORRECCIÓN 3: `notifications.notify_renewal` existía
+        # desde FASE 17 pero nunca se llamaba desde ningún punto real del
+        # ciclo de renovación — se conecta aquí (el único lugar donde el
+        # período efectivamente avanza), nunca en el cron/webhook que lo
+        # invoca, para que sea el mismo aviso sin importar cuál de los
+        # dos disparó la renovación primero.
+        notifications.notify_renewal(subscription)
     return invoice, creada
 
 

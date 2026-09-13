@@ -87,6 +87,43 @@ def reverse_credit_note_application(application, *, user=None, reason=""):
         return application
 
 
+def auto_apply_available_credit_notes(subscription, *, user=None):
+    """Aplica automáticamente el saldo disponible de las notas de
+    crédito de esta suscripción a sus facturas ABIERTAS más antiguas —
+    equivalente de `apps.billing.services.payments.auto_apply_payment`
+    pero para notas de crédito. FASE DE CORRECCIÓN 3 (Lifecycle
+    integral, sección "crédito"): antes de esta corrección,
+    `apply_credit_note_to_invoice` existía pero solo se ejercitaba desde
+    pruebas — ninguna vista ni proceso automático la invocaba nunca, así
+    que una nota de crédito emitida por un downgrade (`subscriptions.
+    change_plan`) jamás se "aplicaba a la próxima factura" salvo que un
+    humano lo hiciera a mano (y no existe ninguna pantalla para eso).
+    Se llama automáticamente cada vez que se emite una factura NUEVA
+    para la suscripción (`invoicing.generate_invoice_for_subscription`/
+    `issue_proration_charge_invoice`) — nunca al revisar una factura ya
+    existente, para no reabrir una ya resuelta de otra forma."""
+    aplicadas = []
+    notas = CreditNote.all_objects.filter(subscription=subscription).order_by("created_at")
+    for nota in notas:
+        disponible = get_unapplied_credit_note_amount(nota)
+        if disponible <= 0:
+            continue
+        facturas_abiertas = SaaSInvoice.all_objects.filter(
+            tenant=nota.tenant, subscription=subscription,
+            status__in=[SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID],
+        ).order_by("due_date", "id")
+        for invoice in facturas_abiertas:
+            if disponible <= 0:
+                break
+            saldo_factura = get_invoice_balance_due(invoice)
+            if saldo_factura <= 0:
+                continue
+            monto = min(disponible, saldo_factura)
+            aplicadas.append(apply_credit_note_to_invoice(nota, invoice, monto, user=user))
+            disponible -= monto
+    return aplicadas
+
+
 def get_subscription_credit_balance(*, tenant, subscription=None):
     """Saldo a favor = pagos CONFIRMADOS sin aplicar + notas de crédito
     sin aplicar, del tenant (opcionalmente acotado a una suscripción

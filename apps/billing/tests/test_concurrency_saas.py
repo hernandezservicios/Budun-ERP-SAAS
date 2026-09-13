@@ -10,9 +10,10 @@ from django.db import connection
 from django.test import TransactionTestCase
 
 from apps.billing import services as billing_services
-from apps.billing.models import BankAccount, PayPalTransaction, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation, Subscription
+from apps.billing.models import BankAccount, BillingRefund, PayPalTransaction, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation, Subscription
 from apps.billing.services import invoicing as invoicing_services
 from apps.billing.services import payments as payment_services
+from apps.billing.services import refunds as refund_services
 from apps.billing.services import subscriptions as subscription_services
 from apps.billing.services import transfers as transfer_services
 from apps.tenants.models import Tenant
@@ -296,3 +297,143 @@ class CreateCheckoutForInvoiceConcurrencyTests(TransactionTestCase):
         self.assertEqual(resultados.count("rechazado"), 1)
         self.assertEqual(PayPalTransaction.objects.filter(tenant=self.tenant).count(), 1)
         self.assertEqual(SaaSPayment.all_objects.filter(tenant=self.tenant).count(), 1)
+
+
+class ReactivationConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 3 (Lifecycle integral, sección 23) — dos
+    reactivaciones simultáneas de la MISMA suscripción SUSPENDED nunca
+    deben producir dos transiciones/notificaciones ni un período
+    restaurado dos veces."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("29.00"))
+        self.saas_customer = crear_saas_customer()
+        subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        subscription = subscription_services.activate_subscription(subscription)
+        self.subscription = subscription_services.suspend_subscription(subscription)
+
+    def test_dos_reactivaciones_simultaneas_solo_una_transiciona(self):
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def reactivar():
+            barrera.wait()
+            try:
+                subscription_services.reactivate_subscription(self.subscription)
+                resultados.append("ok")
+            except subscription_services.InvalidSubscriptionOperation:
+                resultados.append("rechazado")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=reactivar) for _ in range(2)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+
+        self.assertEqual(resultados.count("ok"), 1)
+        self.assertEqual(resultados.count("rechazado"), 1)
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.ACTIVE)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.billing_status, Tenant.BillingStatus.ACTIVE)
+
+
+class RefundConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 3 (Lifecycle integral, sección 23) — dos
+    solicitudes de reembolso simultáneas sobre el MISMO pago nunca deben
+    poder exceder juntas el monto disponible del pago."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.saas_customer = crear_saas_customer()
+        pago = payment_services.record_payment(
+            tenant=self.tenant, saas_customer=self.saas_customer, method=SaaSPayment.Method.MANUAL_OTHER,
+            amount=Decimal("50.00"), currency="USD",
+        )
+        self.payment = payment_services.confirm_payment(pago)
+
+    def test_dos_solicitudes_de_reembolso_simultaneas_nunca_exceden_el_monto_disponible(self):
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def solicitar():
+            barrera.wait()
+            try:
+                refund_services.request_billing_refund(self.payment, amount=Decimal("30.00"))
+                resultados.append("ok")
+            except refund_services.InvalidRefundOperation:
+                resultados.append("rechazado")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=solicitar) for _ in range(2)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+
+        self.assertEqual(resultados.count("ok"), 1)
+        self.assertEqual(resultados.count("rechazado"), 1)
+        total_solicitado = sum((r.amount for r in BillingRefund.all_objects.filter(payment=self.payment)), Decimal("0"))
+        self.assertEqual(total_solicitado, Decimal("30.00"))
+
+
+class UpgradeProrationInvoiceConcurrencyTests(TransactionTestCase):
+    """FASE DE CORRECCIÓN 3 — dos envíos simultáneos del formulario de
+    cambio de plan (mismo `change_date`) nunca deben generar dos
+    facturas de cargo por prorrateo para el mismo día."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        from datetime import date
+
+        self.change_date = date(2026, 1, 16)
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.plan, self.version = crear_plan_con_version(precio=Decimal("30.00"))
+        self.saas_customer = crear_saas_customer()
+        subscription = subscription_services.create_subscription(self.tenant, saas_customer=self.saas_customer, plan_version=self.version)
+        subscription = subscription_services.activate_subscription(subscription)
+        subscription.current_period_start = date(2026, 1, 1)
+        subscription.current_period_end = date(2026, 1, 31)
+        subscription.save(update_fields=["current_period_start", "current_period_end"])
+        self.subscription = subscription
+        self.plan2, self.version2 = crear_plan_con_version(slug="empresarial-conc", precio=Decimal("90.00"))
+
+    def test_dos_llamadas_simultaneas_a_issue_proration_charge_invoice_no_duplican(self):
+        # Prueba directa de la garantía de idempotencia real (`UniqueConstraint
+        # (subscription, period_start)`), mismo patrón que
+        # `InvoiceGenerationConcurrencyTests` para la renovación normal —
+        # `change_plan` en sí serializa por el lock de `Subscription`, así
+        # que la carrera real que puede ocurrir es sobre esta función.
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def emitir():
+            barrera.wait()
+            try:
+                invoicing_services.issue_proration_charge_invoice(
+                    self.subscription, amount=Decimal("30.00"), currency="USD", change_date=self.change_date,
+                    description="Prorrateo por cambio de plan (prueba de concurrencia)",
+                )
+                resultados.append("ok")
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=emitir) for _ in range(2)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+
+        self.assertEqual(resultados.count("ok"), 2)
+        self.assertEqual(
+            SaaSInvoice.all_objects.filter(subscription=self.subscription, period_start=self.change_date).count(), 1,
+        )

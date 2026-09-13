@@ -23,10 +23,18 @@ def _on_payment_confirmed(sender, transaction, **kwargs):
         return  # transacción de PayPal sin un SaaSPayment asociado (p. ej. la herramienta manual de FASE 16) — nada que hacer.
     payment_services.confirm_payment(payment, user=None)
     payment_services.auto_apply_payment(payment, user=None)
-    if payment.subscription is not None and payment.subscription.status in (
-        Subscription.Status.PENDING, Subscription.Status.PAST_DUE, Subscription.Status.SUSPENDED,
-    ):
-        subscription_services.activate_subscription(payment.subscription, user=None)
+    if payment.subscription is not None:
+        # FASE DE CORRECCIÓN 3 (Lifecycle integral): `ACTIVATE != REACTIVATE`
+        # — antes de esta corrección, un pago único de PayPal confirmado
+        # sobre una suscripción PAST_DUE/SUSPENDED llamaba siempre al
+        # primitivo de activación INICIAL, saltándose el guard/auditoría/
+        # notificación/restauración de período propios de `reactivate_
+        # subscription`.
+        estado = payment.subscription.status
+        if estado == Subscription.Status.PENDING:
+            subscription_services.activate_subscription(payment.subscription, user=None)
+        elif estado in (Subscription.Status.PAST_DUE, Subscription.Status.SUSPENDED):
+            subscription_services.reactivate_subscription(payment.subscription, user=None)
 
 
 def _on_payment_failed(sender, transaction, **kwargs):

@@ -250,8 +250,19 @@ def confirm_recurring_charge(subscription, *, amount, currency, external_referen
                 metadata={"cobrado": f"{amount} {currency}", "factura": f"{invoice.total} {invoice.currency}"},
             )
 
-        if subscription.status in (Subscription.Status.PENDING, Subscription.Status.PAST_DUE, Subscription.Status.SUSPENDED):
-            subscription_services.activate_subscription(subscription, user=user)
+        estado_previo = subscription.status
+
+    # FASE DE CORRECCIÓN 3 (Lifecycle integral): `ACTIVATE != REACTIVATE`
+    # — fuera del `with transaction.atomic()` de arriba (mismo estilo que
+    # `subscriptions.activate_pending_subscription`), porque
+    # `reactivate_subscription` abre su propia transacción/lock. Antes de
+    # esta corrección, un cobro recurrente confirmado sobre una
+    # suscripción PAST_DUE/SUSPENDED llamaba siempre al primitivo de
+    # activación INICIAL, sin restaurar el período si ya había vencido.
+    if estado_previo == Subscription.Status.PENDING:
+        subscription_services.activate_subscription(subscription, user=user)
+    elif estado_previo in (Subscription.Status.PAST_DUE, Subscription.Status.SUSPENDED):
+        subscription_services.reactivate_subscription(subscription, user=user)
     return pago
 
 

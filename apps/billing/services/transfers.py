@@ -120,8 +120,18 @@ def approve_payment_proof(proof, *, user=None):
 
     from . import subscriptions as subscription_services
 
-    if proof.subscription.status in (Subscription.Status.PENDING, Subscription.Status.PAST_DUE, Subscription.Status.SUSPENDED):
+    # FASE DE CORRECCIÓN 3 (Lifecycle integral): `ACTIVATE != REACTIVATE`
+    # (ver `subscriptions.activate_pending_subscription`) — antes de
+    # esta corrección, aprobar un comprobante sobre una suscripción
+    # PAST_DUE/SUSPENDED llamaba al primitivo de activación INICIAL
+    # directamente, saltándose el guard/auditoría/notificación propios
+    # de `reactivate_subscription` y sin restaurar el período si ya
+    # había vencido durante la suspensión.
+    estado_actual = proof.subscription.status
+    if estado_actual == Subscription.Status.PENDING:
         subscription_services.activate_subscription(proof.subscription, user=user)
+    elif estado_actual in (Subscription.Status.PAST_DUE, Subscription.Status.SUSPENDED):
+        subscription_services.reactivate_subscription(proof.subscription, user=user)
 
     audit_event(proof.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="payment_proof", object_id=proof.pk,
                 after={"status": "approved"})
