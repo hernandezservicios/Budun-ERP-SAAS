@@ -23,6 +23,19 @@ verde estructural** — verde queda reservado ahí exclusivamente para
 estados de éxito (`badge--verde`, `kpi--exito`). Ningún token existente se
 eliminó; ambos shells comparten `base.css`/`design-system.css`.
 
+### Refinamiento visual de la plataforma SaaS (FASE — REDISEÑO VISUAL INTEGRAL SaaS 2.0)
+Sobre la separación de shells de la fase anterior, la plataforma SaaS
+(`.shell--saas`) recibió: tamaños de encabezado explícitos de la
+escala tipográfica (`h1`=`--texto-2xl`, `h2`=`--texto-lg`,
+`h3`=`--texto-base`, acotados al modificador — el ERP conserva el
+tamaño por defecto del navegador, sin cambios); iconos con emoji en
+cada enlace del sidebar y cada KPI (mismo mecanismo ya usado en
+`estado-vacio__icono`, nunca una librería de iconos nueva); espaciado
+más generoso en `.main`. Scrollbar fina (`scrollbar-width: thin` +
+`::-webkit-scrollbar`) y `overflow-x: hidden` en `body` se dejaron
+GLOBALES (todo el proyecto, ERP incluido) — son mejoras neutras de
+plataforma/navegador, no cambios de identidad visual.
+
 ## UX
 Prioridades: experiencia de usuario > legibilidad > claridad > jerarquía > consistencia > estética.
 

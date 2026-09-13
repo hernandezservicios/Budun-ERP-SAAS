@@ -136,8 +136,10 @@ Reutiliza literalmente el mismo grid `.shell` y las mismas clases base
 
 | Clase | Qué cambia |
 |---|---|
+| `.shell--saas` | Wrapper raíz — acota tipografía/espaciado propios de la plataforma (`h1`/`h2`/`h3`, `.main`) sin tocar los selectores globales que comparte con el ERP |
 | `.sidebar--saas` | Fondo azul profundo (`--color-saas-sidebar-fondo`, azul-950) en vez del gris del ERP |
-| `.sidebar__grupo` / `.sidebar__grupo-titulo` | Agrupación por sección (Clientes/Tenants, Suscripciones y planes, Facturación, Reportes, Configuración) — el sidebar del ERP no agrupa, es una lista plana |
+| `.sidebar__grupo` / `.sidebar__grupo-titulo` | Agrupación por sección (Clientes y empresas, Suscripciones y planes, Facturación, Reportes, Configuración) — el sidebar del ERP no agrupa, es una lista plana |
+| `.sidebar__icono` / `.kpi__icono` | Icono (emoji) antes del texto de cada enlace del sidebar y cada etiqueta de KPI — mismo mecanismo ya usado en `estado-vacio__icono` desde FASE 5, nunca una librería de iconos nueva |
 | `.navbar--saas` / `.navbar__contexto` | Marca+contexto ("Plataforma — Super Admin") junto al menú de usuario |
 
 Tokens nuevos en `base.css` (nunca reemplazan los existentes):
@@ -147,6 +149,19 @@ Tokens nuevos en `base.css` (nunca reemplazan los existentes):
 se haga en un solo lugar). Ver "SaaS Visual Shell Separation" y "SaaS
 Design Token Pattern" en `docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md`
 para el problema/causa/solución completos.
+
+### Refinamiento visual 2.0: tipografía, iconos, scrollbar
+`.shell--saas h1`/`h2`/`h3` fijan tamaños explícitos de la escala
+tipográfica (`--texto-2xl`/`-lg`/`-base`) — antes dependían del tamaño
+por defecto del navegador, sin relación con los tokens del sistema de
+diseño; acotado al modificador para no alterar el ERP (`h1`/`h2`/`h3`
+globales de `base.css` quedan intactos). Scrollbar fina
+(`scrollbar-width: thin` + `::-webkit-scrollbar`, `base.css`) y
+`overflow-x: hidden` en `body` se aplican GLOBALMENTE (ERP incluido) —
+son mejoras neutras de plataforma/navegador, no cambios de identidad
+visual, documentadas explícitamente como la excepción a "todo lo nuevo
+se acota" (ver "SaaS Visual Design Pattern",
+`docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md`).
 
 ### Estados con color semántico: filtro `estado_badge`
 `apps/core/templatetags/ui_extras.py::estado_badge` traduce el CÓDIGO

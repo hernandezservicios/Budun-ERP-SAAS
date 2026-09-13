@@ -1214,6 +1214,71 @@ antes de corregir que el resto de este Knowledge Kit.
   estado que se muestre a un usuario — nunca decidir el color caso por
   caso en cada plantilla.
 
+## SaaS Visual Design Pattern (FASE DE REDISEÑO VISUAL SaaS 2.0)
+
+Continuación directa de "SAAS VISUAL SHELL PATTERNS": una vez separado
+el shell y establecida la identidad de color, este patrón cubre cómo
+*elevar* ese sistema a un lenguaje visual premium consistente sin
+tocar el ERP ni reescribir cada plantilla individualmente.
+
+- **Problema**: un sistema de diseño puede tener los componentes
+  correctos (shell separado, badges semánticos, botones consistentes)
+  y aun así sentirse "genérico" o incompleto frente a una referencia
+  visual real (un mockup aprobado) — faltan los detalles de
+  refinamiento (iconografía, jerarquía tipográfica explícita,
+  scrollbar, espaciado generoso) que hacen que una plataforma se
+  sienta terminada y no una colección de componentes sueltos.
+- **Causa raíz**: varios de estos detalles nunca se decidieron
+  explícitamente porque nunca se necesitaron hasta que hubo una
+  referencia visual concreta que compararlos — p. ej. `h1`/`h2`/`h3`
+  nunca tuvieron un tamaño de fuente propio del sistema de diseño
+  (dependían del tamaño por defecto del navegador), y el sidebar nunca
+  tuvo iconos porque nadie los pidió hasta ahora.
+- **Patrón**: refinar el sistema en la capa de COMPONENTES/TOKENS
+  compartidos (`design-system.css`, un puñado de plantillas de shell),
+  nunca vista por vista — cualquier plantilla que ya consume
+  `.tarjeta`/`.kpi`/`.badge`/`.tabla` recibe el refinamiento
+  automáticamente la próxima vez que se renderiza, sin tocar su propio
+  archivo. Cuando el refinamiento es "de identidad" (tamaños de
+  encabezado, espaciado del `.main`) y el selector es compartido con
+  el ERP (`h1`, `h2`, `.main`), se acota con un modificador
+  (`.shell--saas`) en vez de cambiar el selector global — el mismo
+  principio ya usado para el color del sidebar en la fase anterior,
+  aplicado ahora a la tipografía.
+- **Solución**: (1) tipografía — escala explícita de tamaños
+  (`--texto-*`) para `h1`/`h2`/`h3`, acotada a `.shell--saas`; (2)
+  iconografía — emoji consistentes (mismo criterio ya usado en
+  `estado-vacio__icono`/`kpi-grupo__titulo` desde fases anteriores,
+  nunca una librería de iconos SVG/fuente nueva) en sidebar y KPIs;
+  (3) scrollbar fina (`scrollbar-width: thin` + `::-webkit-scrollbar`)
+  y `overflow-x: hidden` en `body` — estas dos SÍ se dejan globales
+  (nunca acotadas a `.shell--saas`) porque son mejoras neutras de
+  plataforma de navegador, no cambios de identidad visual, y benefician
+  también al ERP sin alterarlo; (4) espaciado más generoso
+  (`.shell--saas .main`) para la sensación "premium" pedida.
+- **Reglas**: antes de decidir si un refinamiento va acotado o global,
+  preguntar "¿esto cambia la IDENTIDAD visual (color, tipografía,
+  layout) o es una mejora NEUTRA de plataforma (scrollbar, prevención
+  de overflow)?" — la primera se acota con un modificador, la segunda
+  puede aplicarse globalmente con una nota explícita documentando por
+  qué se consideró segura.
+- **Errores comunes**: sobre-corregir aplicando CADA refinamiento vista
+  por vista (25 archivos) cuando el mismo resultado se logra con 3-4
+  cambios en los componentes/shell compartidos — además de ser mucho
+  más trabajo, introduce inconsistencias reales entre vistas que se
+  tocaron y las que no.
+- **Prevención**: antes de tocar una plantilla individual para un
+  cambio "visual", preguntar primero si el mismo resultado se logra
+  extendiendo la clase/componente ya compartido por todas — solo bajar
+  a nivel de plantilla cuando el cambio es específico de ESA vista
+  (un texto, un dato real).
+- **Aplicabilidad a futuros proyectos**: cualquier plataforma que reciba
+  una referencia visual aprobada (un mockup, una guía de marca) después
+  de que el sistema base ya existe debe traducir esa referencia a
+  tokens/componentes primero, y aplicarla como una actualización de
+  la capa compartida — nunca como 20+ ediciones de plantilla
+  individuales que terminan divergiendo entre sí con el tiempo.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -1335,6 +1400,17 @@ las decisiones de esta familia de correcciones:
   "Eliminar" (protegida por `on_delete=PROTECT` desde FASE 17). Los
   `style=` inline se reemplazan por un conjunto pequeño y cerrado de
   utilidades CSS, nunca un framework de utilidades completo.
+- **#118** (FASE — REDISEÑO VISUAL INTEGRAL SaaS 2.0, ver
+  `KNOWN_ISSUES.md` #138): refinamientos de identidad (tipografía de
+  encabezados, espaciado del `.main`) acotados a `.shell--saas`,
+  siguiendo al pie de la letra la instrucción explícita de crear una
+  variante SaaS específica en vez de asumir que un cambio al selector
+  global era "seguro" para el ERP. Scrollbar fina y `overflow-x:
+  hidden` SÍ se dejan globales, documentado explícitamente como la
+  excepción (mejora neutra de plataforma, no de identidad). Iconos con
+  emoji, nunca una librería SVG/fuente de iconos nueva. Sin tipografía
+  de Google Fonts — la pila `system-ui` ya es moderna y no introduce
+  una dependencia de red nueva sin aprobación explícita.
 
 ## LESSONS LEARNED
 
@@ -1447,6 +1523,21 @@ las decisiones de esta familia de correcciones:
   modelo?", y la respuesta correcta suele ser activar/desactivar, no
   un manejo de excepción alrededor de un borrado que se sabe de
   antemano que puede fallar.
+- Un selector CSS "global" (`h1`, `.main`) compartido entre dos
+  superficies con identidades distintas (ERP y SaaS) es exactamente el
+  tipo de cambio donde "probablemente sea seguro" no es suficiente —
+  la regla explícita de crear una variante acotada (`.shell--saas`)
+  cuando existe riesgo, en vez de decidir unilateralmente que el
+  cambio es inofensivo, es la que hay que seguir incluso cuando el
+  cambio parece trivial (un tamaño de fuente menor rara vez rompe un
+  layout, pero "rara vez" no es "nunca").
+- No todo refinamiento visual nuevo necesita acotarse por shell:
+  cuando el cambio es una mejora neutra de plataforma/navegador
+  (scrollbar, prevención de overflow horizontal) que no altera ninguna
+  identidad visual, aplicarlo globalmente es correcto y más simple —
+  la clave es distinguir explícitamente "cambio de identidad" de
+  "mejora neutra" antes de decidir el alcance, nunca por defecto
+  acotar (o generalizar) todo por igual.
 
 ## COMMON FAILURES
 
@@ -1745,3 +1836,17 @@ las decisiones de esta familia de correcciones:
   reescrito con etiquetas humanas agrupadas en 3 secciones; nuevo
   filtro `estado_badge` con un único mapa código-crudo→color aplicado
   de forma consistente en las 21 plantillas de plataforma.
+- **Síntoma**: frente a un mockup visual aprobado por el usuario, la
+  plataforma ya tenía el shell separado y los badges semánticos
+  correctos, pero se sentía incompleta — sin iconos, con encabezados
+  de tamaño inconsistente (heredado del navegador, nunca del sistema
+  de diseño), con una scrollbar pesada por defecto. → **Causa real**:
+  ninguno de estos detalles se había necesitado hasta que hubo una
+  referencia visual concreta contra la cual compararlos — el sistema
+  de componentes era correcto pero incompleto en su capa de
+  refinamiento. → **Corrección**: iconos con emoji (mismo mecanismo ya
+  establecido, nunca una librería nueva), tamaños de encabezado
+  explícitos acotados a `.shell--saas`, scrollbar fina y `overflow-x:
+  hidden` globales (documentados como la excepción segura) — todo
+  aplicado en la capa de componentes/shell compartidos, nunca vista
+  por vista.
