@@ -36,6 +36,7 @@ from .models import (
 )
 from .services import credits as credit_services
 from .services import invoicing as invoicing_services
+from .services import recurring as recurring_services
 from .services import refunds as refund_services
 from .services import reports as report_services
 from .services import subscriptions as subscription_services
@@ -114,7 +115,18 @@ class TenantDetailView(LoginRequiredMixin, SuperuserRequiredMixin, View):
                     tenant_lifecycle_services.reactivate_tenant(tenant, user=request.user)
             elif accion == "cancelar":
                 if subscription is not None:
-                    subscription_services.cancel_subscription(subscription, immediate=True, reason="Cancelado manualmente por Super Admin", user=request.user)
+                    # FASE DE CORRECCIÓN 5: `cancel_subscription` directo
+                    # NUNCA cancela el lado de PayPal — antes de esta
+                    # corrección, cancelar una suscripción con cobro
+                    # recurrente de PayPal ya autorizado dejaba a PayPal
+                    # cobrando indefinidamente pese a que Budun ya marcaba
+                    # la suscripción CANCELLED. `cancel_recurring_
+                    # subscription` es un superset seguro: si nunca hubo
+                    # autorización de PayPal (`paypal_subscription_id`
+                    # vacío), se comporta exactamente igual que `cancel_
+                    # subscription` — nunca se necesita distinguir el caso
+                    # aquí.
+                    recurring_services.cancel_recurring_subscription(subscription, immediate=True, reason="Cancelado manualmente por Super Admin", user=request.user)
                 else:
                     tenant_lifecycle_services.cancel_tenant(tenant, user=request.user)
         except ValidationError as error:
@@ -387,6 +399,14 @@ class IssueCreditNoteView(LoginRequiredMixin, SuperuserRequiredMixin, View):
             messages.error(request, "Revisa el monto/motivo.")
             return redirect("billing_admin:customer_detail", pk=customer_id)
         tenant = customer.tenants.first()
+        if tenant is None:
+            # FASE DE CORRECCIÓN 5: `CreditNote.tenant` no es nulo (es un
+            # `TenantScopedModel`) — antes de esta corrección, un
+            # `SaaSCustomer` sin ningún Tenant asociado todavía (el
+            # formulario nunca lo impedía) producía un `IntegrityError`
+            # sin manejar (500) en vez de un mensaje claro.
+            messages.error(request, "Este cliente SaaS todavía no tiene ningún tenant asociado — no se puede emitir una nota de crédito.")
+            return redirect("billing_admin:customer_detail", pk=customer_id)
         credit_services.issue_credit_note(
             tenant=tenant, saas_customer=customer, amount=form.cleaned_data["amount"], currency=form.cleaned_data["currency"],
             reason=form.cleaned_data["reason"], user=request.user,

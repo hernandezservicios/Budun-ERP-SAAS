@@ -25,7 +25,22 @@ from ..models import (
 
 
 def _mrr_de_suscripcion(subscription):
+    """FASE DE CORRECCIÓN 5: el precio de lista (`plan_version.
+    price_amount`) NUNCA es lo que un tenant con cupón vigente paga
+    realmente — antes de esta corrección, el MRR/ARR reportado
+    sobreestimaba el ingreso real de cualquier suscripción con un
+    cupón activo, porque nunca aplicaba el mismo descuento que
+    `invoicing.generate_invoice_for_subscription` ya calcula al
+    facturar. Reutiliza exactamente la misma vigencia/cálculo de
+    descuento (`coupons.is_coupon_currently_valid`/`calculate_discount`)
+    — nunca una segunda fórmula de descuento."""
     precio = subscription.plan_version.price_amount
+    if subscription.coupon is not None:
+        from . import coupons as coupon_services
+
+        if coupon_services.is_coupon_currently_valid(subscription.coupon):
+            descuento = coupon_services.calculate_discount(subscription.coupon, precio)
+            precio = max(precio - descuento, Decimal("0"))
     if subscription.plan_version.frequency == PlanVersion.Frequency.ANNUAL:
         return (precio / Decimal("12")).quantize(Decimal("0.01"))
     return precio

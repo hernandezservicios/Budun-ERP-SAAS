@@ -404,6 +404,25 @@ class ChangePlanAndCancelViewTests(TestCase):
         self.subscription.refresh_from_db()
         self.assertTrue(self.subscription.cancel_at_period_end)
 
+    def test_cancelar_con_cobro_recurrente_de_paypal_autorizado_cancela_paypal_tambien(self):
+        # FASE DE CORRECCIÓN 5: antes de esta corrección, cancelar desde
+        # el Portal llamaba a `cancel_subscription` directo -- nunca
+        # cancelaba el lado de PayPal, así que un tenant con cobro
+        # recurrente ya autorizado seguía siendo cobrado automáticamente
+        # pese a haber "cancelado" en Budun.
+        from apps.billing.services import recurring as recurring_services
+
+        with fake_provider() as fake:
+            self.subscription, _url = recurring_services.create_recurring_checkout(
+                self.subscription, user=self.owner, return_url="https://example.test/return", cancel_url="https://example.test/cancel",
+            )
+            respuesta = self.client.post(reverse("billing_portal:cancel"), {"immediate": "on", "reason": "prueba"})
+        self.assertRedirects(respuesta, reverse("billing_portal:status"))
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "cancelled")
+        self.assertEqual(self.subscription.paypal_subscription_status, "CANCELLED")
+        self.assertEqual(len([c for c in fake.calls if c[0] == "cancel_recurring_subscription"]), 1)
+
 
 class PortalMultiTenantIsolationTests(TestCase):
     """FASE 18 — Security Hardening. Ninguno de los endpoints del

@@ -300,7 +300,16 @@ class CancelSubscriptionView(LoginRequiredMixin, TenantRequiredMixin, View):
         if subscription is None or not form.is_valid():
             messages.error(request, "No se pudo procesar la cancelación.")
             return redirect("billing_portal:status")
-        subscription_services.cancel_subscription(
+        # FASE DE CORRECCIÓN 5: `cancel_subscription` directo NUNCA
+        # cancela el lado de PayPal — antes de esta corrección, un tenant
+        # con cobro recurrente de PayPal ya autorizado que cancelaba
+        # desde su propio Portal quedaba con la suscripción CANCELLED en
+        # Budun mientras PayPal seguía cobrándole automáticamente cada
+        # período. `cancel_recurring_subscription` es un superset seguro:
+        # si nunca hubo autorización de PayPal, se comporta exactamente
+        # igual que `cancel_subscription` — nunca se necesita distinguir
+        # el caso aquí.
+        recurring_services.cancel_recurring_subscription(
             subscription, immediate=form.cleaned_data.get("immediate", False),
             reason=form.cleaned_data.get("reason", ""), user=request.user,
         )

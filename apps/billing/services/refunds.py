@@ -17,6 +17,7 @@ from django.db import transaction
 from apps.audit.models import AuditLog
 
 from ..models import BillingRefund, SaaSPayment, SaaSPaymentAllocation
+from . import notifications
 from ._saas_audit import audit_event
 
 
@@ -137,6 +138,11 @@ def _complete_refund(refund, payment, *, user=None):
         payment.save(update_fields=["status"])
         audit_event(refund.tenant, action=AuditLog.Action.GENERIC, user=user, object_type="billing_refund", object_id=refund.pk,
                     after={"status": "completed"})
+    # FASE DE CORRECCIÓN 5: antes de esta corrección, ninguna notificación
+    # avisaba al tenant que su reembolso fue completado. Fuera de la
+    # transacción — una notificación nunca debe poder retrasar/bloquear
+    # el commit real.
+    notifications.notify_refund_completed(refund)
 
 
 def _fail_refund(refund, *, user=None):

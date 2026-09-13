@@ -26,6 +26,17 @@ class ManualRefundTests(TestCase):
         self.assertEqual(refund.amount, Decimal("50.00"))
         self.assertEqual(refund.status, BillingRefund.Status.PENDING)
 
+    def test_completar_reembolso_notifica_al_tenant(self):
+        # FASE DE CORRECCIÓN 5: antes de esta corrección, ninguna
+        # notificación avisaba al tenant que su reembolso fue completado.
+        from django.core import mail
+
+        refund = services.request_billing_refund(self.payment, reason="prueba")
+        mail.outbox.clear()
+        services.complete_manual_refund(refund)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(self.owner.email, mail.outbox[0].to)
+
     def test_completar_reembolso_manual_marca_pago_reembolsado(self):
         refund = services.request_billing_refund(self.payment, reason="prueba")
         services.complete_manual_refund(refund)

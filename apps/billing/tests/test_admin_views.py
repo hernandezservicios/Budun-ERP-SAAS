@@ -12,6 +12,7 @@ from apps.billing.services import subscriptions as subscription_services
 from apps.billing.services import transfers as transfer_services
 from apps.tenants.models import Membership
 
+from ._helpers import fake_provider
 from ._helpers_saas import crear_plan_con_version, crear_saas_customer, crear_tenant_con_owner
 
 User = get_user_model()
@@ -328,6 +329,28 @@ class TenantLifecycleAdminViewTests(TestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.billing_status, Tenant.BillingStatus.ACTIVE)
 
+    def test_cancelar_desde_admin_con_cobro_recurrente_de_paypal_autorizado_cancela_paypal_tambien(self):
+        # FASE DE CORRECCIÓN 5: antes de esta corrección, la acción
+        # "cancelar" del Super Admin llamaba a `cancel_subscription`
+        # directo -- nunca cancelaba el lado de PayPal, así que un tenant
+        # con cobro recurrente ya autorizado seguía siendo cobrado
+        # automáticamente pese a que el Super Admin ya lo había
+        # "cancelado" en Budun.
+        from apps.billing.services import recurring as recurring_services
+
+        with fake_provider() as fake:
+            self.subscription, _url = recurring_services.create_recurring_checkout(
+                self.subscription, user=self.owner, return_url="https://example.test/return", cancel_url="https://example.test/cancel",
+            )
+            respuesta = self.client.post(reverse("billing_admin:tenant_detail", args=[self.tenant.pk]), {"accion": "cancelar"})
+        self.assertRedirects(respuesta, reverse("billing_admin:tenant_detail", args=[self.tenant.pk]))
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.CANCELLED)
+        self.assertEqual(self.subscription.paypal_subscription_status, "CANCELLED")
+        self.assertEqual(len([c for c in fake.calls if c[0] == "cancel_recurring_subscription"]), 1)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.billing_status, Tenant.BillingStatus.CANCELLED)
+
 
 class ActivateVsReactivateAdminViewTests(TestCase):
     """Gate Local (KNOWN_ISSUES.md): ACTIVATE != REACTIVATE — dos
@@ -465,6 +488,49 @@ class ProofApprovalAdminViewTests(TestCase):
         self.assertContains(respuesta_seguida, "Solo se puede rechazar un comprobante enviado o en revisión")
         self.proof.refresh_from_db()
         self.assertEqual(self.proof.status, PaymentProof.Status.APPROVED)
+
+
+class IssueCreditNoteAdminViewTests(TestCase):
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(email="super.credit@example.com", password="clave-de-prueba-987")
+        self.tenant, self.owner = crear_tenant_con_owner()
+        self.saas_customer = crear_saas_customer()
+        self.tenant.saas_customer = self.saas_customer
+        self.tenant.save(update_fields=["saas_customer"])
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+    def test_emitir_nota_de_credito_desde_admin(self):
+        from apps.billing.models import CreditNote
+
+        respuesta = self.client.post(
+            reverse("billing_admin:issue_credit_note", args=[self.saas_customer.pk]),
+            {"amount": "15.00", "currency": "USD", "reason": "ajuste comercial"},
+        )
+        self.assertRedirects(respuesta, reverse("billing_admin:customer_detail", args=[self.saas_customer.pk]))
+        self.assertEqual(CreditNote.all_objects.filter(tenant=self.tenant).count(), 1)
+
+    def test_emitir_nota_de_credito_para_cliente_sin_tenant_muestra_error_amigable_no_500(self):
+        # FASE DE CORRECCIÓN 5: `CreditNote.tenant` no es nulo -- antes de
+        # esta corrección, un SaaSCustomer sin ningún tenant asociado
+        # producía un IntegrityError sin manejar (500).
+        from apps.billing.models import CreditNote, SaaSCustomer
+
+        cliente_sin_tenant = SaaSCustomer.objects.create(name="Cliente sin tenant", email="sin.tenant@example.com")
+        respuesta = self.client.post(
+            reverse("billing_admin:issue_credit_note", args=[cliente_sin_tenant.pk]),
+            {"amount": "15.00", "currency": "USD", "reason": "ajuste"},
+        )
+        # `assertRedirects` sigue el redirect internamente para confirmar
+        # que la página destino carga (200) -- eso YA consume el mensaje
+        # de la sesión, así que un `.get()` propio posterior nunca lo
+        # encontraría. Mismo patrón que el resto de este archivo para
+        # verificar el mensaje: solo el status code aquí, un único
+        # `.get()` explícito después.
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(respuesta.url, reverse("billing_admin:customer_detail", args=[cliente_sin_tenant.pk]))
+        respuesta_seguida = self.client.get(respuesta.url)
+        self.assertContains(respuesta_seguida, "no tiene ningún tenant asociado")
+        self.assertEqual(CreditNote.all_objects.count(), 0)
 
 
 class PlanManagementViewTests(TestCase):

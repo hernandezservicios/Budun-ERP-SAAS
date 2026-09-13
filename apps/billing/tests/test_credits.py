@@ -21,6 +21,19 @@ class CreditNoteTests(TestCase):
         self.subscription = subscription_services.activate_subscription(subscription)
         self.invoice, _creada = invoicing_services.generate_invoice_for_subscription(self.subscription)
 
+    def test_emitir_nota_de_credito_notifica_al_tenant(self):
+        # FASE DE CORRECCIÓN 5: antes de esta corrección, ninguna
+        # notificación avisaba al tenant que recibió una nota de crédito.
+        from django.core import mail
+
+        mail.outbox.clear()
+        services.issue_credit_note(
+            tenant=self.tenant, saas_customer=self.saas_customer, subscription=self.subscription,
+            amount=Decimal("10.00"), currency="USD", reason="ajuste",
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(self.owner.email, mail.outbox[0].to)
+
     def test_emitir_nota_de_credito(self):
         nota = services.issue_credit_note(
             tenant=self.tenant, saas_customer=self.saas_customer, subscription=self.subscription,

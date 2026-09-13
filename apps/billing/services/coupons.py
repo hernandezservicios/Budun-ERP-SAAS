@@ -44,6 +44,32 @@ def redeem_coupon(coupon):
         return coupon
 
 
+def is_coupon_currently_valid(coupon, *, at_date=None):
+    """Vigencia por FECHA + interruptor manual (`is_active`) — nunca el
+    límite de usos, que es un concepto de REDENCIÓN inicial (cuántas
+    veces se activó un cupón), no de renovación continua de una
+    suscripción ya en curso. FASE DE CORRECCIÓN 5: reutilizado por
+    `invoicing.generate_invoice_for_subscription` en CADA renovación —
+    antes de esta corrección, esa función solo comprobaba `coupon.
+    is_active` (un interruptor manual del Super Admin), nunca
+    `valid_from`/`valid_until`, así que un cupón por tiempo limitado
+    (p. ej. una promoción de 3 meses) seguía descontando indefinidamente
+    en cada renovación posterior a su fecha de vencimiento, hasta que
+    alguien lo desactivara a mano. `validate_coupon` (primera vez que un
+    tenant lo aplica) mantiene sus propios chequeos con mensajes
+    específicos por separado — esta función es la versión booleana
+    reutilizable para el punto de renovación, donde no hace falta un
+    mensaje de error distinto por cada motivo."""
+    hoy = at_date or date.today()
+    if not coupon.is_active:
+        return False
+    if coupon.valid_from and hoy < coupon.valid_from:
+        return False
+    if coupon.valid_until and hoy > coupon.valid_until:
+        return False
+    return True
+
+
 def calculate_discount(coupon, amount):
     amount = Decimal(amount)
     if coupon.discount_type == Coupon.DiscountType.PERCENT:

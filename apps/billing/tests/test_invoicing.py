@@ -41,6 +41,25 @@ class InvoiceGenerationTests(TestCase):
         self.assertEqual(invoice.total, Decimal("26.10"))
         self.assertEqual(invoice.coupon_code_snapshot, "DESC10")
 
+    def test_generar_factura_con_cupon_ya_vencido_no_aplica_descuento(self):
+        # FASE DE CORRECCIÓN 5: antes de esta corrección, solo se
+        # comprobaba `coupon.is_active` (un interruptor manual) -- un
+        # cupón con `valid_until` ya pasado seguía descontando en cada
+        # renovación indefinidamente, hasta que alguien lo desactivara a
+        # mano.
+        from datetime import date, timedelta
+
+        cupon = Coupon.objects.create(
+            code="PROMO-VENCIDA", discount_type=Coupon.DiscountType.PERCENT, discount_value=Decimal("10"),
+            valid_until=date.today() - timedelta(days=1),
+        )
+        self.subscription.coupon = cupon
+        self.subscription.save(update_fields=["coupon"])
+        invoice, _creada = services.generate_invoice_for_subscription(self.subscription)
+        self.assertEqual(invoice.discount_total, Decimal("0"))
+        self.assertEqual(invoice.total, Decimal("29.00"))
+        self.assertEqual(invoice.coupon_code_snapshot, "")
+
     def test_balance_due_de_una_factura_recien_creada_es_el_total(self):
         invoice, _creada = services.generate_invoice_for_subscription(self.subscription)
         self.assertEqual(services.get_invoice_balance_due(invoice), invoice.total)

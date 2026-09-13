@@ -71,11 +71,16 @@ def generate_invoice_for_subscription(subscription, *, period_start=None, period
     moneda = plan_version.price_currency
     descuento = Decimal("0")
     cupon_snapshot = ""
-    if subscription.coupon is not None and subscription.coupon.is_active:
+    if subscription.coupon is not None:
         from . import coupons as coupon_services
 
-        descuento = coupon_services.calculate_discount(subscription.coupon, monto)
-        cupon_snapshot = subscription.coupon.code
+        # FASE DE CORRECCIÓN 5: vigencia real (fecha + interruptor
+        # manual), no solo `is_active` — un cupón por tiempo limitado
+        # nunca debe seguir descontando en renovaciones posteriores a su
+        # `valid_until` (ver `coupons.is_coupon_currently_valid`).
+        if coupon_services.is_coupon_currently_valid(subscription.coupon):
+            descuento = coupon_services.calculate_discount(subscription.coupon, monto)
+            cupon_snapshot = subscription.coupon.code
 
     subtotal = monto
     total = max(subtotal - descuento, Decimal("0"))

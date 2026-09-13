@@ -17,6 +17,7 @@ from apps.sales.models import DocumentSequence
 from apps.sales.services import generate_document_number
 
 from ..models import CreditNote, CreditNoteApplication, SaaSInvoice, SaaSPayment, SaaSPaymentAllocation
+from . import notifications
 from ._saas_audit import audit_event
 from .invoicing import _recompute_invoice_status, get_invoice_balance_due
 from .payments import get_unallocated_payment_amount
@@ -34,6 +35,10 @@ def issue_credit_note(*, tenant, saas_customer, amount, currency, reason, subscr
     )
     audit_event(tenant, action=AuditLog.Action.GENERIC, user=user, object_type="credit_note", object_id=credit_note.pk,
                 after={"number": numero, "amount": str(amount)}, reason=reason)
+    # FASE DE CORRECCIÓN 5: antes de esta corrección, ninguna notificación
+    # avisaba al tenant que recibió una nota de crédito — solo era
+    # visible si entraba por su cuenta a revisar su Portal de Facturación.
+    notifications.notify_credit_note_issued(credit_note)
     return credit_note
 
 

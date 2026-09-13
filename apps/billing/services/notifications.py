@@ -116,3 +116,26 @@ def notify_payment_failed(tenant, *, detail=""):
         subject="No pudimos procesar tu pago",
         message=f"Hubo un problema procesando tu pago. {detail}",
     )
+
+
+def notify_credit_note_issued(credit_note):
+    """FASE DE CORRECCIÓN 5: `CreditNote`/`BillingRefund` (sección 9 de
+    la corrección) nunca notificaban nada al tenant — el saldo a favor
+    solo era visible si el tenant entraba por su cuenta a `/facturacion/`
+    a revisarlo. Mismo patrón resiliente que el resto de este módulo."""
+    _enviar(
+        to_email=_tenant_owner_email(credit_note.tenant),
+        subject=f"Se emitió una nota de crédito a tu cuenta — {credit_note.number}",
+        message=(
+            f"Se emitió una nota de crédito de {credit_note.amount} {credit_note.currency} a tu cuenta.\n"
+            f"Motivo: {credit_note.reason}\nPuedes consultar tu saldo a favor en tu Portal de Facturación."
+        ),
+    )
+
+
+def notify_refund_completed(refund):
+    _enviar(
+        to_email=_tenant_owner_email(refund.tenant),
+        subject="Tu reembolso fue completado",
+        message=f"Se completó un reembolso de {refund.amount} {refund.currency}.\nMotivo: {refund.reason or '—'}",
+    )
