@@ -253,11 +253,28 @@ cambia, solo la `PlanVersion` referenciada. Prorrateo lineal por DÍA
 (`calculate_proration`, fórmula explícita y documentada, ver
 `DECISIONS.md`): `valor_diario = precio / días_del_período`; `crédito
 = valor_diario_actual × días_restantes`; `cargo = valor_diario_nuevo ×
-días_restantes`; `neto = cargo − crédito`. Un neto negativo (downgrade)
-emite una `CreditNote` automáticamente; un neto positivo (upgrade) se
-audita pero no genera cargo inmediato en esta fase (queda reflejado en
-la próxima factura recurrente, que ya usa el nuevo precio) — decisión
-explícita, ver `DECISIONS.md`.
+días_restantes`; `neto = cargo − crédito`.
+
+- **Neto negativo (downgrade)**: emite una `CreditNote` automáticamente
+  (`credit_services.issue_credit_note`).
+- **Neto positivo (upgrade) — corregido en FASE DE CORRECCIÓN 3**: antes
+  de esta corrección, el cargo solo quedaba en el `metadata` de
+  auditoría — nunca se cobraba de verdad en ningún lado (ver
+  `KNOWN_ISSUES.md` #133). Ahora `invoicing_services.
+  issue_proration_charge_invoice` emite una `SaaSInvoice` INMEDIATA y
+  aparte del ciclo normal de renovación, por el monto exacto del
+  prorrateo (`period_start=change_date`, misma garantía de
+  `UniqueConstraint(subscription, period_start)` de siempre para que un
+  doble envío del formulario nunca duplique el cargo) — la factura del
+  período vigente, ya emitida, nunca se edita.
+
+Cualquier nota de crédito emitida por un downgrade se aplica
+AUTOMÁTICAMENTE a la próxima factura que se genere para esa suscripción
+(`credit_services.auto_apply_available_credit_notes`, llamada desde
+`generate_invoice_for_subscription`/`issue_proration_charge_invoice`) —
+antes de FASE DE CORRECCIÓN 3, `apply_credit_note_to_invoice` existía
+pero solo se ejercitaba desde pruebas; ninguna vista ni proceso
+automático la invocaba nunca.
 
 ## PAST_DUE / Suspensión / Reactivación
 
@@ -441,6 +458,24 @@ vez de romper la página. El período de la suscripción se muestra como
 "pendiente de activación" en vez de un guion ambiguo cuando todavía no
 se ha fijado.
 
+**Corregido en FASE DE CORRECCIÓN 3**: la distinción de arriba solo se
+respetaba en la acción manual del Super Admin — tres caminos
+AUTOMÁTICOS de confirmación de pago (`transfers.approve_payment_proof`,
+`recurring.confirm_recurring_charge`, `paypal_integration.
+_on_payment_confirmed`) llamaban siempre a `activate_subscription`
+directo, incluso cuando la suscripción estaba `PAST_DUE`/`SUSPENDED` —
+saltándose el guard/auditoría/notificación propios de
+`reactivate_subscription`, y (el efecto real, no solo cosmético) sin
+restaurar el período si ya había vencido durante la suspensión. Los
+tres ahora distinguen: `PENDING` → `activate_subscription`;
+`PAST_DUE`/`SUSPENDED` → `reactivate_subscription`. Además,
+`reactivate_subscription` ahora restaura el período (le da uno nuevo a
+partir de HOY) cuando el vigente ya venció mientras la suscripción
+estaba suspendida/en mora — nunca reanuda un período ya vencido, que
+dispararía de inmediato una factura de renovación retroactiva por
+fechas en las que el tenant no pudo operar (ver `DECISIONS.md` #113).
+Si el período vigente todavía no había terminado, se conserva intacto.
+
 **Seguridad (sin excepciones)**: ninguna activación ocurre solo porque
 exista una `PayPalTransaction`/Order ID/Capture ID — la herramienta de
 prueba de PayPal de plataforma (`/plataforma/billing/admin/cobrar/`,
@@ -451,6 +486,71 @@ paypal_integration._on_payment_confirmed`, ya documentaba en código
 ahora además muestra una advertencia visible en su UI, y la vista de
 detalle de cada transacción indica explícitamente si tiene o no un
 `SaaSPayment` real asociado.
+
+## Lifecycle integral del SaaS (Corrección de Gate Local — "FASE DE CORRECCIÓN 3")
+
+Auditoría de extremo a extremo del ciclo de vida completo (Tenant/
+Subscription/SaaSInvoice/SaaSPayment/Allocation/BillingStatus), sin
+tocar la arquitectura ya validada en las correcciones anteriores.
+Máquina de estados REAL confirmada por el código (nunca un estado
+inventado):
+
+- `Tenant.billing_status`: `PENDING_SETUP` → `PENDING_PAYMENT` →
+  `ACTIVE` ⇄ `PAST_DUE` → `SUSPENDED` → `ACTIVE` (reactivación) /
+  `CANCELLED`. `EXPIRED` existe en el enum pero ningún flujo real lo
+  alcanza todavía (`apps.billing.services.tenants.mark_tenant_expired`
+  no tiene ningún llamador) — documentado como pendiente real, nunca
+  inventado un disparador nuevo sin que el negocio lo pida.
+- `Subscription.Status`: mismo shape (`PENDING`/`ACTIVE`/`PAST_DUE`/
+  `SUSPENDED`/`CANCELLED`/`EXPIRED`, este último también sin disparador
+  real hoy).
+
+Hallazgos reales corregidos (auditoría antes de tocar nada, por
+sección 1 de la corrección):
+
+1. **`ACTIVATE` != `REACTIVATE` no se respetaba en los caminos
+   AUTOMÁTICOS** — ver "Alta inicial y activación" arriba.
+2. **Reactivación nunca restauraba un período vencido** — ver arriba.
+3. **Upgrade con neto positivo nunca cobraba nada** — ver "Cambio de
+   plan y prorrateo" arriba.
+4. **Notas de crédito nunca se aplicaban automáticamente** — ver
+   "Cambio de plan y prorrateo" arriba.
+5. **Un reembolso nunca revertía la `SaaSPaymentAllocation` del pago**:
+   la factura quedaba `PAID`/`PARTIALLY_PAID` para siempre aunque el
+   dinero ya hubiera vuelto al cliente. `refunds._complete_refund`
+   ahora revierte las asignaciones activas del pago hasta cubrir el
+   monto reembolsado (más recientes primero); si una asignación
+   revertida era mayor que lo efectivamente reembolsado, el remanente
+   se re-asigna como una asignación NUEVA a la misma factura (reverso +
+   reasignación, nunca una edición in-place del ledger).
+6. **Dos solicitudes de reembolso simultáneas podían comprometer más de
+   lo disponible** — el guard de monto disponible en
+   `request_billing_refund` solo contaba reembolsos `COMPLETED`; un
+   `BillingRefund` recién creado queda `PENDING` (no completado todavía)
+   así que dos solicitudes concurrentes ambas leían "0 ya reembolsado".
+   `_comprometido_total` ahora suma `PENDING` + `COMPLETED` (un
+   reembolso `FAILED` libera de nuevo su monto).
+7. **Notificaciones de PAST_DUE/suspensión/reactivación/renovación
+   existían desde FASE 17 pero ningún flujo real las llamaba** —
+   conectadas en `mark_past_due`/`suspend_subscription`/
+   `reactivate_subscription`/`ensure_next_renewal_invoice`. Las de
+   "factura próxima a vencer"/"factura vencida" (`notify_invoice_
+   upcoming`/`notify_invoice_overdue`) siguen sin ningún disparador
+   real — requerirían un comando de cron nuevo ("N días antes de
+   vencer") que no existe hoy; documentado como pendiente real, nunca
+   construido sin que el negocio lo pida explícitamente.
+
+**Validado sin necesitar cambios** (auditado, comportamiento ya
+correcto): `BillingStatusMiddleware` contra los 7 estados (ninguno deja
+al tenant sin poder pagar, activo sin evidencia de pago, o con acceso
+ERP indebido); reportes de Super Admin (`apps.billing.services.reports`,
+ya distinguen revenue/pending/paid/past-due/suspended/churn/renewal/
+refunds/transferencias pendientes/notas de crédito, nunca mezclados con
+`apps.reports` tenant-scoped); reconciliación de PayPal recurrente
+(nunca crea una segunda `Subscription` de Budun, webhook duplicado/
+fuera de orden ya idempotente desde FASE DE CORRECCIÓN 2C); aislamiento
+Multi-Tenant (arquitectura de `TenantScopedModel`/`all_objects` ya
+suficiente, sin gap nuevo encontrado).
 
 ## Super Admin (`/plataforma/billing/admin/`) y Portal del tenant (`/facturacion/`)
 
@@ -502,10 +602,16 @@ Probado con hilos reales (`TransactionTestCase`): dos generaciones
 simultáneas de la factura del mismo período (una gana, nunca duplica),
 dos asignaciones simultáneas que exceden el saldo de un pago (una
 gana), dos aprobaciones simultáneas del mismo comprobante (un solo
-`SaaSPayment` creado). Idempotencia real (constraints de base de
-datos, nunca solo "el código no se llama dos veces") en: generación de
-factura por período, aprobación de comprobante (`select_for_update`
-sobre `PaymentProof`), renovación recurrente.
+`SaaSPayment` creado), dos reactivaciones simultáneas de la misma
+suscripción (una gana), dos solicitudes de reembolso simultáneas sobre
+el mismo pago (nunca comprometen juntas más de lo disponible — FASE DE
+CORRECCIÓN 3), dos emisiones simultáneas de la factura de cargo por
+prorrateo de un mismo upgrade (nunca duplica, mismo
+`UniqueConstraint(subscription, period_start)`). Idempotencia real
+(constraints de base de datos, nunca solo "el código no se llama dos
+veces") en: generación de factura por período, factura de cargo por
+prorrateo, aprobación de comprobante (`select_for_update` sobre
+`PaymentProof`), renovación recurrente, reactivación.
 
 ## Reportes
 

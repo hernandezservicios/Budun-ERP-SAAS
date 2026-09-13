@@ -243,6 +243,301 @@ informativo, nunca una entrada a la lógica de negocio.
   facturación nuevo del lado del proveedor — nunca se edita el
   existente.
 
+## SUBSCRIPTION & BILLING LIFECYCLE PATTERNS
+
+Agregado durante "FASE DE CORRECCIÓN 3 — Lifecycle Integral del SaaS"
+(ver `KNOWN_ISSUES.md` #133, `DECISIONS.md` #113, `docs/billing.md`
+sección "Lifecycle integral del SaaS"). Los 11 patrones reutilizables
+que esa corrección exigió documentar explícitamente — varios ya
+aparecían implícitos en secciones anteriores de este Kit; aquí quedan
+todos con la misma estructura (Problema/Patrón/Solución/Reglas/Errores
+comunes/Prevención) para que cualquier dominio futuro con un ciclo de
+vida de estados (no solo Billing) pueda reutilizarlos sin releer el
+código fuente.
+
+### 1. Subscription State Machine
+
+- **Problema**: un ciclo de vida con varios estados relacionados
+  (`Tenant.billing_status` de plataforma + `Subscription.status` de
+  negocio) puede divergir entre sí, o alguien puede "inventar" un
+  estado nuevo a mitad de una corrección sin darse cuenta de que ya
+  existe uno equivalente.
+- **Patrón**: DOS máquinas de estados relacionadas pero DISTINTAS, cada
+  una con su propio `TextChoices`, sincronizadas en un solo sentido
+  (`apps.billing.services.subscriptions` llama a
+  `apps.billing.services.tenants`, nunca al revés) por funciones que
+  son las ÚNICAS que escriben ese campo en todo el proyecto.
+- **Solución**: antes de tocar código, leer el `TextChoices` real de
+  AMBOS modelos y listar cada transición que el código realmente
+  ejecuta (`grep` de cada función de transición) — nunca asumir la
+  máquina de estados a partir de la memoria o de la documentación
+  vieja.
+- **Reglas**: nunca inventar un estado nuevo sin que el negocio lo pida
+  explícitamente; un estado que existe en el enum pero sin ningún
+  disparador real (`EXPIRED` en este proyecto) se documenta como
+  pendiente, nunca se "completa" solo por prolijidad.
+- **Errores comunes**: asumir que dos campos con nombres parecidos
+  (`billing_status` del Tenant, `status` de la Subscription) son la
+  misma máquina de estados solo porque comparten varios valores.
+- **Prevención**: un test explícito por cada valor del enum contra cada
+  clase de ruta/comportamiento relevante (ver "PAST_DUE / SUSPENDED"
+  abajo y `BillingStatusMiddlewareTests`), nunca solo un subconjunto
+  "representativo".
+
+### 2. Billing Lifecycle (visión de punta a punta)
+
+- **Problema**: "existe una función para cada paso" no significa que
+  los pasos estén conectados entre sí en el orden real de negocio.
+- **Patrón**: alta → activación → período fijo → renovación → pago →
+  (fallo → PAST_DUE → gracia → retry → SUSPENDED → reactivación) →
+  cancelación, con upgrade/downgrade/crédito/reembolso como ramas
+  laterales que nunca alteran una factura ya emitida.
+- **Solución**: auditar CADA transición leyendo el código real (nunca
+  solo el nombre de la función) antes de corregir nada — de las 6
+  correcciones reales de esta fase, ninguna era "falta una función";
+  todas eran "la función existe pero un llamador real la usa mal, o
+  nadie la llama".
+- **Reglas**: cada paso deja evidencia real (factura, pago, allocation)
+  antes de avanzar al siguiente estado — nunca una transición "porque
+  sí" sin el evento de negocio que la justifica.
+- **Errores comunes**: revisar solo las pruebas unitarias existentes
+  como prueba de que el flujo completo funciona — 228 tests pasaban en
+  verde con los 6 gaps de esta corrección todavía presentes, porque
+  ninguno probaba el camino AUTOMÁTICO completo de punta a punta con el
+  estado de partida correcto (PAST_DUE/SUSPENDED en vez de PENDING).
+- **Prevención**: un smoke manual de ciclo de vida completo (ver
+  sección de smoke en `docs/billing.md`) sigue siendo la única prueba
+  real de que los pasos individuales, todos correctos por separado,
+  también lo son ENCADENADOS.
+
+### 3. Renewal Pattern
+
+- **Problema**: la renovación recurrente puede dispararse desde más de
+  un lugar (un cron programado, un webhook reactivo) — coordinarlos
+  explícitamente sería frágil y agregaría estado nuevo.
+- **Patrón**: una única función idempotente (`ensure_next_renewal_
+  invoice`) que cualquiera de los caminos puede llamar sin saber del
+  otro; la idempotencia real es un `UniqueConstraint` de base de datos
+  (`SaaSInvoice(subscription, period_start)`), nunca una bandera en
+  memoria ni "el código no se llama dos veces".
+- **Solución**: extraer la función compartida UNA vez (hecho en la
+  Corrección 2C) y reutilizarla sin duplicar la lógica de cálculo de
+  período en el segundo camino.
+- **Reglas**: el período NUNCA avanza dos veces para el mismo ciclo —
+  se avanza solo cuando la factura realmente se CREÓ (`creada=True`),
+  nunca cuando se recuperó una ya existente.
+- **Errores comunes**: asumir que el cron "siempre corre primero" y
+  que el webhook solo necesita reaccionar a una factura que ya existe.
+- **Prevención**: prueba de concurrencia real con dos hilos generando
+  la misma renovación a la vez (`InvoiceGenerationConcurrencyTests`).
+
+### 4. Grace Period
+
+- **Problema**: sin un período de gracia explícito, un fallo de pago
+  puntual (tarjeta rechazada por un motivo transitorio) suspendería la
+  cuenta de inmediato, una experiencia agresiva e innecesaria.
+- **Patrón**: un estado intermedio (`PAST_DUE`) que NO bloquea la
+  operación (`billing_status_blocks_operation` es `False` para él),
+  gobernado por una política CONFIGURABLE (`BillingPolicy.
+  grace_period_days`), nunca un número hardcodeado en el código.
+- **Solución**: `apply_billing_past_due_policy` calcula la escalación
+  por CALENDARIO (días desde el vencimiento de una factura real),
+  determinístico y re-ejecutable sin duplicar transiciones (cada
+  función de transición ya es idempotente por sí sola).
+- **Reglas**: nunca suspender directo desde `ACTIVE` sin pasar por
+  `PAST_DUE` primero; el tiempo de gracia se lee siempre de
+  `BillingPolicy`, nunca de una constante en el código.
+- **Errores comunes**: confundir el mecanismo de gracia por CALENDARIO
+  (Transferencia, sin forma de "reintentar un cobro") con el mecanismo
+  de reintento por CANTIDAD DE INTENTOS que un proveedor de cobro
+  recurrente puede ofrecer nativamente (ver "PayPal recurrente" abajo)
+  — son dos mecanismos DISTINTOS para dos métodos de pago distintos,
+  nunca el mismo código.
+- **Prevención**: un test por cada combinación de "¿cuántos días de
+  atraso?" contra el resultado esperado (`ACTIVE`/`PAST_DUE`/
+  `SUSPENDED`), nunca un solo caso feliz.
+
+### 5. PAST_DUE / SUSPENDED (dos estados de mora, deliberadamente distintos)
+
+- **Problema**: tratar "cuenta con problemas de pago" como un único
+  estado difuso pierde información real: ¿puede el tenant seguir
+  operando mientras regulariza, o ya se le bloqueó por completo?
+- **Patrón**: `PAST_DUE` (en gracia, opera con normalidad) y
+  `SUSPENDED` (bloqueado, solo puede pagar) son dos estados
+  INDEPENDIENTES en el enum, nunca un booleano `is_past_due` sobre un
+  único estado "problema de pago".
+- **Solución**: `Tenant.billing_status_blocks_operation` es la única
+  fuente de verdad de "¿bloquea o no?" — evalúa el valor exacto del
+  enum, nunca una heurística sobre otro campo.
+- **Reglas**: `PENDING` != `SUSPENDED` != `PAST_DUE` != `CANCELLED` —
+  cuatro estados con guardas y significados de negocio distintos,
+  ninguno intercambiable con otro aunque el efecto visible ("el tenant
+  no puede operar del todo") coincida para dos de ellos.
+- **Errores comunes**: implementar una única condición "¿tiene algún
+  problema de facturación?" que trate `PAST_DUE` y `SUSPENDED` igual —
+  pierde exactamente la distinción de negocio que este patrón exige.
+- **Prevención**: `BillingStatusMiddlewareTests` prueba cada estado del
+  enum por separado contra el mismo conjunto de rutas, nunca agrupa
+  "los estados problemáticos" en un solo caso de prueba.
+
+### 6. Activation vs Reactivation
+
+- **Problema**: dos operaciones que "terminan en el mismo lugar"
+  (`Subscription.status = ACTIVE`) pueden tener puntos de partida y
+  garantías completamente distintos — tratarlas como intercambiables
+  pierde esas garantías.
+- **Patrón**: `activate_subscription`/`activate_pending_subscription`
+  (exclusivas de `PENDING`, generan evidencia de pago si falta) nunca
+  se reutilizan para `reactivate_subscription` (exclusiva de
+  `SUSPENDED`/`PAST_DUE`, restaura el período si ya venció) — dos
+  funciones con guardas de estado de entrada disjuntas, cada una
+  auditando/notificando con su propio significado ("activada" vs.
+  "reactivada").
+- **Solución real de esta corrección**: el patrón YA estaba correcto en
+  la acción manual del Super Admin desde el Gate Local original; el
+  gap estaba en que TRES caminos automáticos (aprobación de
+  transferencia, confirmación de cobro recurrente, confirmación de
+  pago único vía señal) llamaban al primitivo de activación inicial
+  incluso para una suscripción `SUSPENDED`/`PAST_DUE` — nunca revisado
+  hasta esta auditoría porque cada uno se implementó en una corrección
+  distinta, sin volver a comparar contra el patrón ya establecido en la
+  primera.
+- **Reglas**: antes de llamar a una función de transición de estado,
+  el llamador SIEMPRE debe conocer el estado de PARTIDA real (nunca
+  "sea cual sea, esta función lo arregla") y elegir la función que
+  exige exactamente ese estado de entrada.
+- **Errores comunes**: reutilizar el primitivo de activación "porque ya
+  hace casi lo mismo" (mismo campo, mismo valor final) sin revisar que
+  las garantías adicionales (restauración de período, auditoría/
+  notificación correctas) solo viven en la función específica.
+- **Prevención**: cuando un patrón de negocio se establece en una
+  corrección (aquí, en el Gate Local original de FASE 17), toda
+  corrección POSTERIOR que agregue un nuevo camino de confirmación de
+  pago debe auditar explícitamente si ese camino respeta el mismo
+  patrón — nunca asumir que, por estar descrito en la documentación, ya
+  se aplica en todos lados.
+
+### 7. Invoice as Contractual Snapshot
+
+- **Problema**: un valor "vigente" (precio actual de un plan) puede
+  cambiar en cualquier momento; una obligación de cobro ya emitida
+  nunca debe seguir ese valor cambiante.
+- **Patrón**: `SaaSInvoice.total`/`SaaSInvoice.currency`, congelados al
+  emitirse, son la ÚNICA fuente de verdad para cualquier cobro
+  posterior contra esa factura — nunca se recalculan desde el precio
+  vigente del plan/`PlanVersion`.
+- **Solución**: toda función que iniciar un cobro contra una factura ya
+  existente exige el monto/moneda como parámetros explícitos leídos de
+  la factura (`create_checkout_for_invoice`), nunca un identificador de
+  plan que otra función podría "resolver" de nuevo.
+- **Reglas**: un cargo NUEVO (upgrade a mitad de período) es una
+  factura NUEVA y separada — nunca una edición de una factura ya
+  emitida, ni siquiera para "corregir" un monto.
+- **Errores comunes**: pasar un identificador de negocio (`plan_id`)
+  en vez del monto ya congelado, confiando en que la función de destino
+  "seguramente" no lo recalcula.
+- **Prevención**: un test que cambia el precio vigente DESPUÉS de emitir
+  la factura y confirma que el cobro real sigue usando el monto
+  original (`test_b_un_cambio_de_precio_del_plan_tras_emitir_la_factura_
+  no_afecta_el_monto_cobrado`).
+
+### 8. Recurring Billing
+
+Ver la sección **RECURRING BILLING PATTERN** completa arriba — mismo
+patrón, sin cambios en esta corrección. Resumen: la plataforma SaaS
+sigue siendo la fuente de verdad de negocio (`Subscription`/
+`SaaSInvoice`), el proveedor externo solo autoriza/ejecuta el cobro y
+reporta su propio estado (espejo informativo, nunca una entrada a la
+lógica de negocio); el proveedor decide el calendario, Budun reacciona
+por evento; un fallo de cobro recurrente marca `PAST_DUE`, nunca
+suspende directo; el proveedor reutiliza su propio mecanismo nativo de
+reintentos si lo ofrece, nunca un scheduler propio en paralelo.
+
+### 9. Payment Reconciliation
+
+- **Problema**: conciliar "dinero recibido" contra "obligación
+  pendiente" tiene más casos de los que un primer diseño suele cubrir:
+  pago exacto, sobrepago, pago parcial, reembolso total, reembolso
+  parcial.
+- **Patrón**: un ledger append-only de dos niveles — `SaaSPayment`
+  (dinero recibido) + `SaaSPaymentAllocation` (a qué factura se aplicó,
+  cuánto) — nunca un campo `paid_amount` desnormalizado en la factura
+  ni en el pago; el saldo se calcula siempre sumando el ledger.
+- **Solución de esta corrección**: la reconciliación es SIMÉTRICA — así
+  como `auto_apply_payment` aplica un pago nuevo a facturas abiertas,
+  un reembolso ahora REVIERTE esa aplicación (reverso + reasignación
+  del remanente, nunca una edición in-place) para que la factura vuelva
+  a reflejar la realidad después de que el dinero salió.
+- **Reglas**: una asignación (`SaaSPaymentAllocation`) nunca se edita
+  in-place — una corrección real es SIEMPRE un reverso (`status=
+  REVERSED`) más, si corresponde, una asignación nueva por el monto
+  correcto.
+- **Errores comunes**: implementar el camino "aplicar dinero a una
+  factura" completo y dar por sentado que el camino inverso (reembolso)
+  "ya funciona solo" porque ambos tocan el mismo ledger — son dos
+  operaciones independientes que hay que implementar y probar por
+  separado.
+- **Prevención**: un test que reembolsa un pago que SÍ está aplicado a
+  una factura real (no uno recién creado sin aplicar, que es el caso
+  que las pruebas anteriores cubrían) — exactamente el gap que esta
+  corrección encontró.
+
+### 10. Idempotent Renewal Jobs
+
+- **Problema**: un comando programado (cron) puede ejecutarse dos veces
+  por error humano, o competir con un camino reactivo equivalente — sin
+  una garantía real, ambos podrían duplicar el efecto.
+- **Patrón**: la idempotencia real vive en una restricción de BASE DE
+  DATOS (`UniqueConstraint`), nunca en "el comando no se ejecuta dos
+  veces" ni en un lock aplicativo separado — cualquier camino que
+  intente crear el mismo registro dos veces recibe un `IntegrityError`
+  y se resuelve devolviendo el registro ya existente.
+- **Solución**: `generate_invoice_for_subscription`/`issue_proration_
+  charge_invoice` atrapan `IntegrityError` explícitamente y devuelven
+  la fila existente — nunca dejan que la excepción se propague como un
+  error real.
+- **Reglas**: todo comando pensado para cron real (sin Celery/Redis en
+  este proyecto) debe poder ejecutarse dos veces seguidas sin efecto
+  adicional — verificado con un test, nunca solo argumentado.
+- **Errores comunes**: confiar en un `.exists()` previo para decidir si
+  crear una fila — dos procesos concurrentes pueden pasar esa
+  comprobación a la vez (ventana de carrera real); solo el
+  `UniqueConstraint` cierra la ventana de verdad.
+- **Prevención**: `UpgradeProrationInvoiceConcurrencyTests`/
+  `InvoiceGenerationConcurrencyTests` — dos hilos reales intentando
+  crear el mismo registro a la vez, nunca solo una prueba secuencial
+  que llama a la función dos veces en el mismo hilo.
+
+### 11. Safe Cancellation
+
+- **Problema**: cancelar una suscripción puede, si no se diseña con
+  cuidado, borrar o corromper el historial que Super Admin/tenant
+  necesitan consultar después, o dejar cobros futuros sueltos.
+- **Patrón**: cancelar es una TRANSICIÓN DE ESTADO, nunca un borrado —
+  el historial completo (facturas, pagos, allocations, notas de
+  crédito, reembolsos) permanece intacto y consultable después de
+  cancelar, para siempre. Cuando existe un proveedor externo con cobro
+  autorizado, se cancela PRIMERO ahí (impide cualquier cobro futuro
+  real) y DESPUÉS en Budun — nunca al revés, y nunca solo un lado
+  asumiendo que el otro se entera solo.
+- **Solución**: `cancel_subscription` soporta inmediata o "al finalizar
+  el período" (`cancel_at_period_end`), nunca fuerza una sola semántica;
+  `cancel_recurring_subscription` coordina ambos lados explícitamente,
+  y si el lado del proveedor falla de forma transitoria, el lado de
+  Budun se cancela igual (un tenant nunca debe quedar atrapado por un
+  error externo al querer cancelar su propia cuenta).
+- **Reglas**: cancelar una suscripción `PENDING` (nunca llegó a
+  activarse) sigue siendo una cancelación válida — nunca un caso
+  especial no contemplado.
+- **Errores comunes**: asumir que cancelar significa "ya no hay nada
+  más que hacer con esta suscripción" y dejar de reaccionar a eventos
+  tardíos del proveedor (un cobro tardío/fuera de orden sobre una
+  suscripción ya `CANCELLED` se registra como pago sin aplicar, nunca
+  se descarta ni reactiva nada — ver "RECURRING BILLING PATTERN").
+- **Prevención**: un test que cancela y luego simula un evento tardío
+  del proveedor, confirmando que el estado cancelado nunca se revierte
+  y que el dinero, si llega de todas formas, nunca se pierde.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
@@ -300,6 +595,19 @@ las decisiones de esta familia de correcciones:
   ADEMÁS de programada (desde el cron existente) — ambos caminos usan la
   misma función idempotente, así que cualquiera de los dos que llegue
   primero resuelve, sin necesitar coordinación explícita entre ellos.
+- **#113**: reactivar una suscripción con el período ya vencido le da
+  un período NUEVO a partir de HOY (nunca reanuda el vencido, que
+  facturaría retroactivamente tiempo bloqueado). El cargo de un upgrade
+  se cobra con una factura inmediata y separada, en vez de esperar a la
+  renovación siguiente (evitaba sistemáticamente cobrar el resto del
+  período actual al precio nuevo). Un reembolso `PENDING` cuenta como
+  monto comprometido para el guard de sobre-reembolso (no solo los
+  `COMPLETED`) — cierra una ventana de doble-solicitud concurrente. La
+  nota de crédito de un downgrade se aplica automáticamente a la
+  próxima factura (no existe ninguna pantalla manual para eso, así que
+  dejarlo manual equivalía a nunca aplicarla). `EXPIRED` se deja sin
+  disparador explícitamente — existe en el enum pero ningún flujo real
+  lo pide todavía.
 
 ## LESSONS LEARNED
 
@@ -343,6 +651,30 @@ las decisiones de esta familia de correcciones:
   monto a partir de un identificador, preguntar explícitamente "¿ya
   existe un snapshot congelado del monto real, o esta operación
   necesita calcularlo desde cero?".
+- 228 tests en verde NO significan que el ciclo de vida completo esté
+  conectado — cada corrección anterior probó su propio camino nuevo
+  correctamente, pero ninguna volvió a probar los caminos YA existentes
+  con el estado de partida que su propio cambio hacía posible por
+  primera vez (un pago confirmándose sobre una suscripción `SUSPENDED`,
+  no solo `PENDING`). Una auditoría de "¿todos los caminos hacia esta
+  función usan la función correcta?" (`grep` de cada llamador real,
+  nunca solo releer la función en sí) encontró 3 de los 6 gaps de esta
+  corrección.
+- Un guard de concurrencia que solo cuenta filas en un estado TERMINAL
+  (`COMPLETED`) dentro de una tabla cuyo primer estado real es
+  intermedio (`PENDING`) tiene una ventana real: dos solicitudes que
+  todavía no llegaron al estado terminal se ven ambas como "no cuentan
+  todavía" — el `select_for_update()` sobre la fila padre (aquí,
+  `SaaSPayment`) serializa el ORDEN de ejecución, pero no arregla un
+  cálculo que ignora los intentos ya en curso. La corrección fue sumar
+  también el estado intermedio al cálculo, nunca cambiar el mecanismo
+  de lock (que ya era correcto).
+- Cuando dos operaciones "terminan en el mismo lugar" (mismo campo,
+  mismo valor final), la pregunta correcta nunca es "¿puedo reutilizar
+  la más simple de las dos?" sino "¿desde qué estado de PARTIDA se
+  permite llegar aquí, y qué garantías adicionales (auditoría,
+  notificación, restauración de estado relacionado) solo tiene la
+  función más específica?".
 
 ## COMMON FAILURES
 
@@ -438,3 +770,51 @@ las decisiones de esta familia de correcciones:
   abrir su PROPIA transacción, nunca asumir que el llamador ya abrió
   una; un smoke manual ejecutado fuera del framework de tests es lo que
   expuso este caso real.
+- **Síntoma**: aprobar un comprobante de transferencia (o confirmar un
+  cobro de PayPal, único o recurrente) sobre una suscripción
+  `SUSPENDED`/`PAST_DUE` la reactivaba correctamente en apariencia
+  (`status` volvía a `ACTIVE`), pero el período seguía siendo el
+  vencido de antes de la suspensión. → **Causa real**: los tres caminos
+  automáticos de confirmación de pago llamaban a `activate_subscription`
+  (el primitivo de activación INICIAL) en vez de `reactivate_
+  subscription` — funcionalmente parecido (mismo campo, mismo valor
+  final) pero sin la lógica de restauración de período que solo vive en
+  la segunda función. → **Corrección**: los tres caminos ahora
+  distinguen el estado de partida (`PENDING` → activar; `PAST_DUE`/
+  `SUSPENDED` → reactivar) y `reactivate_subscription` restaura el
+  período cuando ya venció.
+- **Síntoma**: un upgrade de plan a mitad de período nunca aparecía
+  cobrado en ningún lado — ni una factura nueva, ni una línea en la
+  siguiente, solo un registro en el `metadata` de auditoría. → **Causa
+  real**: `change_plan` solo tenía una rama para el caso "hay que
+  acreditar" (downgrade); el caso "hay que cobrar" (upgrade) nunca se
+  implementó, pese a que el propio docstring de la función lo prometía.
+  → **Corrección**: `issue_proration_charge_invoice` emite una factura
+  inmediata y separada por el cargo exacto.
+- **Síntoma**: una nota de crédito emitida por un downgrade nunca se
+  veía reflejada en ninguna factura futura, ni automática ni
+  manualmente (no existe ninguna pantalla para "aplicar" una). → **Causa
+  real**: `apply_credit_note_to_invoice` existía desde FASE 17 pero
+  ningún llamador real (vista o proceso automático) la invocaba —
+  código completamente alcanzable solo desde pruebas. → **Corrección**:
+  `auto_apply_available_credit_notes`, invocada automáticamente al
+  generar cualquier factura nueva para la suscripción.
+- **Síntoma**: reembolsar un pago que SÍ estaba aplicado a una factura
+  dejaba esa factura marcada `PAID` para siempre, aunque el dinero ya
+  hubiera vuelto al cliente. → **Causa real**: `_complete_refund`
+  cambiaba el estado del `SaaSPayment` pero nunca tocaba la
+  `SaaSPaymentAllocation` correspondiente — los 11 tests de reembolso
+  existentes nunca lo detectaron porque ninguno reembolsaba un pago
+  realmente aplicado (todos usaban un pago recién creado, sin aplicar).
+  → **Corrección**: revertir las asignaciones activas del pago hasta
+  cubrir el monto reembolsado, reasignando el remanente si la
+  asignación revertida era mayor que lo efectivamente devuelto.
+- **Síntoma** (encontrado por la prueba de concurrencia nueva del punto
+  anterior, no por auditoría de código): dos solicitudes de reembolso
+  simultáneas de 30.00 cada una sobre un pago de 50.00 pasaban AMBAS. →
+  **Causa real**: el guard de monto disponible contaba solo reembolsos
+  `COMPLETED`; un `BillingRefund` recién creado queda `PENDING`, así
+  que ambos hilos, aunque serializados por el lock sobre `SaaSPayment`,
+  veían igualmente "0 ya reembolsado" uno después del otro. →
+  **Corrección**: sumar también `PENDING` al cálculo del monto ya
+  comprometido.
