@@ -1279,6 +1279,50 @@ tocar el ERP ni reescribir cada plantilla individualmente.
   la capa compartida — nunca como 20+ ediciones de plantilla
   individuales que terminan divergiendo entre sí con el tiempo.
 
+## Conditional Severity Indicator Pattern (Revisión visual SaaS, Bloque A)
+
+- **Problema**: un indicador visual de severidad (color de advertencia
+  o peligro en un KPI/badge) que se aplica de forma INCONDICIONAL —
+  sin importar si el valor real es 0 — muestra una señal de alarma
+  falsa constantemente, entrenando al usuario a ignorarla (la clásica
+  "fatiga de alertas").
+- **Causa raíz**: al construir un panel de KPIs con varias métricas de
+  "problema" (pagos atrasados, suspensiones, cancelaciones), es fácil
+  fijar el color de severidad de cada tarjeta como parte de su
+  definición estática, en vez de derivarlo del valor real que esa
+  tarjeta va a mostrar — el propio dashboard de esta plataforma tenía
+  2 KPIs ya condicionales (Transferencias pendientes, Facturas
+  vencidas) y 3 sin condicionar (Pagos atrasados, Suspendidas,
+  Cancelaciones este mes), una inconsistencia real dentro de la MISMA
+  pantalla que nadie había notado.
+- **Patrón**: separar el CONTEO (siempre se muestra, sea 0 o no) del
+  COLOR DE SEVERIDAD (solo se aplica cuando el conteo indica un
+  problema real) — `{% if resumen.valor %}kpi--advertencia{% endif %}`,
+  nunca la clase fija.
+- **Solución**: para cada indicador que representa "algo va mal si
+  este número es mayor que 0", la clase de color se calcula desde el
+  valor, nunca se asigna en la plantilla como si fuera parte fija del
+  diseño de esa tarjeta.
+- **Reglas**: distinguir dos categorías de KPI antes de decidir el
+  color: "indicador de problema" (0 = bien, código neutro; >0 = alerta,
+  color condicional) vs. "indicador de crecimiento/categoría" (ingresos,
+  suscripciones activas — el color puede ser fijo porque representa la
+  categoría del dato, no un juicio sobre si el valor actual es bueno o
+  malo).
+- **Errores comunes**: copiar y pegar el modificador de color de un KPI
+  ya existente al crear uno nuevo sin verificar si ese KPI en concreto
+  debería ser condicional — así fue exactamente como surgió la
+  inconsistencia real encontrada aquí.
+- **Prevención**: al agregar cualquier KPI/badge de "problema" nuevo,
+  preguntar explícitamente "¿este color debe desaparecer cuando el
+  valor sea 0?" antes de fijar la clase.
+- **Aplicabilidad a futuros proyectos**: cualquier dashboard con
+  indicadores de "cosas que requieren atención" (una plataforma de
+  préstamos con "cuotas vencidas", "solicitudes rechazadas",
+  "clientes en mora") debe aplicar este mismo criterio — el color de
+  alarma se deriva siempre del valor real, nunca se fija como parte
+  del diseño estático de la tarjeta.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en
