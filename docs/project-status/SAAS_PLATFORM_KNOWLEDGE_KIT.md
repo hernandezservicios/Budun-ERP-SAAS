@@ -1167,6 +1167,18 @@ antes de corregir que el resto de este Knowledge Kit.
   principio un sidebar agrupado por dominio con este mismo mecanismo de
   estado activo, en vez de una navegación ad-hoc que "ya se ordenará
   después".
+- **Addendum (Revisión visual SaaS, Bloque B) — reutilización de una
+  vista de detalle adyacente**: cuando un modelo B (aquí, `Subscription`)
+  no tiene una página de detalle propia pero SIEMPRE pertenece 1:1 (o
+  1:N con "el vigente" bien definido) a un modelo A que SÍ la tiene
+  (aquí, `Tenant`), la vista de detalle de A ya es, en la práctica, el
+  detalle real de B — la solución correcta es enlazar el listado de B
+  hacia el detalle de A (agregando solo el campo id que falte al
+  reporte, nunca lógica nueva), NUNCA construir una página de detalle
+  nueva y duplicada para B. Invertir esta regla (crear SubscriptionDetail
+  cuando TenantDetail ya muestra todo lo relevante de la suscripción
+  vigente) sería exactamente el tipo de "segunda fuente de verdad"/
+  funcionalidad duplicada que el proyecto evita en todo lo demás.
 
 ### 4. Human-readable SaaS Status Pattern
 
@@ -1582,6 +1594,15 @@ las decisiones de esta familia de correcciones:
   la clave es distinguir explícitamente "cambio de identidad" de
   "mejora neutra" antes de decidir el alcance, nunca por defecto
   acotar (o generalizar) todo por igual.
+- Una vista puede pasar un `ModelForm` ya validado al contexto de la
+  plantilla (`context["version_form"] = PlanVersionForm()`) y la
+  plantilla puede simplemente IGNORARLO, usando `<input>`/`<select>`
+  sueltos con los mismos `name=` — el POST sigue funcionando (los
+  nombres de campo coinciden) así que nada se rompe funcionalmente,
+  pero se pierden los labels/help_text/errores por campo que el form
+  ya sabía renderizar. Auditar un formulario no es solo mirar la
+  plantilla: hay que confirmar que la plantilla REALMENTE usa el form
+  que la vista le da, no solo que el nombre del campo coincide.
 
 ## COMMON FAILURES
 
