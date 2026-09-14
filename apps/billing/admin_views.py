@@ -393,8 +393,18 @@ class ProofDownloadView(LoginRequiredMixin, SuperuserRequiredMixin, View):
 
 class CreditNotesListView(LoginRequiredMixin, SuperuserRequiredMixin, View):
     def get(self, request):
+        # BLOQUE C (revisión visual): se anota el saldo disponible de
+        # cada nota reutilizando el servicio ya existente — el listado
+        # mostraba el monto emitido pero nunca si la nota ya estaba
+        # agotada, dato real que el Super Admin necesita para decidir
+        # si todavía puede aplicarse a una factura.
+        credit_notes = list(
+            CreditNote.all_objects.select_related("tenant", "saas_customer").order_by("-created_at")[:100]
+        )
+        for nota in credit_notes:
+            nota.saldo_disponible = credit_services.get_unapplied_credit_note_amount(nota)
         return render(request, "billing/admin/credit_notes_list.html", {
-            "credit_notes": CreditNote.all_objects.select_related("tenant", "saas_customer").order_by("-created_at")[:100],
+            "credit_notes": credit_notes,
         })
 
 

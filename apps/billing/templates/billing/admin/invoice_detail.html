@@ -8,7 +8,12 @@
 <div class="encabezado-pagina">
     <div>
         <h1>Factura {{ invoice.number }}</h1>
-        <p class="encabezado-pagina__descripcion">Tenant: {{ invoice.tenant }} · Estado: <span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span> · Saldo pendiente: {{ saldo|monto }} {{ invoice.currency }}</p>
+        <p class="encabezado-pagina__descripcion">
+            Tenant: {{ invoice.tenant }} · Estado: <span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span> · Saldo pendiente: {{ saldo|monto }} {{ invoice.currency }}
+        </p>
+        <p class="encabezado-pagina__descripcion">
+            Período: {{ invoice.period_start }} — {{ invoice.period_end }} · Emitida: {{ invoice.issue_date }} · Vence: {{ invoice.due_date }}
+        </p>
     </div>
     <div class="encabezado-pagina__acciones">
         <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:invoices_list' %}">← Volver a facturas</a>
@@ -23,11 +28,24 @@
     </table>
 </div>
 
+<div class="tarjeta u-ancho-32 u-mb-6">
+    <div class="tarjeta__cuerpo">
+        <p>Subtotal: {{ invoice.subtotal|monto }} {{ invoice.currency }}</p>
+        {% if invoice.discount_total %}
+        <p>Descuento: −{{ invoice.discount_total|monto }} {{ invoice.currency }}{% if invoice.coupon_code_snapshot %} (cupón {{ invoice.coupon_code_snapshot }}){% endif %}</p>
+        {% endif %}
+        {% if invoice.tax_total %}
+        <p>Impuesto: {{ invoice.tax_total|monto }} {{ invoice.currency }}</p>
+        {% endif %}
+        <p><strong>Total: {{ invoice.total|monto }} {{ invoice.currency }}</strong></p>
+    </div>
+</div>
+
 <div class="encabezado-pagina"><h2>Pagos aplicados</h2></div>
 <div class="tabla-envoltorio u-mb-6">
     <table class="tabla">
-        <thead><tr><th>Pago</th><th>Monto</th><th>Estado</th></tr></thead>
-        <tbody>{% for allocation in allocations %}<tr><td>{{ allocation.payment }}</td><td>{{ allocation.amount|monto }}</td><td><span class="badge badge--{{ allocation.status|estado_badge }}">{{ allocation.get_status_display }}</span></td></tr>{% empty %}<tr><td colspan="3">Sin pagos aplicados.</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>Pago</th><th>Método</th><th>Monto</th><th>Estado</th></tr></thead>
+        <tbody>{% for allocation in allocations %}<tr><td>{{ allocation.payment }}</td><td>{{ allocation.payment.get_method_display }}</td><td>{{ allocation.amount|monto }}</td><td><span class="badge badge--{{ allocation.status|estado_badge }}">{{ allocation.get_status_display }}</span></td></tr>{% empty %}<tr><td colspan="4">Sin pagos aplicados.</td></tr>{% endfor %}</tbody>
     </table>
 </div>
 

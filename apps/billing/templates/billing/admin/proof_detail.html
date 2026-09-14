@@ -29,10 +29,7 @@
         {% endif %}
 
         {% if proof.status == "submitted" or proof.status == "under_review" %}
-        <form method="post" class="u-inline-block u-mr-2">
-            {% csrf_token %}
-            <button type="submit" class="btn btn--primario" name="accion" value="aprobar">Aprobar</button>
-        </form>
+        <button type="button" class="btn btn--primario u-mr-2" data-modal-open="modal-aprobar-comprobante">Aprobar</button>
         <form method="post" class="u-inline-block">
             {% csrf_token %}
             <input type="text" name="reason" placeholder="Motivo del rechazo" required>
@@ -41,4 +38,24 @@
         {% endif %}
     </div>
 </div>
+
+{% if proof.status == "submitted" or proof.status == "under_review" %}
+<dialog class="modal" id="modal-aprobar-comprobante">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="aprobar">
+        <div class="modal__encabezado">
+            <h2>Aprobar comprobante</h2>
+            <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal__cuerpo">
+            <p>Se aplicará un pago de <strong>{{ proof.declared_amount|monto }} {{ proof.declared_currency }}</strong> a la factura <strong>{{ proof.invoice.number }}</strong> de <strong>{{ proof.tenant }}</strong>, activando su suscripción si corresponde. ¿Confirmas la aprobación?</p>
+        </div>
+        <div class="modal__pie">
+            <button type="button" class="btn btn--contorno" data-modal-close>Cancelar</button>
+            <button type="submit" class="btn btn--primario">Sí, aprobar</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
 {% endblock %}

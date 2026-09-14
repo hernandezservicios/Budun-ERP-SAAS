@@ -415,3 +415,244 @@ class RevisionVisualFaseBTests(TestCase):
         self.assertEqual(set(codigos_reales), {"pending", "active", "past_due", "suspended", "cancelled", "expired"})
         for codigo in codigos_reales:
             self.assertNotEqual(estado_badge(codigo), "neutro", f"Estado real {codigo!r} no debería caer al color por defecto")
+
+
+class RevisionVisualFaseCTests(TestCase):
+    """FASE SIGUIENTE — Revisión visual SaaS vista por vista, Bloque C
+    (Facturación y Pagos: Facturas, detalle de factura, Pagos,
+    Transferencias, Comprobantes, Reembolsos, Notas de crédito). Cada
+    test cubre una inconsistencia real encontrada y corregida durante
+    la auditoría de este bloque — nunca una regla de negocio nueva."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(email="super.fasec@example.com", password="clave-de-prueba-987")
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+    def test_invoices_list_muestra_estado_vacio_real_cuando_no_hay_facturas(self):
+        respuesta = self.client.get(reverse("billing_admin:invoices_list"))
+        self.assertContains(respuesta, "Sin facturas todavía")
+        self.assertContains(respuesta, "estado-vacio")
+
+    def test_invoice_detail_muestra_el_desglose_real_de_totales_y_periodo(self):
+        """Hallazgo real: `SaaSInvoice` tiene subtotal/discount_total/
+        tax_total/total/period_start/period_end/issue_date, pero
+        invoice_detail.html solo mostraba el total en el encabezado —
+        nunca el desglose ni el período facturado."""
+        from apps.billing.services import invoicing as invoicing_services
+        from apps.billing.services import subscriptions as subscription_services
+
+        from ._helpers_saas import crear_plan_con_version, crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-desglose-factura")
+        plan, version = crear_plan_con_version(slug="plan-desglose-factura", precio=Decimal("50.00"))
+        saas_customer = crear_saas_customer(email="cliente.desglose@example.com")
+        subscription = subscription_services.create_subscription(tenant, saas_customer=saas_customer, plan_version=version)
+        invoice, _creada = invoicing_services.generate_invoice_for_subscription(subscription)
+        respuesta = self.client.get(reverse("billing_admin:invoice_detail", args=[invoice.pk]))
+        contenido = respuesta.content.decode()
+        self.assertIn("Subtotal", contenido)
+        self.assertIn("50.00 USD", contenido)
+        # La plantilla renderiza la fecha ya localizada (es-ES, ej. "14 de
+        # septiembre de 2026"), nunca el ISO crudo de `str(date)` — se
+        # compara contra el mismo formateador que usa el template.
+        from django.utils.formats import date_format
+
+        self.assertIn(date_format(invoice.period_start), contenido)
+
+    def test_payments_list_muestra_estado_vacio_real_cuando_no_hay_pagos(self):
+        respuesta = self.client.get(reverse("billing_admin:payments_list"))
+        self.assertContains(respuesta, "Sin pagos todavía")
+        self.assertContains(respuesta, "estado-vacio")
+
+    def test_payments_list_muestra_fecha_y_referencia_reales(self):
+        """Hallazgo real: `SaaSPayment.external_reference`/`received_at`
+        existían en el modelo pero nunca se mostraban en el listado."""
+        from apps.billing.models import SaaSPayment
+        from apps.billing.services import payments as payment_services
+
+        from ._helpers_saas import crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-pago-referencia")
+        saas_customer = crear_saas_customer(email="cliente.pago.referencia@example.com")
+        payment = payment_services.record_payment(
+            tenant=tenant, saas_customer=saas_customer, method=SaaSPayment.Method.MANUAL_OTHER,
+            amount=Decimal("29.00"), currency="USD", external_reference="REF-AUDITORIA-001",
+            status=SaaSPayment.Status.PENDING,
+        )
+        payment_services.confirm_payment(payment)
+        respuesta = self.client.get(reverse("billing_admin:payments_list"))
+        self.assertContains(respuesta, "REF-AUDITORIA-001")
+
+    def test_payments_list_reembolsar_usa_modal_de_confirmacion_no_envio_directo(self):
+        """"Reembolsar total" ya no envía el formulario en un solo clic —
+        abre un modal de confirmación (mismo patrón que Suspender/
+        Cancelar de tenant_detail.html, Bloque A). El formulario real
+        sigue apuntando al mismo endpoint, sin cambios de vista."""
+        from apps.billing.models import SaaSPayment
+        from apps.billing.services import payments as payment_services
+
+        from ._helpers_saas import crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-pago-modal-reembolso")
+        saas_customer = crear_saas_customer(email="cliente.pago.modal@example.com")
+        payment = payment_services.record_payment(
+            tenant=tenant, saas_customer=saas_customer, method=SaaSPayment.Method.MANUAL_OTHER,
+            amount=Decimal("29.00"), currency="USD", status=SaaSPayment.Status.PENDING,
+        )
+        payment_services.confirm_payment(payment)
+        respuesta = self.client.get(reverse("billing_admin:payments_list"))
+        contenido = respuesta.content.decode()
+        self.assertIn(f'data-modal-open="modal-reembolsar-{payment.pk}"', contenido)
+        self.assertIn(f'id="modal-reembolsar-{payment.pk}"', contenido)
+        self.assertIn(reverse("billing_admin:request_refund", args=[payment.pk]), contenido)
+
+    def test_transfers_queue_muestra_fecha_y_cuenta_bancaria_reales(self):
+        """Hallazgo real: `PaymentProof.uploaded_at`/`bank_account` nunca
+        aparecían como columna en la cola de transferencias."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.billing.models import BankAccount
+        from apps.billing.services import invoicing as invoicing_services
+        from apps.billing.services import subscriptions as subscription_services
+        from apps.billing.services import transfers as transfer_services
+
+        from ._helpers_saas import crear_plan_con_version, crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-cola-transferencia")
+        plan, version = crear_plan_con_version(slug="plan-cola-transferencia")
+        saas_customer = crear_saas_customer(email="cliente.cola.transferencia@example.com")
+        subscription = subscription_services.create_subscription(tenant, saas_customer=saas_customer, plan_version=version)
+        invoice, _creada = invoicing_services.generate_invoice_for_subscription(subscription)
+        bank_account = BankAccount.objects.create(
+            bank_name="Banco Auditoria", country="RD", currency="USD", account_holder="Budun ERP", account_number="1111",
+        )
+        transfer_services.submit_payment_proof(
+            subscription=subscription, invoice=invoice, bank_account=bank_account,
+            declared_amount=invoice.total, declared_currency="USD",
+            file=SimpleUploadedFile("comprobante.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf"),
+        )
+        respuesta = self.client.get(reverse("billing_admin:transfers_queue"))
+        self.assertContains(respuesta, "Banco Auditoria")
+
+    def test_transfers_queue_estado_vacio_sin_emoji(self):
+        """Hallazgo real: el barrido de emojis de la FASE REDISEÑO VISUAL
+        MAESTRO usaba un regex que no cubría el bloque Dingbats y dejó
+        pasar el ✅ de este estado vacío — corregido a
+        {% icono "check-circulo" %} durante la auditoría de Bloque C."""
+        respuesta = self.client.get(reverse("billing_admin:transfers_queue"))
+        contenido = respuesta.content.decode()
+        self.assertIn("Sin transferencias pendientes", contenido)
+        self.assertNotIn("✅", contenido)
+        self.assertIn("icono-svg", contenido)
+
+    def test_proof_detail_aprobar_usa_modal_de_confirmacion(self):
+        """"Aprobar" ya no es un envío directo de un clic — abre un modal
+        de confirmación; "Rechazar" sigue igual (ya exige escribir un
+        motivo). El envío POST real (`accion=aprobar`) sigue funcionando
+        exactamente igual que antes — cero cambios en la vista."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.billing.models import BankAccount, PaymentProof
+        from apps.billing.services import invoicing as invoicing_services
+        from apps.billing.services import subscriptions as subscription_services
+        from apps.billing.services import transfers as transfer_services
+
+        from ._helpers_saas import crear_plan_con_version, crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-modal-aprobar")
+        plan, version = crear_plan_con_version(slug="plan-modal-aprobar")
+        saas_customer = crear_saas_customer(email="cliente.modal.aprobar@example.com")
+        subscription = subscription_services.create_subscription(tenant, saas_customer=saas_customer, plan_version=version)
+        invoice, _creada = invoicing_services.generate_invoice_for_subscription(subscription)
+        bank_account = BankAccount.objects.create(
+            bank_name="Banco Modal", country="RD", currency="USD", account_holder="Budun ERP", account_number="2222",
+        )
+        proof = transfer_services.submit_payment_proof(
+            subscription=subscription, invoice=invoice, bank_account=bank_account,
+            declared_amount=invoice.total, declared_currency="USD",
+            file=SimpleUploadedFile("comprobante.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf"),
+        )
+        respuesta = self.client.get(reverse("billing_admin:proof_detail", args=[proof.pk]))
+        contenido = respuesta.content.decode()
+        self.assertIn('data-modal-open="modal-aprobar-comprobante"', contenido)
+        self.assertIn('id="modal-aprobar-comprobante"', contenido)
+        respuesta_post = self.client.post(reverse("billing_admin:proof_detail", args=[proof.pk]), {"accion": "aprobar"})
+        self.assertRedirects(respuesta_post, reverse("billing_admin:proof_detail", args=[proof.pk]))
+        proof.refresh_from_db()
+        self.assertEqual(proof.status, PaymentProof.Status.APPROVED)
+
+    def test_refunds_list_muestra_estado_vacio_real_cuando_no_hay_reembolsos(self):
+        respuesta = self.client.get(reverse("billing_admin:refunds_list"))
+        self.assertContains(respuesta, "Sin reembolsos todavía")
+        self.assertContains(respuesta, "estado-vacio")
+
+    def test_refunds_list_muestra_fecha_y_motivo_reales(self):
+        """Hallazgo real: `BillingRefund.created_at`/`reason` existían en
+        el modelo pero nunca se mostraban en el listado."""
+        from apps.billing.models import SaaSPayment
+        from apps.billing.services import payments as payment_services
+        from apps.billing.services import refunds as refund_services
+
+        from ._helpers_saas import crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-reembolso-motivo")
+        saas_customer = crear_saas_customer(email="cliente.reembolso.motivo@example.com")
+        payment = payment_services.record_payment(
+            tenant=tenant, saas_customer=saas_customer, method=SaaSPayment.Method.MANUAL_OTHER,
+            amount=Decimal("29.00"), currency="USD", status=SaaSPayment.Status.PENDING,
+        )
+        payment_services.confirm_payment(payment)
+        refund_services.request_billing_refund(payment, reason="Cliente canceló por error", user=self.superadmin)
+        respuesta = self.client.get(reverse("billing_admin:refunds_list"))
+        self.assertContains(respuesta, "Cliente canceló por error")
+
+    def test_refunds_list_marcar_completado_usa_modal_de_confirmacion(self):
+        """"Marcar completado" (reembolso manual, sin reversión posible)
+        ya no es un envío directo de un clic — mismo patrón de modal ya
+        aplicado a Reembolsar/Aprobar/Suspender/Cancelar."""
+        from apps.billing.models import SaaSPayment
+        from apps.billing.services import payments as payment_services
+        from apps.billing.services import refunds as refund_services
+
+        from ._helpers_saas import crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-reembolso-modal")
+        saas_customer = crear_saas_customer(email="cliente.reembolso.modal@example.com")
+        payment = payment_services.record_payment(
+            tenant=tenant, saas_customer=saas_customer, method=SaaSPayment.Method.MANUAL_OTHER,
+            amount=Decimal("29.00"), currency="USD", status=SaaSPayment.Status.PENDING,
+        )
+        payment_services.confirm_payment(payment)
+        refund = refund_services.request_billing_refund(payment, reason="Prueba modal", user=self.superadmin)
+        respuesta = self.client.get(reverse("billing_admin:refunds_list"))
+        contenido = respuesta.content.decode()
+        self.assertIn(f'data-modal-open="modal-completar-{refund.pk}"', contenido)
+        self.assertIn(f'id="modal-completar-{refund.pk}"', contenido)
+        self.assertIn(reverse("billing_admin:complete_refund", args=[refund.pk]), contenido)
+
+    def test_credit_notes_list_muestra_estado_vacio_real_cuando_no_hay_notas(self):
+        respuesta = self.client.get(reverse("billing_admin:credit_notes_list"))
+        self.assertContains(respuesta, "Sin notas de crédito todavía")
+        self.assertContains(respuesta, "estado-vacio")
+
+    def test_credit_notes_list_muestra_saldo_disponible_y_estado_real(self):
+        """Hallazgo real: el listado mostraba el monto emitido de cada
+        nota pero nunca si ya estaba aplicada (parcial o totalmente) —
+        dato que ya existía como servicio
+        (`get_unapplied_credit_note_amount`) y ahora se anota en la
+        vista (`CreditNotesListView`), sin crear ninguna regla nueva."""
+        from apps.billing.services import credits as credit_services
+
+        from ._helpers_saas import crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-nota-saldo")
+        saas_customer = crear_saas_customer(email="cliente.nota.saldo@example.com")
+        credit_services.issue_credit_note(
+            tenant=tenant, saas_customer=saas_customer, amount=Decimal("15.00"), currency="USD",
+            reason="Ajuste de auditoría",
+        )
+        respuesta = self.client.get(reverse("billing_admin:credit_notes_list"))
+        contenido = respuesta.content.decode()
+        self.assertIn("15.00 USD", contenido)
+        self.assertIn("Disponible", contenido)
+        self.assertIn("Ajuste de auditoría", contenido)

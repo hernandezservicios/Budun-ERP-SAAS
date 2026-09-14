@@ -1,5 +1,5 @@
 {% extends "layout_saas_admin.html" %}
-{% load ui_extras %}
+{% load ui_extras ui_icons %}
 {% block title %}Transferencias pendientes — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
@@ -9,16 +9,23 @@
 {% if proofs %}
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Referencia</th><th>Tenant</th><th>Monto declarado</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Referencia</th><th>Tenant</th><th>Fecha</th><th>Cuenta bancaria</th><th>Monto declarado</th><th>Estado</th><th></th></tr></thead>
         <tbody>
             {% for proof in proofs %}
-            <tr><td>{{ proof.reference }}</td><td>{{ proof.tenant }}</td><td>{{ proof.declared_amount|monto }} {{ proof.declared_currency }}</td><td><span class="badge badge--{{ proof.status|estado_badge }}">{{ proof.get_status_display }}</span></td>
-                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:proof_detail' proof.pk %}">Revisar</a></td></tr>
+            <tr>
+                <td>{{ proof.reference }}</td>
+                <td>{{ proof.tenant }}</td>
+                <td>{{ proof.uploaded_at }}</td>
+                <td>{{ proof.bank_account }}</td>
+                <td>{{ proof.declared_amount|monto }} {{ proof.declared_currency }}</td>
+                <td><span class="badge badge--{{ proof.status|estado_badge }}">{{ proof.get_status_display }}</span></td>
+                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:proof_detail' proof.pk %}">Revisar</a></td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">✅</div><h3>Sin transferencias pendientes</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono">{% icono "check-circulo" %}</div><h3>Sin transferencias pendientes</h3></div>
 {% endif %}
 {% endblock %}

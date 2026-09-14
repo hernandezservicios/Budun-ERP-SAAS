@@ -1,29 +1,55 @@
 {% extends "layout_saas_admin.html" %}
-{% load ui_extras %}
+{% load ui_extras ui_icons %}
 {% block title %}Reembolsos — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
     <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Reembolsos</li></ol>
 </nav>
 <div class="encabezado-pagina"><h1>Reembolsos</h1></div>
+{% if refunds %}
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Tenant</th><th>Pago</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Tenant</th><th>Pago</th><th>Fecha</th><th>Monto</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
         <tbody>
             {% for refund in refunds %}
             <tr>
-                <td>{{ refund.tenant }}</td><td>{{ refund.payment }}</td><td>{{ refund.amount|monto }} {{ refund.currency }}</td><td><span class="badge badge--{{ refund.status|estado_badge }}">{{ refund.get_status_display }}</span></td>
+                <td>{{ refund.tenant }}</td>
+                <td>{{ refund.payment }}</td>
+                <td>{{ refund.created_at }}</td>
+                <td>{{ refund.amount|monto }} {{ refund.currency }}</td>
+                <td>{{ refund.reason|default:"—" }}</td>
+                <td><span class="badge badge--{{ refund.status|estado_badge }}">{{ refund.get_status_display }}</span></td>
                 <td>
                     {% if refund.status == "pending" and not refund.paypal_transaction_id %}
-                    <form method="post" action="{% url 'billing_admin:complete_refund' refund.pk %}">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn--contorno btn--sm">Marcar completado</button>
-                    </form>
+                    <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-completar-{{ refund.pk }}">Marcar completado</button>
                     {% endif %}
                 </td>
             </tr>
-            {% empty %}<tr><td colspan="5">Sin reembolsos.</td></tr>{% endfor %}
+            {% endfor %}
         </tbody>
     </table>
 </div>
+{% for refund in refunds %}
+{% if refund.status == "pending" and not refund.paypal_transaction_id %}
+<dialog class="modal" id="modal-completar-{{ refund.pk }}">
+    <form method="post" action="{% url 'billing_admin:complete_refund' refund.pk %}">
+        {% csrf_token %}
+        <div class="modal__encabezado">
+            <h2>Marcar reembolso como completado</h2>
+            <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal__cuerpo">
+            <p>Confirma que el reembolso de <strong>{{ refund.amount|monto }} {{ refund.currency }}</strong> del tenant <strong>{{ refund.tenant }}</strong> ya fue procesado manualmente (ej. transferencia bancaria) fuera del sistema. Esta acción marca el pago original como reembolsado y no se puede deshacer. ¿Confirmas?</p>
+        </div>
+        <div class="modal__pie">
+            <button type="button" class="btn btn--contorno" data-modal-close>Cancelar</button>
+            <button type="submit" class="btn btn--primario">Sí, marcar completado</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+{% endfor %}
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono">{% icono "reembolso" %}</div><h3>Sin reembolsos todavía</h3></div>
+{% endif %}
 {% endblock %}
