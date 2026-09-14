@@ -7,7 +7,7 @@
 <div class="encabezado-pagina">
     <div>
         <h1>Venta manual</h1>
-        <p class="encabezado-pagina__descripcion">Crea un cliente SaaS, un tenant y su suscripción — usa el mismo núcleo de Billing (nunca activa el tenant directamente; queda pendiente de pago).</p>
+        <p class="encabezado-pagina__descripcion">Crea un cliente SaaS, un tenant y su suscripción. El tenant queda pendiente de pago hasta que se confirme la primera factura.</p>
     </div>
     <div class="encabezado-pagina__acciones">
         <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:dashboard' %}">← Volver al panel</a>
@@ -17,10 +17,18 @@
     <div class="tarjeta__cuerpo">
         <form method="post" novalidate>
             {% csrf_token %}
-            {% for field in form %}
-            {% include "customers/_campo.html" with field=field %}
-            {% endfor %}
-            <button type="submit" class="btn btn--primario">Crear</button>
+            <h3 class="panel-seccion__titulo">Cliente SaaS</h3>
+            {% include "customers/_campo.html" with field=form.customer_name %}
+            {% include "customers/_campo.html" with field=form.customer_email %}
+
+            <h3 class="panel-seccion__titulo u-mt-4">Tenant</h3>
+            {% include "customers/_campo.html" with field=form.tenant_name %}
+            {% include "customers/_campo.html" with field=form.plan_version %}
+
+            <h3 class="panel-seccion__titulo u-mt-4">Propietario (Owner)</h3>
+            {% include "customers/_campo.html" with field=form.owner_email %}
+
+            <button type="submit" class="btn btn--primario u-mt-2">Registrar venta manual</button>
         </form>
     </div>
 </div>

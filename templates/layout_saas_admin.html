@@ -52,6 +52,12 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
                         <span class="sidebar__icono" aria-hidden="true">🏢</span> Tenants
                     </a>
                 </li>
+                <li>
+                    <a class="sidebar__enlace" href="{% url 'billing_admin:manual_sale' %}"
+                       {% if request.resolver_match.url_name == 'manual_sale' %}aria-current="page"{% endif %}>
+                        <span class="sidebar__icono" aria-hidden="true">🛒</span> Venta manual
+                    </a>
+                </li>
             </ul>
         </div>
 
@@ -124,12 +130,6 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
         <div class="sidebar__grupo">
             <p class="sidebar__grupo-titulo">Configuración</p>
             <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:manual_sale' %}"
-                       {% if request.resolver_match.url_name == 'manual_sale' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🛒</span> Venta manual
-                    </a>
-                </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:bank_accounts_list' %}"
                        {% if request.resolver_match.url_name == 'bank_accounts_list' %}aria-current="page"{% endif %}>

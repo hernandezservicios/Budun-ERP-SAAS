@@ -154,6 +154,94 @@ class BotonVolverTests(TestCase):
         self.assertContains(respuesta, reverse("billing_admin:tenants_list"))
 
 
+class RevisionVisualFaseATests(TestCase):
+    """FASE SIGUIENTE — Revisión visual SaaS vista por vista, bloque A
+    (Dashboard, sidebar, Clientes/Tenants, detalle de tenant, venta
+    manual). Cada test cubre una inconsistencia real encontrada y
+    corregida durante la auditoría de este bloque."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(email="super.fasea@example.com", password="clave-de-prueba-987")
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+    def test_dashboard_kpis_de_alerta_no_muestran_color_de_advertencia_cuando_el_conteo_es_cero(self):
+        """Hallazgo real: Pagos atrasados/Suspendidas/Cancelaciones este
+        mes mostraban su color de advertencia/peligro incluso con 0 —
+        inconsistente con Transferencias pendientes/Facturas vencidas,
+        que ya eran condicionales. Con la BD de test vacía (sin ninguna
+        suscripción), el conteo real es 0 para las tres."""
+        respuesta = self.client.get(reverse("billing_admin:dashboard"))
+        contenido = respuesta.content.decode()
+        self.assertIn('<div class="kpi ">\n                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⏰</span> Pagos atrasados', contenido)
+        self.assertIn('<div class="kpi ">\n                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⛔</span> Suspendidas', contenido)
+        self.assertIn('<div class="kpi ">\n                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">❌</span> Cancelaciones este mes', contenido)
+
+    def test_dashboard_ya_no_muestra_los_acronimos_mrr_arr_en_el_texto_de_ayuda(self):
+        respuesta = self.client.get(reverse("billing_admin:dashboard"))
+        contenido = respuesta.content.decode()
+        self.assertNotIn("MRR —", contenido)
+        self.assertNotIn("ARR —", contenido)
+
+    def test_sidebar_agrupa_venta_manual_junto_a_clientes_y_tenants(self):
+        """Venta manual crea un Tenant real — pertenece conceptualmente
+        al grupo 'Clientes y empresas', no a 'Configuración'."""
+        respuesta = self.client.get(reverse("billing_admin:dashboard"))
+        contenido = respuesta.content.decode()
+        inicio_grupo = contenido.index("Clientes y empresas")
+        fin_grupo = contenido.index("Suscripciones y planes")
+        self.assertIn("Venta manual", contenido[inicio_grupo:fin_grupo])
+
+    def test_tenants_list_muestra_estado_vacio_real_cuando_no_hay_tenants(self):
+        respuesta = self.client.get(reverse("billing_admin:tenants_list"))
+        self.assertContains(respuesta, "Sin tenants todavía")
+        self.assertContains(respuesta, "estado-vacio")
+
+    def test_tenants_list_columna_activo_es_un_badge_no_texto_plano(self):
+        tenant, _ = crear_tenant_con_owner(slug="tenant-badge-activo")
+        respuesta = self.client.get(reverse("billing_admin:tenants_list"))
+        self.assertContains(respuesta, "badge--verde")
+
+    def test_detalle_de_tenant_pide_confirmacion_antes_de_suspender_o_cancelar(self):
+        tenant, owner = crear_tenant_con_owner(slug="tenant-confirmacion")
+        from apps.billing.services import subscriptions as subscription_services
+        from ._helpers_saas import crear_plan_con_version, crear_saas_customer
+
+        plan, version = crear_plan_con_version(slug="plan-confirmacion")
+        saas_customer = crear_saas_customer(email="cliente.confirmacion@example.com")
+        subscription = subscription_services.create_subscription(tenant, saas_customer=saas_customer, plan_version=version)
+        subscription_services.activate_subscription(subscription)
+        respuesta = self.client.get(reverse("billing_admin:tenant_detail", args=[tenant.pk]))
+        self.assertContains(respuesta, 'id="modal-suspender-tenant"')
+        self.assertContains(respuesta, 'id="modal-cancelar-tenant"')
+        self.assertContains(respuesta, "data-modal-open=\"modal-suspender-tenant\"")
+        self.assertContains(respuesta, "¿Confirmas la suspensión?")
+
+    def test_suspender_via_el_modal_sigue_funcionando_igual_que_antes(self):
+        """El cambio es solo de presentación (confirmación) — el POST
+        real al mismo endpoint debe seguir funcionando exactamente igual."""
+        tenant, owner = crear_tenant_con_owner(slug="tenant-suspender-modal")
+        from apps.billing.services import subscriptions as subscription_services
+        from ._helpers_saas import crear_plan_con_version, crear_saas_customer
+
+        plan, version = crear_plan_con_version(slug="plan-suspender-modal")
+        saas_customer = crear_saas_customer(email="cliente.suspender.modal@example.com")
+        subscription = subscription_services.create_subscription(tenant, saas_customer=saas_customer, plan_version=version)
+        subscription_services.activate_subscription(subscription)
+        self.client.post(reverse("billing_admin:tenant_detail", args=[tenant.pk]), {"accion": "suspender"})
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, subscription.Status.SUSPENDED)
+
+    def test_manual_sale_agrupa_los_campos_por_entidad_real(self):
+        respuesta = self.client.get(reverse("billing_admin:manual_sale"))
+        contenido = respuesta.content.decode()
+        for texto in ["Cliente SaaS", "Tenant", "Propietario (Owner)", "Registrar venta manual"]:
+            self.assertContains(respuesta, texto)
+        # El orden real debe respetar la agrupación (Cliente antes que
+        # Tenant antes que Propietario).
+        self.assertLess(contenido.index("Cliente SaaS"), contenido.index(">Tenant<"))
+        self.assertLess(contenido.index(">Tenant<"), contenido.index("Propietario (Owner)"))
+
+
 class BankAccountEditarDesactivarTests(TestCase):
     """Sección 11: editar y desactivar (nunca borrado físico) para
     `BankAccount` desde la UI de plataforma."""

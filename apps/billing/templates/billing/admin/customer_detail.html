@@ -16,14 +16,26 @@
 </div>
 
 <div class="encabezado-pagina"><h2>Tenants</h2></div>
-{% for tenant in tenants %}
-<p><a href="{% url 'billing_admin:tenant_detail' tenant.pk %}">{{ tenant.name }}</a> — <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></p>
-{% empty %}<p>Sin tenants asociados.</p>{% endfor %}
+{% if tenants %}
+<ul class="actividad-lista u-mb-6">
+    {% for tenant in tenants %}
+    <li><a href="{% url 'billing_admin:tenant_detail' tenant.pk %}">{{ tenant.name }}</a> <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="campo__ayuda u-mb-6">Sin tenants asociados.</p>
+{% endif %}
 
 <div class="encabezado-pagina"><h2>Suscripciones</h2></div>
-{% for subscription in subscriptions %}
-<p>{{ subscription.plan_version.plan.name }} — <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></p>
-{% empty %}<p>Sin suscripciones.</p>{% endfor %}
+{% if subscriptions %}
+<ul class="actividad-lista u-mb-6">
+    {% for subscription in subscriptions %}
+    <li>{{ subscription.plan_version.plan.name }} <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="campo__ayuda u-mb-6">Sin suscripciones.</p>
+{% endif %}
 
 <div class="tarjeta u-ancho-32 u-mt-6">
     <div class="tarjeta__cuerpo">

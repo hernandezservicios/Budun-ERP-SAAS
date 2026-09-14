@@ -18,12 +18,12 @@
             <div class="kpi kpi--exito">
                 <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">💵</span> Ingresos recurrentes mensuales</p>
                 <p class="kpi__valor">{{ resumen.mrr|monto }}</p>
-                <p class="kpi__ayuda">MRR — suma de todas las suscripciones activas, normalizada a un mes.</p>
+                <p class="kpi__ayuda">Suma de todas las suscripciones activas, normalizada a un mes.</p>
             </div>
             <div class="kpi kpi--exito">
                 <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">📈</span> Ingresos recurrentes anuales</p>
                 <p class="kpi__valor">{{ resumen.arr|monto }}</p>
-                <p class="kpi__ayuda">ARR — ingresos recurrentes mensuales proyectados a 12 meses.</p>
+                <p class="kpi__ayuda">Ingresos recurrentes mensuales proyectados a 12 meses.</p>
             </div>
             <div class="kpi">
                 <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">🧮</span> Ingresos del mes</p>
@@ -46,16 +46,16 @@
                 <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">🆕</span> Altas este mes</p>
                 <p class="kpi__valor">{{ resumen.new_signups_this_month }}</p>
             </div>
-            <div class="kpi kpi--advertencia">
+            <div class="kpi {% if resumen.past_due_subscriptions %}kpi--advertencia{% endif %}">
                 <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⏰</span> Pagos atrasados</p>
                 <p class="kpi__valor">{{ resumen.past_due_subscriptions }}</p>
                 <p class="kpi__ayuda">Suscripciones en período de gracia.</p>
             </div>
-            <div class="kpi kpi--peligro">
+            <div class="kpi {% if resumen.suspended_subscriptions %}kpi--peligro{% endif %}">
                 <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⛔</span> Suspendidas</p>
                 <p class="kpi__valor">{{ resumen.suspended_subscriptions }}</p>
             </div>
-            <div class="kpi kpi--peligro">
+            <div class="kpi {% if resumen.cancellations_this_month %}kpi--peligro{% endif %}">
                 <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">❌</span> Cancelaciones este mes</p>
                 <p class="kpi__valor">{{ resumen.cancellations_this_month }}</p>
             </div>

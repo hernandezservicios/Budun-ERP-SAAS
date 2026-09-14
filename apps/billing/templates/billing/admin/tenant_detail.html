@@ -27,7 +27,7 @@
         <p>
             Cobro recurrente PayPal:
             {% if subscription.paypal_subscription_id %}
-            <code>{{ subscription.paypal_subscription_status|default:"desconocido" }}</code>
+            <span class="badge badge--{{ subscription.paypal_subscription_status|estado_badge }}">{{ subscription.paypal_subscription_status|default:"desconocido"|estado_paypal }}</span>
             — referencia externa: <code>{{ subscription.paypal_subscription_id }}</code>
             {% else %}
             <span class="badge badge--neutro">Sin autorización de cobro automático (pago manual)</span>
@@ -46,14 +46,51 @@
     <button type="submit" class="btn btn--contorno" name="accion" value="reactivar">Reactivar</button>
     {% endif %}
     {% if not subscription or subscription.status == "active" or subscription.status == "past_due" %}
-    <button type="submit" class="btn btn--peligro" name="accion" value="suspender">Suspender</button>
+    <button type="button" class="btn btn--peligro" data-modal-open="modal-suspender-tenant">Suspender</button>
     {% endif %}
     {% if not subscription or subscription.status != "cancelled" %}
-    <button type="submit" class="btn btn--peligro" name="accion" value="cancelar">Cancelar</button>
+    <button type="button" class="btn btn--peligro" data-modal-open="modal-cancelar-tenant">Cancelar</button>
     {% endif %}
 </form>
 
+<dialog class="modal" id="modal-suspender-tenant">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="suspender">
+        <div class="modal__encabezado">
+            <h2>Suspender tenant</h2>
+            <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal__cuerpo">
+            <p>Se bloqueará el acceso de <strong>{{ tenant.name }}</strong> al ERP hasta que se reactive. ¿Confirmas la suspensión?</p>
+        </div>
+        <div class="modal__pie">
+            <button type="button" class="btn btn--contorno" data-modal-close>Cancelar</button>
+            <button type="submit" class="btn btn--peligro">Sí, suspender</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog class="modal" id="modal-cancelar-tenant">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="cancelar">
+        <div class="modal__encabezado">
+            <h2>Cancelar suscripción</h2>
+            <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal__cuerpo">
+            <p>Se cancelará la suscripción de <strong>{{ tenant.name }}</strong>. Esta acción detiene la facturación futura (incluido el cobro recurrente de PayPal, si está autorizado). ¿Confirmas la cancelación?</p>
+        </div>
+        <div class="modal__pie">
+            <button type="button" class="btn btn--contorno" data-modal-close>Volver</button>
+            <button type="submit" class="btn btn--peligro">Sí, cancelar</button>
+        </div>
+    </form>
+</dialog>
+
 <div class="encabezado-pagina"><h2>Facturas recientes</h2></div>
+{% if invoices %}
 <div class="tabla-envoltorio">
     <table class="tabla">
         <thead><tr><th>Número</th><th>Total</th><th>Estado</th><th></th></tr></thead>
@@ -61,8 +98,11 @@
             {% for invoice in invoices %}
             <tr><td>{{ invoice.number }}</td><td>{{ invoice.total|monto }} {{ invoice.currency }}</td><td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
                 <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td></tr>
-            {% empty %}<tr><td colspan="4">Sin facturas.</td></tr>{% endfor %}
+            {% endfor %}
         </tbody>
     </table>
 </div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin facturas todavía</h3></div>
+{% endif %}
 {% endblock %}
