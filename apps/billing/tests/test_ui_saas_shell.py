@@ -294,3 +294,114 @@ class BankAccountEditarDesactivarTests(TestCase):
 
         campo = PaymentProof._meta.get_field("bank_account")
         self.assertIs(campo.remote_field.on_delete, django_models.PROTECT)
+
+
+class RevisionVisualFaseBTests(TestCase):
+    """FASE SIGUIENTE — Revisión visual SaaS vista por vista, Bloque B
+    (Planes, versiones de planes, Suscripciones, detalle de suscripción,
+    estados de suscripción). Cada test cubre una inconsistencia real
+    encontrada y corregida durante la auditoría de este bloque."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(email="super.faseb@example.com", password="clave-de-prueba-987")
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+    def test_plans_list_no_muestra_el_slug_interno_en_el_titulo(self):
+        from apps.billing.models import Plan
+
+        Plan.objects.create(name="Plan Slug Oculto", slug="plan-slug-oculto")
+        respuesta = self.client.get(reverse("billing_admin:plans_list"))
+        contenido = respuesta.content.decode()
+        # El slug sigue siendo consultable (dato real, nunca oculto),
+        # pero nunca dentro del título principal de la tarjeta.
+        self.assertNotIn("Plan Slug Oculto (plan-slug-oculto)", contenido)
+        self.assertIn("plan-slug-oculto", contenido)
+
+    def test_plans_list_muestra_estado_vacio_real_cuando_no_hay_planes(self):
+        respuesta = self.client.get(reverse("billing_admin:plans_list"))
+        self.assertContains(respuesta, "No hay planes registrados")
+        self.assertContains(respuesta, "estado-vacio")
+
+    def test_plans_list_formulario_de_version_usa_labels_reales(self):
+        """Hallazgo real: la vista ya pasaba `version_form` (con
+        validación real de PlanVersionForm) pero la plantilla lo
+        ignoraba y usaba <select>/<input> sueltos sin ningún label."""
+        from apps.billing.models import Plan
+
+        Plan.objects.create(name="Plan Con Form", slug="plan-con-form")
+        respuesta = self.client.get(reverse("billing_admin:plans_list"))
+        contenido = respuesta.content.decode()
+        for texto in ["Frecuencia", "Precio", "Moneda"]:
+            self.assertIn(f">{texto}<", contenido)
+
+    def test_plans_list_precio_se_muestra_antes_que_la_frecuencia(self):
+        from apps.billing.models import Plan, PlanVersion
+
+        plan = Plan.objects.create(name="Plan Precio Visible", slug="plan-precio-visible")
+        PlanVersion.objects.create(plan=plan, frequency="monthly", price_amount=Decimal("29.00"), price_currency="USD", is_current=True)
+        respuesta = self.client.get(reverse("billing_admin:plans_list"))
+        contenido = respuesta.content.decode()
+        self.assertLess(contenido.index("29.00 USD"), contenido.index("Mensual"))
+
+    def test_subscriptions_list_muestra_estado_vacio_real(self):
+        respuesta = self.client.get(reverse("billing_admin:subscriptions_list"))
+        self.assertContains(respuesta, "No hay suscripciones registradas")
+        self.assertContains(respuesta, "estado-vacio")
+
+    def test_subscriptions_list_ofrece_ver_detalle_hacia_el_tenant(self):
+        """Hallazgo real: no existía ninguna vía de drill-down desde la
+        lista de suscripciones — ni un enlace ni una columna de acción.
+        `tenant_detail.html` ya es, en la práctica, el detalle real de
+        gestión de la suscripción vigente de ese tenant."""
+        from apps.billing.services import subscriptions as subscription_services
+
+        from ._helpers_saas import crear_plan_con_version, crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-drilldown-suscripcion")
+        plan, version = crear_plan_con_version(slug="plan-drilldown-suscripcion")
+        saas_customer = crear_saas_customer(email="cliente.drilldown@example.com")
+        subscription_services.create_subscription(tenant, saas_customer=saas_customer, plan_version=version)
+        respuesta = self.client.get(reverse("billing_admin:subscriptions_list"))
+        self.assertContains(respuesta, reverse("billing_admin:tenant_detail", args=[tenant.pk]))
+
+    def test_detalle_de_tenant_muestra_precio_y_frecuencia_de_la_suscripcion(self):
+        """Hallazgo real: la tarjeta de suscripción de tenant_detail.html
+        mostraba el nombre del plan y el estado, pero nunca el precio ni
+        la frecuencia real que el tenant está pagando."""
+        from apps.billing.services import subscriptions as subscription_services
+
+        from ._helpers_saas import crear_plan_con_version, crear_saas_customer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-precio-visible")
+        plan, version = crear_plan_con_version(slug="plan-precio-tenant", precio=Decimal("29.00"))
+        saas_customer = crear_saas_customer(email="cliente.precio.tenant@example.com")
+        subscription = subscription_services.create_subscription(tenant, saas_customer=saas_customer, plan_version=version)
+        subscription_services.activate_subscription(subscription)
+        respuesta = self.client.get(reverse("billing_admin:tenant_detail", args=[tenant.pk]))
+        self.assertContains(respuesta, "29.00 USD")
+        self.assertContains(respuesta, "Próxima renovación")
+
+    def test_detalle_de_tenant_enlaza_al_cliente_saas_propietario(self):
+        """Hallazgo real: tenant_detail.html nunca mostraba ni enlazaba
+        al SaaSCustomer (Tenant.saas_customer) dueño real del tenant."""
+        from apps.billing.models import SaaSCustomer
+
+        tenant, owner = crear_tenant_con_owner(slug="tenant-con-cliente-saas")
+        saas_customer = SaaSCustomer.objects.create(name="Cliente Dueño Real", email="dueno.real@example.com")
+        tenant.saas_customer = saas_customer
+        tenant.save(update_fields=["saas_customer"])
+        respuesta = self.client.get(reverse("billing_admin:tenant_detail", args=[tenant.pk]))
+        self.assertContains(respuesta, "Cliente Dueño Real")
+        self.assertContains(respuesta, reverse("billing_admin:customer_detail", args=[saas_customer.pk]))
+
+    def test_todos_los_estados_reales_de_subscription_tienen_color_semantico_mapeado(self):
+        """'Estados de suscripción' (sección del Bloque B): verificado sin
+        necesitar cambios — los 6 códigos reales de Subscription.Status
+        ya estaban cubiertos por el mapa de estado_badge desde la fase
+        anterior."""
+        from apps.billing.models import Subscription
+
+        codigos_reales = [c for c, _ in Subscription.Status.choices]
+        self.assertEqual(set(codigos_reales), {"pending", "active", "past_due", "suspended", "cancelled", "expired"})
+        for codigo in codigos_reales:
+            self.assertNotEqual(estado_badge(codigo), "neutro", f"Estado real {codigo!r} no debería caer al color por defecto")

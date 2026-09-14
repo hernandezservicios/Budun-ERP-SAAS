@@ -10,22 +10,23 @@
 {% for plan in plans %}
 <div class="tarjeta u-ancho-40 u-mb-4">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">{{ plan.name }} ({{ plan.slug }}) {% if not plan.is_active %}<span class="badge badge--advertencia">Inactivo</span>{% endif %}</h3>
+        <h3 class="panel-seccion__titulo">{{ plan.name }} {% if not plan.is_active %}<span class="badge badge--advertencia">Inactivo</span>{% endif %}</h3>
+        <p class="campo__ayuda"><code>{{ plan.slug }}</code></p>
         <p>{{ plan.description }}</p>
         {% for version in plan.versions.all %}
-        <p>{% if version.is_current %}<span class="badge badge--verde">Vigente</span>{% endif %} {{ version.get_frequency_display }} — {{ version.price_amount|monto }} {{ version.price_currency }}</p>
+        <p><strong>{{ version.price_amount|monto }} {{ version.price_currency }}</strong> — {{ version.get_frequency_display }} {% if version.is_current %}<span class="badge badge--verde">Vigente</span>{% endif %}</p>
         {% empty %}<p>Sin precios configurados.</p>{% endfor %}
         <form method="post" action="{% url 'billing_admin:plan_version_create' plan.pk %}" class="u-mt-2">
             {% csrf_token %}
-            <select name="frequency"><option value="monthly">Mensual</option><option value="annual">Anual</option></select>
-            <input type="number" step="0.01" name="price_amount" placeholder="Precio" required>
-            <input type="text" name="price_currency" value="USD" class="u-campo-corto">
+            {% for field in version_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
             <button type="submit" class="btn btn--contorno btn--sm">Nueva versión de precio</button>
         </form>
     </div>
 </div>
 {% empty %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📦</div><h3>Sin planes todavía</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📦</div><h3>No hay planes registrados</h3></div>
 {% endfor %}
 
 <div class="tarjeta u-ancho-32">

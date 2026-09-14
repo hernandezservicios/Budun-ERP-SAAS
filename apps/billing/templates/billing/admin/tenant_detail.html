@@ -8,7 +8,12 @@
 <div class="encabezado-pagina">
     <div>
         <h1>{{ tenant.name }}</h1>
-        <p class="encabezado-pagina__descripcion">Estado de facturación: <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></p>
+        <p class="encabezado-pagina__descripcion">
+            Estado de facturación: <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span>
+            {% if tenant.saas_customer %}
+            · Cliente SaaS: <a href="{% url 'billing_admin:customer_detail' tenant.saas_customer.pk %}">{{ tenant.saas_customer.name }}</a>
+            {% endif %}
+        </p>
     </div>
     <div class="encabezado-pagina__acciones">
         <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:tenants_list' %}">← Volver a tenants</a>
@@ -16,14 +21,19 @@
 </div>
 
 {% if subscription %}
-<div class="tarjeta u-ancho-32 u-mb-6">
+<div class="tarjeta u-ancho-40 u-mb-6">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} — <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></h3>
+        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></h3>
+
+        <p>{{ subscription.plan_version.price_amount|monto }} {{ subscription.plan_version.price_currency }} — {{ subscription.plan_version.get_frequency_display }}</p>
+
         {% if subscription.current_period_start %}
-        <p>Período: {{ subscription.current_period_start }} — {{ subscription.current_period_end }} (próxima cobranza/factura: {{ subscription.current_period_end }})</p>
+        <p>Período actual: {{ subscription.current_period_start }} — {{ subscription.current_period_end }}</p>
+        <p>Próxima renovación: {{ subscription.current_period_end }}</p>
         {% else %}
         <p>Período: <em>pendiente de activación</em></p>
         {% endif %}
+
         <p>
             Cobro recurrente PayPal:
             {% if subscription.paypal_subscription_id %}

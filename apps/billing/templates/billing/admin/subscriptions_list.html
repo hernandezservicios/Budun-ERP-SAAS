@@ -6,14 +6,25 @@
     <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Suscripciones</li></ol>
 </nav>
 <div class="encabezado-pagina"><h1>Suscripciones</h1></div>
+{% if resumen.rows %}
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Tenant</th><th>Plan</th><th>Frecuencia</th><th>Estado</th><th>Fin de período</th></tr></thead>
+        <thead><tr><th>Tenant</th><th>Plan</th><th>Frecuencia</th><th>Estado</th><th>Fin de período</th><th></th></tr></thead>
         <tbody>
             {% for fila in resumen.rows %}
-            <tr><td>{{ fila.tenant }}</td><td>{{ fila.plan }}</td><td>{{ fila.frecuencia }}</td><td><span class="badge badge--{{ fila.estado_codigo|estado_badge }}">{{ fila.estado }}</span></td><td>{{ fila.periodo_fin|default:"—" }}</td></tr>
-            {% empty %}<tr><td colspan="5">Sin suscripciones.</td></tr>{% endfor %}
+            <tr>
+                <td>{{ fila.tenant }}</td>
+                <td>{{ fila.plan }}</td>
+                <td>{{ fila.frecuencia }}</td>
+                <td><span class="badge badge--{{ fila.estado_codigo|estado_badge }}">{{ fila.estado }}</span></td>
+                <td>{{ fila.periodo_fin|default:"—" }}</td>
+                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:tenant_detail' fila.tenant_id %}">Ver</a></td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 </div>
+{% else %}
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🔁</div><h3>No hay suscripciones registradas</h3></div>
+{% endif %}
 {% endblock %}
