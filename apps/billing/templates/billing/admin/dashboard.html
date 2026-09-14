@@ -1,90 +1,256 @@
 {% extends "layout_saas_admin.html" %}
-{% load ui_extras %}
+{% load ui_extras ui_icons ui_charts %}
 
 {% block title %}Panel — Billing SaaS — Budun{% endblock %}
 
 {% block app_content %}
 <div class="encabezado-pagina">
     <div>
-        <h1>Panel de control</h1>
-        <p class="encabezado-pagina__descripcion">Resumen de facturación de la plataforma.</p>
+        <h1>Bienvenido, {% firstof request.user.get_full_name request.user.email "Super Admin" %}</h1>
+        <p class="encabezado-pagina__descripcion">Aquí tienes un resumen general de la plataforma.</p>
     </div>
 </div>
 
-<section class="panel-seccion" aria-labelledby="titulo-kpis-ingresos">
-    <div class="kpi-grupo">
-        <h2 class="kpi-grupo__titulo" id="titulo-kpis-ingresos"><span class="kpi__icono" aria-hidden="true">💰</span> Ingresos</h2>
-        <div class="kpi-grid">
-            <div class="kpi kpi--exito">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">💵</span> Ingresos recurrentes mensuales</p>
-                <p class="kpi__valor">{{ resumen.mrr|monto }}</p>
-                <p class="kpi__ayuda">Suma de todas las suscripciones activas, normalizada a un mes.</p>
-            </div>
-            <div class="kpi kpi--exito">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">📈</span> Ingresos recurrentes anuales</p>
-                <p class="kpi__valor">{{ resumen.arr|monto }}</p>
-                <p class="kpi__ayuda">Ingresos recurrentes mensuales proyectados a 12 meses.</p>
-            </div>
-            <div class="kpi">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">🧮</span> Ingresos del mes</p>
-                <p class="kpi__valor">{{ resumen.revenue_this_month|monto }}</p>
-                <p class="kpi__ayuda">Cobrado realmente en el mes en curso (PayPal + transferencias).</p>
-            </div>
+<div class="saas-kpi-grid u-mb-6">
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--azul">{% icono "tarjeta" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Ingresos recurrentes mensuales</p>
+            <p class="saas-kpi-card__valor">$ {{ resumen.mrr|monto }}</p>
         </div>
     </div>
-</section>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--morado">{% icono "barras" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Ingresos recurrentes anuales</p>
+            <p class="saas-kpi-card__valor">$ {{ resumen.arr|monto }}</p>
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--verde">{% icono "usuarios" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Suscripciones activas</p>
+            <p class="saas-kpi-card__valor">{{ resumen.active_subscriptions }}</p>
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--rojo">{% icono "alerta-triangulo" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Pagos atrasados</p>
+            <p class="saas-kpi-card__valor">{{ resumen.past_due_subscriptions }}</p>
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--naranja">{% icono "pausa" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Suspendidas</p>
+            <p class="saas-kpi-card__valor">{{ resumen.suspended_subscriptions }}</p>
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--azul">{% icono "usuario-mas" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Altas este mes</p>
+            <p class="saas-kpi-card__valor">{{ resumen.new_signups_this_month }}</p>
+            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.new_signups_change_pct invertido=False %}
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--morado">{% icono "equis-circulo" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Cancelaciones este mes</p>
+            <p class="saas-kpi-card__valor">{{ resumen.cancellations_this_month }}</p>
+            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.cancellations_change_pct invertido=True %}
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--teal">{% icono "banco" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Transferencias pendientes</p>
+            <p class="saas-kpi-card__valor">{{ resumen.pending_transfers }}</p>
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--verde">{% icono "recibo" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Ingresos del mes</p>
+            <p class="saas-kpi-card__valor">$ {{ resumen.revenue_this_month|monto }}</p>
+            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.revenue_change_pct invertido=False %}
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--rojo">{% icono "reembolso" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Reembolsos del mes</p>
+            <p class="saas-kpi-card__valor">$ {{ resumen.refunds_this_month|monto }}</p>
+            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.refunds_change_pct invertido=True %}
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--gris">{% icono "nota-mas" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Notas de crédito del mes</p>
+            <p class="saas-kpi-card__valor">$ {{ resumen.credit_notes_this_month|monto }}</p>
+            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.credit_notes_change_pct invertido=True %}
+        </div>
+    </div>
+    <div class="saas-kpi-card">
+        <div class="saas-kpi-card__icono saas-kpi-card__icono--rojo">{% icono "documento" %}</div>
+        <div class="saas-kpi-card__cuerpo">
+            <p class="saas-kpi-card__etiqueta">Facturas vencidas</p>
+            <p class="saas-kpi-card__valor">{{ resumen.overdue_invoices }}</p>
+        </div>
+    </div>
+</div>
 
-<section class="panel-seccion" aria-labelledby="titulo-kpis-suscripciones">
-    <div class="kpi-grupo">
-        <h2 class="kpi-grupo__titulo" id="titulo-kpis-suscripciones"><span class="kpi__icono" aria-hidden="true">🔁</span> Suscripciones</h2>
-        <div class="kpi-grid">
-            <div class="kpi kpi--exito">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">✅</span> Suscripciones activas</p>
-                <p class="kpi__valor">{{ resumen.active_subscriptions }}</p>
+<div class="saas-dashboard-fila u-mb-6">
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <div class="saas-card__encabezado">
+                <h2 class="saas-card__titulo">Ingresos de los últimos 6 meses</h2>
             </div>
-            <div class="kpi kpi--exito">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">🆕</span> Altas este mes</p>
-                <p class="kpi__valor">{{ resumen.new_signups_this_month }}</p>
-            </div>
-            <div class="kpi {% if resumen.past_due_subscriptions %}kpi--advertencia{% endif %}">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⏰</span> Pagos atrasados</p>
-                <p class="kpi__valor">{{ resumen.past_due_subscriptions }}</p>
-                <p class="kpi__ayuda">Suscripciones en período de gracia.</p>
-            </div>
-            <div class="kpi {% if resumen.suspended_subscriptions %}kpi--peligro{% endif %}">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⛔</span> Suspendidas</p>
-                <p class="kpi__valor">{{ resumen.suspended_subscriptions }}</p>
-            </div>
-            <div class="kpi {% if resumen.cancellations_this_month %}kpi--peligro{% endif %}">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">❌</span> Cancelaciones este mes</p>
-                <p class="kpi__valor">{{ resumen.cancellations_this_month }}</p>
+            {% linea_chart_datos ingresos_6_meses as grafica_ingresos %}
+            <svg class="saas-linea-chart" viewBox="0 0 {{ grafica_ingresos.ancho }} {{ grafica_ingresos.alto }}" preserveAspectRatio="none" role="img" aria-label="Ingresos confirmados por mes, últimos 6 meses">
+                {% if grafica_ingresos.polyline %}
+                <polygon class="saas-linea-chart__area" points="{{ grafica_ingresos.area }}"></polygon>
+                <polyline class="saas-linea-chart__linea" points="{{ grafica_ingresos.polyline }}"></polyline>
+                {% for punto in grafica_ingresos.puntos %}
+                <circle class="saas-linea-chart__punto" cx="{{ punto.x }}" cy="{{ punto.y }}" r="3.5"></circle>
+                {% endfor %}
+                {% endif %}
+            </svg>
+            <div class="saas-linea-chart__etiquetas">
+                {% for fila in ingresos_6_meses %}
+                <span>{{ fila.etiqueta }}</span>
+                {% endfor %}
             </div>
         </div>
     </div>
-</section>
 
-<section class="panel-seccion" aria-labelledby="titulo-kpis-facturacion">
-    <div class="kpi-grupo">
-        <h2 class="kpi-grupo__titulo" id="titulo-kpis-facturacion"><span class="kpi__icono" aria-hidden="true">🧾</span> Facturación</h2>
-        <div class="kpi-grid">
-            <div class="kpi {% if resumen.pending_transfers %}kpi--advertencia{% endif %}">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">🏦</span> Transferencias pendientes</p>
-                <p class="kpi__valor">{{ resumen.pending_transfers }}</p>
-                <p class="kpi__ayuda">Comprobantes de transferencia esperando revisión.</p>
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <div class="saas-card__encabezado">
+                <h2 class="saas-card__titulo">Estado de suscripciones</h2>
             </div>
-            <div class="kpi {% if resumen.overdue_invoices %}kpi--peligro{% endif %}">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⚠️</span> Facturas vencidas</p>
-                <p class="kpi__valor">{{ resumen.overdue_invoices }}</p>
+            {% dona_chart_segmentos desglose_suscripciones.filas as dona %}
+            <div class="saas-dona-envoltorio">
+                <div class="saas-dona">
+                    <svg width="140" height="140" viewBox="0 0 100 100" role="img" aria-label="Distribución de suscripciones por estado">
+                        <circle cx="50" cy="50" r="{{ dona.radio }}" fill="none" class="saas-dona__pista" stroke-width="12"></circle>
+                        {% for segmento in dona.segmentos %}
+                        <circle cx="50" cy="50" r="{{ dona.radio }}" fill="none" class="saas-dona__segmento saas-dona__segmento--{{ segmento.variante }}" stroke-width="12"
+                                stroke-dasharray="{{ segmento.dasharray }}" stroke-dashoffset="{{ segmento.dashoffset }}"
+                                transform="rotate(-90 50 50)" stroke-linecap="round"></circle>
+                        {% endfor %}
+                    </svg>
+                    <div class="saas-dona__centro">
+                        <span class="saas-dona__centro-valor">{{ dona.total }}</span>
+                        <span class="saas-dona__centro-etiqueta">Total</span>
+                    </div>
+                </div>
             </div>
-            <div class="kpi">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">↩️</span> Reembolsos del mes</p>
-                <p class="kpi__valor">{{ resumen.refunds_this_month|monto }}</p>
-            </div>
-            <div class="kpi">
-                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">📝</span> Notas de crédito del mes</p>
-                <p class="kpi__valor">{{ resumen.credit_notes_this_month|monto }}</p>
-            </div>
+            <ul class="saas-dona__leyenda">
+                {% for segmento in dona.segmentos %}
+                <li><span class="saas-dona__punto saas-dona__punto--{{ segmento.variante }}"></span>{{ segmento.etiqueta }} <span class="saas-dona__leyenda-valor">{{ segmento.conteo }} ({{ segmento.porcentaje }}%)</span></li>
+                {% empty %}
+                <li>Sin suscripciones todavía.</li>
+                {% endfor %}
+            </ul>
         </div>
     </div>
-</section>
+
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <div class="saas-card__encabezado">
+                <h2 class="saas-card__titulo">Actividad reciente</h2>
+                <a class="saas-card__enlace" href="{% url 'billing_admin:reports' %}">Ver todas →</a>
+            </div>
+            {% if actividad_reciente %}
+            <ul class="actividad-lista">
+                {% for evento in actividad_reciente %}
+                <li>
+                    <div class="saas-actividad-item">
+                        <div class="saas-actividad-item__icono
+                            {% if evento.tipo == 'suscripcion' %}saas-kpi-card__icono--azul
+                            {% elif evento.tipo == 'pago' %}saas-kpi-card__icono--verde
+                            {% elif evento.tipo == 'nota_credito' %}saas-kpi-card__icono--gris
+                            {% else %}saas-kpi-card__icono--morado{% endif %}">
+                            {% if evento.tipo == 'suscripcion' %}{% icono "repetir" %}
+                            {% elif evento.tipo == 'pago' %}{% icono "tarjeta" %}
+                            {% elif evento.tipo == 'nota_credito' %}{% icono "nota-mas" %}
+                            {% else %}{% icono "usuario-mas" %}{% endif %}
+                        </div>
+                        <div class="saas-actividad-item__cuerpo">
+                            <p class="saas-actividad-item__titulo">{{ evento.titulo }}</p>
+                            <p class="saas-actividad-item__subtitulo">{{ evento.subtitulo }}</p>
+                        </div>
+                    </div>
+                    <time datetime="{{ evento.cuando|date:'c' }}">{{ evento.cuando|timesince }}</time>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="campo__ayuda">Sin actividad todavía.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="saas-dashboard-fila--2col">
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <div class="saas-card__encabezado">
+                <h2 class="saas-card__titulo">Últimas facturas</h2>
+                <a class="saas-card__enlace" href="{% url 'billing_admin:invoices_list' %}">Ver todas →</a>
+            </div>
+            {% if facturas_recientes %}
+            <div class="tabla-envoltorio">
+                <table class="tabla">
+                    <thead><tr><th>Número</th><th>Tenant</th><th>Fecha</th><th>Total</th><th>Estado</th></tr></thead>
+                    <tbody>
+                        {% for factura in facturas_recientes %}
+                        <tr>
+                            <td><a href="{% url 'billing_admin:invoice_detail' factura.pk %}">{{ factura.number }}</a></td>
+                            <td>{{ factura.tenant }}</td>
+                            <td>{{ factura.issue_date }}</td>
+                            <td>{{ factura.total|monto }} {{ factura.currency }}</td>
+                            <td><span class="badge badge--{{ factura.status|estado_badge }}">{{ factura.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="campo__ayuda">Sin facturas todavía.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <div class="saas-card__encabezado">
+                <h2 class="saas-card__titulo">Próximos vencimientos</h2>
+                <a class="saas-card__enlace" href="{% url 'billing_admin:invoices_list' %}">Ver todas →</a>
+            </div>
+            {% if proximos_vencimientos %}
+            <ul class="actividad-lista">
+                {% for factura in proximos_vencimientos %}
+                <li>
+                    <div>
+                        <p class="saas-actividad-item__titulo">Factura {{ factura.number }}</p>
+                        <p class="saas-actividad-item__subtitulo">{{ factura.tenant }} · {{ factura.due_date }}</p>
+                    </div>
+                    <div class="u-text-derecha">
+                        <p class="saas-actividad-item__titulo">{{ factura.total|monto }} {{ factura.currency }}</p>
+                        <span class="badge badge--{{ factura.status|estado_badge }}">{{ factura.get_status_display }}</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="campo__ayuda">Sin vencimientos próximos.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock %}

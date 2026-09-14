@@ -235,10 +235,23 @@
     transition: background-color 0.12s ease, color 0.12s ease;
 }
 
+/* ============================================================
+   ICONOS (FASE — Rediseño Visual Maestro): sistema SVG inline propio
+   del proyecto (ver apps/core/templatetags/ui_icons.py), reemplaza el
+   uso de emoji como iconografía de interfaz en shell/componentes SaaS.
+   ============================================================ */
+.icono-svg {
+    width: 1.15em;
+    height: 1.15em;
+    flex-shrink: 0;
+    vertical-align: -0.2em;
+}
+
 .sidebar__icono {
-    display: inline-flex;
-    width: 1.25em;
-    font-size: 0.95em;
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+    opacity: 0.9;
 }
 
 /* Scrollbar clara sobre el fondo azul profundo del sidebar SaaS —
@@ -313,6 +326,385 @@
 
 .navbar__contexto strong {
     color: var(--color-texto);
+}
+
+/* ============================================================
+   NAVBAR — buscador (FASE — Rediseño Visual Maestro). Preparado/
+   inerte a propósito (mismo criterio que `.paginacion` desde FASE 5):
+   no existe todavía un buscador transversal real de la plataforma —
+   nunca se envía como si buscara algo. Ver docs/design-system.md.
+   ============================================================ */
+.navbar__buscador {
+    display: flex;
+    align-items: center;
+    gap: var(--espacio-2);
+    background: var(--gris-50);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    padding: 0.5rem var(--espacio-3);
+    max-width: 22rem;
+    width: 100%;
+    color: var(--color-texto-tenue);
+}
+
+.navbar__buscador input {
+    border: none;
+    background: transparent;
+    outline: none;
+    width: 100%;
+    font: inherit;
+    color: var(--color-texto);
+    font-size: var(--texto-sm);
+}
+
+.navbar__buscador input::placeholder {
+    color: var(--color-texto-tenue);
+}
+
+@media (max-width: 1024px) {
+    .navbar__buscador {
+        display: none;
+    }
+}
+
+/* ============================================================
+   AVATAR — iniciales en círculo (FASE — Rediseño Visual Maestro).
+   ============================================================ */
+.avatar-circulo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radio-completo);
+    background: var(--color-azul-100);
+    color: var(--color-azul-800);
+    font-weight: 700;
+    font-size: var(--texto-sm);
+    flex-shrink: 0;
+}
+
+/* ============================================================
+   TARJETA DE CONTENIDO SaaS — encabezado con título + enlace/control
+   opcional (gráficas, actividad, listas auxiliares del dashboard).
+   Reutiliza `.tarjeta`/`.tarjeta__cuerpo` (FASE 5) como contenedor —
+   nunca un contenedor nuevo duplicado.
+   ============================================================ */
+.saas-card__encabezado {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--espacio-3);
+    margin-bottom: var(--espacio-4);
+}
+
+.saas-card__titulo {
+    font-size: var(--texto-base);
+    font-weight: 600;
+    color: var(--gris-900);
+    margin: 0;
+}
+
+.saas-card__enlace {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--espacio-1);
+    font-size: var(--texto-sm);
+    font-weight: 600;
+    color: var(--color-primario);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.saas-card__enlace:hover {
+    text-decoration: underline;
+}
+
+/* ============================================================
+   KPI CARD SaaS v2 — icono circular + valor + tendencia (FASE —
+   Rediseño Visual Maestro). Deliberadamente un componente NUEVO y
+   NUNCA una modificación de `.kpi`/`.kpi-grid` (FASE 7): ese
+   componente lo usa también el dashboard del ERP y varias vistas de
+   detalle de Ventas/Compras/Inventario/POS — tocarlo habría alterado
+   el ERP, algo explícitamente prohibido en esta fase. Ver "SaaS KPI
+   Card v2" en docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md.
+   ============================================================ */
+.saas-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: var(--espacio-5);
+}
+
+.saas-kpi-card {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--espacio-4);
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-lg);
+    box-shadow: var(--sombra-sm);
+    padding: var(--espacio-5);
+}
+
+.saas-kpi-card__icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: var(--radio-completo);
+    flex-shrink: 0;
+}
+
+.saas-kpi-card__icono .icono-svg {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
+.saas-kpi-card__icono--azul { background: var(--color-azul-100); color: var(--color-azul-700); }
+.saas-kpi-card__icono--morado { background: var(--color-morado-100); color: var(--color-morado-700); }
+.saas-kpi-card__icono--verde { background: var(--color-verde-100); color: var(--color-verde-800); }
+.saas-kpi-card__icono--rojo { background: var(--color-peligro-100); color: var(--color-peligro-700); }
+.saas-kpi-card__icono--naranja { background: var(--color-advertencia-100); color: var(--color-advertencia-700); }
+.saas-kpi-card__icono--teal { background: var(--color-teal-100); color: var(--color-teal-700); }
+.saas-kpi-card__icono--gris { background: var(--gris-100); color: var(--gris-600); }
+
+.saas-kpi-card__cuerpo {
+    min-width: 0;
+    flex: 1;
+}
+
+.saas-kpi-card__etiqueta {
+    font-size: var(--texto-sm);
+    color: var(--color-texto-tenue);
+    margin: 0 0 var(--espacio-1);
+}
+
+.saas-kpi-card__valor {
+    font-size: var(--texto-2xl);
+    font-weight: 700;
+    color: var(--gris-900);
+    line-height: 1.2;
+    margin: 0 0 var(--espacio-1);
+}
+
+.saas-kpi-card__tendencia {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    font-size: var(--texto-xs);
+    font-weight: 600;
+    color: var(--color-texto-tenue);
+    margin: 0;
+}
+
+.saas-kpi-card__tendencia .icono-svg {
+    width: 0.9em;
+    height: 0.9em;
+}
+
+.saas-kpi-card__tendencia--positiva { color: var(--color-verde-700); }
+.saas-kpi-card__tendencia--negativa { color: var(--color-peligro-700); }
+
+.saas-kpi-card__tendencia span {
+    color: var(--color-texto-tenue);
+    font-weight: 400;
+}
+
+/* ============================================================
+   GRÁFICA DE LÍNEA SaaS — SVG inline (sin librería de gráficas,
+   CLAUDE.md exige no introducir dependencias nuevas sin necesidad).
+   ============================================================ */
+.saas-linea-chart {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.saas-linea-chart__area {
+    opacity: 0.12;
+    fill: var(--color-primario);
+    stroke: none;
+}
+
+.saas-linea-chart__linea {
+    fill: none;
+    stroke: var(--color-primario);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.saas-linea-chart__punto {
+    fill: var(--color-primario);
+    stroke: var(--color-superficie);
+    stroke-width: 2;
+}
+
+.saas-linea-chart__eje-texto {
+    font-size: 11px;
+    fill: var(--color-texto-tenue);
+    font-family: var(--fuente-base);
+}
+
+.saas-linea-chart__etiquetas {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 var(--espacio-1);
+    margin-top: var(--espacio-2);
+    font-size: var(--texto-xs);
+    color: var(--color-texto-tenue);
+}
+
+.saas-dona-envoltorio {
+    display: flex;
+    justify-content: center;
+}
+
+.saas-dona__pista {
+    stroke: var(--gris-100);
+}
+
+/* Variantes de color de segmento/leyenda de la dona — mismas 5
+   variantes semánticas que `.badge--*` (ver `estado_badge`), nunca un
+   valor de color calculado inline en la plantilla. */
+.saas-dona__segmento--verde { stroke: var(--color-verde-700); }
+.saas-dona__segmento--advertencia { stroke: var(--color-advertencia-700); }
+.saas-dona__segmento--peligro { stroke: var(--color-peligro-700); }
+.saas-dona__segmento--azul { stroke: var(--color-azul-700); }
+.saas-dona__segmento--neutro { stroke: var(--gris-400); }
+
+.saas-dona__punto--verde { background: var(--color-verde-700); }
+.saas-dona__punto--advertencia { background: var(--color-advertencia-700); }
+.saas-dona__punto--peligro { background: var(--color-peligro-700); }
+.saas-dona__punto--azul { background: var(--color-azul-700); }
+.saas-dona__punto--neutro { background: var(--gris-400); }
+
+.u-text-derecha {
+    text-align: right;
+}
+
+/* ============================================================
+   GRÁFICA DE DONA SaaS — SVG inline (stroke-dasharray por segmento).
+   ============================================================ */
+.saas-dona {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.saas-dona__centro {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.saas-dona__centro-valor {
+    font-size: var(--texto-2xl);
+    font-weight: 700;
+    color: var(--gris-900);
+    line-height: 1;
+}
+
+.saas-dona__centro-etiqueta {
+    font-size: var(--texto-xs);
+    color: var(--color-texto-tenue);
+}
+
+.saas-dona__leyenda {
+    list-style: none;
+    margin: var(--espacio-4) 0 0;
+    padding: 0;
+}
+
+.saas-dona__leyenda li {
+    display: flex;
+    align-items: center;
+    gap: var(--espacio-2);
+    padding: var(--espacio-1) 0;
+    font-size: var(--texto-sm);
+}
+
+.saas-dona__punto {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: var(--radio-completo);
+    flex-shrink: 0;
+}
+
+.saas-dona__leyenda-valor {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-texto-tenue);
+}
+
+.saas-dashboard-fila {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: var(--espacio-5);
+    align-items: stretch;
+}
+
+.saas-dashboard-fila--2col {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: var(--espacio-5);
+    align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+    .saas-dashboard-fila,
+    .saas-dashboard-fila--2col {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============================================================
+   ACTIVIDAD RECIENTE SaaS — icono circular + título + subtítulo +
+   tiempo relativo. Extiende visualmente `.actividad-lista` (FASE 7,
+   reutilizada tal cual como contenedor `<ul>`) agregando el icono.
+   ============================================================ */
+.saas-actividad-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--espacio-3);
+}
+
+.saas-actividad-item__icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: var(--radio-completo);
+    flex-shrink: 0;
+}
+
+.saas-actividad-item__icono .icono-svg {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+
+.saas-actividad-item__cuerpo {
+    flex: 1;
+    min-width: 0;
+}
+
+.saas-actividad-item__titulo {
+    font-size: var(--texto-sm);
+    font-weight: 600;
+    color: var(--color-texto);
+    margin: 0;
+}
+
+.saas-actividad-item__subtitulo {
+    font-size: var(--texto-xs);
+    color: var(--color-texto-tenue);
+    margin: 0;
 }
 
 /* Vista previa aislada del sidebar SaaS en /estilo/ — nunca el sidebar

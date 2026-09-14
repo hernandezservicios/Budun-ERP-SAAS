@@ -1,5 +1,5 @@
 {% extends "layout_saas_admin.html" %}
-{% load ui_extras %}
+{% load ui_extras ui_icons %}
 {% block title %}Planes — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
@@ -26,7 +26,7 @@
     </div>
 </div>
 {% empty %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📦</div><h3>No hay planes registrados</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono">{% icono "paquete" %}</div><h3>No hay planes registrados</h3></div>
 {% endfor %}
 
 <div class="tarjeta u-ancho-32">

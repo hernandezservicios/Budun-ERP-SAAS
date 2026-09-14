@@ -98,11 +98,12 @@ class DashboardTextoHumanoTests(TestCase):
         contenido = respuesta.content.decode()
         # "MRR"/"ARR"/"PAST_DUE" como ETIQUETA de KPI ya no existen (el
         # hallazgo real de la auditoría) — se buscan como fragmento de
-        # etiqueta (envueltos en <p class="kpi__etiqueta">) para no dar un
-        # falso positivo si la palabra apareciera dentro de otro texto.
-        self.assertNotIn('kpi__etiqueta">MRR<', contenido)
-        self.assertNotIn('kpi__etiqueta">ARR<', contenido)
-        self.assertNotIn('kpi__etiqueta">PAST_DUE<', contenido)
+        # etiqueta (envueltos en <p class="saas-kpi-card__etiqueta">)
+        # para no dar un falso positivo si la palabra apareciera dentro
+        # de otro texto.
+        self.assertNotIn('saas-kpi-card__etiqueta">MRR<', contenido)
+        self.assertNotIn('saas-kpi-card__etiqueta">ARR<', contenido)
+        self.assertNotIn('saas-kpi-card__etiqueta">PAST_DUE<', contenido)
 
 
 class BadgeEstadoSemanticoTests(TestCase):
@@ -165,16 +166,25 @@ class RevisionVisualFaseATests(TestCase):
         self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
 
     def test_dashboard_kpis_de_alerta_no_muestran_color_de_advertencia_cuando_el_conteo_es_cero(self):
-        """Hallazgo real: Pagos atrasados/Suspendidas/Cancelaciones este
-        mes mostraban su color de advertencia/peligro incluso con 0 —
-        inconsistente con Transferencias pendientes/Facturas vencidas,
-        que ya eran condicionales. Con la BD de test vacía (sin ninguna
-        suscripción), el conteo real es 0 para las tres."""
+        """Hallazgo real de este bloque (ver KNOWN_ISSUES.md #139):
+        Pagos atrasados/Suspendidas/Cancelaciones este mes aplicaban su
+        color de advertencia/peligro de forma incondicional.
+
+        NOTA (FASE — Rediseño Visual Maestro): las KPI cards se
+        reconstruyeron por completo (`.saas-kpi-card`, icono circular
+        con color FIJO por identidad de métrica — nunca condicional al
+        valor, siguiendo el lenguaje visual de la imagen de referencia
+        maestra) reemplazando el componente `.kpi`/`.kpi--advertencia`/
+        `.kpi--peligro` (que sigue existiendo intacto, compartido con
+        el ERP — nunca se tocó). El hallazgo original de "color
+        incondicional" ya no puede reproducirse porque esas clases ni
+        siquiera se usan en este dashboard — se verifica aquí
+        explícitamente esa ausencia."""
         respuesta = self.client.get(reverse("billing_admin:dashboard"))
         contenido = respuesta.content.decode()
-        self.assertIn('<div class="kpi ">\n                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⏰</span> Pagos atrasados', contenido)
-        self.assertIn('<div class="kpi ">\n                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">⛔</span> Suspendidas', contenido)
-        self.assertIn('<div class="kpi ">\n                <p class="kpi__etiqueta"><span class="kpi__icono" aria-hidden="true">❌</span> Cancelaciones este mes', contenido)
+        self.assertNotIn("kpi--advertencia", contenido)
+        self.assertNotIn("kpi--peligro", contenido)
+        self.assertEqual(contenido.count('class="saas-kpi-card"'), 12)
 
     def test_dashboard_ya_no_muestra_los_acronimos_mrr_arr_en_el_texto_de_ayuda(self):
         respuesta = self.client.get(reverse("billing_admin:dashboard"))

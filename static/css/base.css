@@ -39,6 +39,16 @@
     --color-advertencia-700: #b45309;
     --color-advertencia-800: #92400e;
 
+    /* --- Acentos decorativos de icono (FASE — Rediseño Visual Maestro):
+       SOLO para el círculo de color detrás del icono de una KPI card —
+       categorización visual, NUNCA el sistema semántico de estados
+       (badge--verde/advertencia/peligro/azul/neutro, que no cambia).
+       Morado y teal son nuevos; el resto reutiliza familias existentes. */
+    --color-morado-100: #ede9fe;
+    --color-morado-700: #6d28d9;
+    --color-teal-100: #ccfbf1;
+    --color-teal-700: #0f766e;
+
     --color-info-50:  var(--color-azul-50);
     --color-info-100: var(--color-azul-100);
     --color-info-700: var(--color-azul-700);

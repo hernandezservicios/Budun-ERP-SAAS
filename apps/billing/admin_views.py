@@ -48,7 +48,14 @@ User = get_user_model()
 
 class DashboardView(LoginRequiredMixin, SuperuserRequiredMixin, View):
     def get(self, request):
-        return render(request, "billing/admin/dashboard.html", {"resumen": report_services.get_billing_dashboard_summary()})
+        return render(request, "billing/admin/dashboard.html", {
+            "resumen": report_services.get_billing_dashboard_summary(),
+            "ingresos_6_meses": report_services.get_revenue_last_6_months(),
+            "desglose_suscripciones": report_services.get_subscription_status_breakdown(),
+            "actividad_reciente": report_services.get_recent_platform_activity(),
+            "facturas_recientes": report_services.get_recent_invoices_for_dashboard(),
+            "proximos_vencimientos": report_services.get_upcoming_invoices_for_dashboard(),
+        })
 
 
 # ---------------------------------------------------------------------

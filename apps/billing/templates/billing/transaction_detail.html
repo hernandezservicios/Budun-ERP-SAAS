@@ -1,5 +1,5 @@
 {% extends "layout_saas_admin.html" %}
-{% load ui_extras %}
+{% load ui_extras ui_icons %}
 
 {% block title %}Transacción PayPal — Billing SaaS — Budun{% endblock %}
 
@@ -71,6 +71,6 @@
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📭</div><h3>Sin eventos de webhook todavía</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono">{% icono "documento" %}</div><h3>Sin eventos de webhook todavía</h3></div>
 {% endif %}
 {% endblock %}

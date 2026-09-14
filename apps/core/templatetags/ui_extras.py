@@ -115,6 +115,34 @@ def estado_paypal(codigo_crudo):
 
 
 @register.filter
+def valor_absoluto(numero):
+    """Valor absoluto — usado junto a una flecha de tendencia (↑/↓) que
+    ya comunica el signo, para no mostrar un "-8%" redundante junto a
+    una flecha hacia abajo."""
+    try:
+        return abs(numero)
+    except TypeError:
+        return numero
+
+
+@register.filter
+def iniciales(texto):
+    """Hasta 2 iniciales en mayúscula para un avatar circular — a
+    partir de un nombre completo ("Super Admin" → "SA") o, si no hay
+    nombre, de la parte local de un correo ("super.admin@..." → "SA")."""
+    texto = (texto or "").strip()
+    if not texto:
+        return "?"
+    parte_local = texto.split("@")[0] if "@" in texto and " " not in texto else texto
+    partes = [p for p in parte_local.replace(".", " ").replace("_", " ").split() if p]
+    if not partes:
+        return "?"
+    if len(partes) == 1:
+        return partes[0][:2].upper()
+    return (partes[0][0] + partes[-1][0]).upper()
+
+
+@register.filter
 def monto(valor):
     """Formatea un número/Decimal como monto legible: separador de miles
     y dos decimales fijos (ej. 1234.5 -> "1,234.50"). Puramente

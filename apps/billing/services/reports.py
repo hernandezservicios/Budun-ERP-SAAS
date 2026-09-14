@@ -7,7 +7,7 @@ sobre los modelos ya existentes (`{"summary": ..., "rows": ...}`,
 mismo contrato que `apps.reports.services`). Exportación reutiliza
 `apps.reports.exports` (PDF/XLSX) — nunca un segundo motor."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.db.models import Sum
@@ -18,10 +18,29 @@ from ..models import (
     CreditNote,
     PaymentProof,
     PlanVersion,
+    SaaSCustomer,
     SaaSInvoice,
     SaaSPayment,
     Subscription,
 )
+
+_NOMBRE_MES_CORTO = {
+    1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr", 5: "May", 6: "Jun",
+    7: "Jul", 8: "Ago", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic",
+}
+
+
+def _variacion_porcentual(actual, anterior):
+    """Variación porcentual REAL entre dos períodos — nunca un número
+    inventado para "rellenar" la interfaz. Devuelve `None` cuando el
+    período anterior fue 0 (sin base real de comparación: cualquier
+    porcentaje ahí sería matemáticamente indefinido o engañoso) — la
+    plantilla debe tratar `None` como "sin dato de tendencia", nunca
+    como 0%."""
+    if not anterior:
+        return None
+    actual_dec, anterior_dec = Decimal(actual), Decimal(anterior)
+    return ((actual_dec - anterior_dec) / anterior_dec * 100).quantize(Decimal("1"))
 
 
 def _mrr_de_suscripcion(subscription):
@@ -56,9 +75,42 @@ def get_billing_dashboard_summary(*, today=None):
     # ver KNOWN_ISSUES.md) — se construye aquí, una sola vez, el
     # datetime CONSCIENTE equivalente para esos filtros.
     inicio_mes_dt = timezone.make_aware(datetime.combine(inicio_mes, time.min))
+    inicio_mes_anterior = (inicio_mes - timedelta(days=1)).replace(day=1)
+    inicio_mes_anterior_dt = timezone.make_aware(datetime.combine(inicio_mes_anterior, time.min))
 
     activas = Subscription.all_objects.filter(status=Subscription.Status.ACTIVE).select_related("plan_version")
     mrr = sum((_mrr_de_suscripcion(s) for s in activas), Decimal("0"))
+
+    revenue_this_month = SaaSPayment.all_objects.filter(
+        status=SaaSPayment.Status.CONFIRMED, received_at__gte=inicio_mes_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    revenue_last_month = SaaSPayment.all_objects.filter(
+        status=SaaSPayment.Status.CONFIRMED, received_at__gte=inicio_mes_anterior_dt, received_at__lt=inicio_mes_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    new_signups_this_month = Subscription.all_objects.filter(created_at__gte=inicio_mes_dt).count()
+    new_signups_last_month = Subscription.all_objects.filter(
+        created_at__gte=inicio_mes_anterior_dt, created_at__lt=inicio_mes_dt,
+    ).count()
+
+    cancellations_this_month = Subscription.all_objects.filter(
+        status=Subscription.Status.CANCELLED, cancelled_at__gte=inicio_mes_dt,
+    ).count()
+    cancellations_last_month = Subscription.all_objects.filter(
+        status=Subscription.Status.CANCELLED, cancelled_at__gte=inicio_mes_anterior_dt, cancelled_at__lt=inicio_mes_dt,
+    ).count()
+
+    refunds_this_month = BillingRefund.all_objects.filter(
+        status=BillingRefund.Status.COMPLETED, completed_at__gte=inicio_mes_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    refunds_last_month = BillingRefund.all_objects.filter(
+        status=BillingRefund.Status.COMPLETED, completed_at__gte=inicio_mes_anterior_dt, completed_at__lt=inicio_mes_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    credit_notes_this_month = CreditNote.all_objects.filter(created_at__gte=inicio_mes_dt).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    credit_notes_last_month = CreditNote.all_objects.filter(
+        created_at__gte=inicio_mes_anterior_dt, created_at__lt=inicio_mes_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     return {
         "mrr": mrr,
@@ -66,24 +118,110 @@ def get_billing_dashboard_summary(*, today=None):
         "active_subscriptions": activas.count(),
         "past_due_subscriptions": Subscription.all_objects.filter(status=Subscription.Status.PAST_DUE).count(),
         "suspended_subscriptions": Subscription.all_objects.filter(status=Subscription.Status.SUSPENDED).count(),
-        "new_signups_this_month": Subscription.all_objects.filter(created_at__gte=inicio_mes_dt).count(),
-        "cancellations_this_month": Subscription.all_objects.filter(
-            status=Subscription.Status.CANCELLED, cancelled_at__gte=inicio_mes_dt,
-        ).count(),
+        "new_signups_this_month": new_signups_this_month,
+        "new_signups_change_pct": _variacion_porcentual(new_signups_this_month, new_signups_last_month),
+        "cancellations_this_month": cancellations_this_month,
+        "cancellations_change_pct": _variacion_porcentual(cancellations_this_month, cancellations_last_month),
         "pending_transfers": PaymentProof.all_objects.filter(
             status__in=[PaymentProof.Status.SUBMITTED, PaymentProof.Status.UNDER_REVIEW],
         ).count(),
-        "revenue_this_month": SaaSPayment.all_objects.filter(
-            status=SaaSPayment.Status.CONFIRMED, received_at__gte=inicio_mes_dt,
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0"),
-        "refunds_this_month": BillingRefund.all_objects.filter(
-            status=BillingRefund.Status.COMPLETED, completed_at__gte=inicio_mes_dt,
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0"),
-        "credit_notes_this_month": CreditNote.all_objects.filter(created_at__gte=inicio_mes_dt).aggregate(total=Sum("amount"))["total"] or Decimal("0"),
+        "revenue_this_month": revenue_this_month,
+        "revenue_change_pct": _variacion_porcentual(revenue_this_month, revenue_last_month),
+        "refunds_this_month": refunds_this_month,
+        "refunds_change_pct": _variacion_porcentual(refunds_this_month, refunds_last_month),
+        "credit_notes_this_month": credit_notes_this_month,
+        "credit_notes_change_pct": _variacion_porcentual(credit_notes_this_month, credit_notes_last_month),
         "overdue_invoices": SaaSInvoice.all_objects.filter(
             status__in=[SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID], due_date__lt=hoy,
         ).count(),
     }
+
+
+def get_revenue_last_6_months(*, today=None):
+    """Ingresos reales confirmados (`SaaSPayment.CONFIRMED`) de cada uno
+    de los últimos 6 meses, incluido el actual — para la gráfica de
+    línea del panel. Un mes sin pagos confirmados aparece con total 0,
+    nunca se omite (el punto debe existir igual en la gráfica); nunca
+    un dato inventado."""
+    hoy = today or date.today()
+    inicios = []
+    cursor = hoy.replace(day=1)
+    for _ in range(6):
+        inicios.append(cursor)
+        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    inicios.reverse()
+
+    filas = []
+    for indice, inicio in enumerate(inicios):
+        inicio_dt = timezone.make_aware(datetime.combine(inicio, time.min))
+        qs = SaaSPayment.all_objects.filter(status=SaaSPayment.Status.CONFIRMED, received_at__gte=inicio_dt)
+        if indice + 1 < len(inicios):
+            fin_dt = timezone.make_aware(datetime.combine(inicios[indice + 1], time.min))
+            qs = qs.filter(received_at__lt=fin_dt)
+        # El mes actual (el último de la lista) no tiene límite superior
+        # de fecha: todavía está en curso.
+        total = qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        filas.append({"mes": inicio, "etiqueta": _NOMBRE_MES_CORTO[inicio.month], "total": total})
+    return filas
+
+
+def get_subscription_status_breakdown():
+    """Conteo real de suscripciones por estado — para la gráfica de
+    dona del panel. Los mismos 6 códigos reales de `Subscription.Status`
+    (con su label real ya humanizado), nunca una categoría inventada."""
+    filas = [
+        {"codigo": codigo, "etiqueta": etiqueta, "conteo": Subscription.all_objects.filter(status=codigo).count()}
+        for codigo, etiqueta in Subscription.Status.choices
+    ]
+    return {"total": sum(fila["conteo"] for fila in filas), "filas": filas}
+
+
+def get_recent_platform_activity(*, limit=6):
+    """Actividad reciente REAL de la plataforma, construida agregando
+    eventos que los propios modelos de Billing ya registran (nunca un
+    log nuevo/paralelo): nueva suscripción, pago confirmado, nota de
+    crédito emitida, cliente SaaS registrado — combinados y ordenados
+    por fecha real. Nunca se inventa un evento ni un texto genérico."""
+    eventos = []
+    for s in Subscription.all_objects.select_related("tenant", "plan_version__plan").order_by("-created_at")[:limit]:
+        eventos.append({
+            "tipo": "suscripcion", "titulo": "Nueva suscripción",
+            "subtitulo": f"{s.plan_version.plan.name} — {s.tenant}", "cuando": s.created_at,
+        })
+    for p in SaaSPayment.all_objects.filter(status=SaaSPayment.Status.CONFIRMED).select_related("tenant").order_by("-received_at")[:limit]:
+        eventos.append({
+            "tipo": "pago", "titulo": "Pago recibido",
+            "subtitulo": f"{p.amount} {p.currency} — {p.tenant}", "cuando": p.received_at,
+        })
+    for cn in CreditNote.all_objects.select_related("tenant").order_by("-created_at")[:limit]:
+        eventos.append({
+            "tipo": "nota_credito", "titulo": "Nota de crédito emitida",
+            "subtitulo": f"{cn.amount} {cn.currency} — {cn.tenant}", "cuando": cn.created_at,
+        })
+    for c in SaaSCustomer.objects.order_by("-created_at")[:limit]:
+        eventos.append({
+            "tipo": "cliente", "titulo": "Cliente registrado",
+            "subtitulo": c.name, "cuando": c.created_at,
+        })
+    eventos.sort(key=lambda evento: evento["cuando"], reverse=True)
+    return eventos[:limit]
+
+
+def get_recent_invoices_for_dashboard(*, limit=5):
+    """Últimas facturas reales de la plataforma (todas las tenants) —
+    para la tabla del panel."""
+    return list(SaaSInvoice.all_objects.select_related("tenant").order_by("-issue_date", "-id")[:limit])
+
+
+def get_upcoming_invoices_for_dashboard(*, today=None, limit=5):
+    """Facturas realmente pendientes de pago con vencimiento próximo
+    (incluye ya vencidas: siguen pendientes de cobrar) — para el panel."""
+    hoy = today or date.today()
+    return list(
+        SaaSInvoice.all_objects.filter(
+            status__in=[SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID],
+        ).select_related("tenant").order_by("due_date")[:limit],
+    )
 
 
 def get_revenue_report(*, date_from=None, date_to=None):

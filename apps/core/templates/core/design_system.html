@@ -3,7 +3,7 @@
 {% block title %}Design System — ERP SaaS{% endblock %}
 
 {% block app_content %}
-{% load ui_extras %}
+{% load ui_extras ui_icons %}
 <nav class="migas" aria-label="Ruta de navegación">
     <ol>
         <li><a href="{% url 'core:home' %}">Inicio</a></li>
@@ -56,15 +56,15 @@
         <a class="sidebar__marca" href="#">Budun SaaS<span class="sidebar__marca__contexto">Plataforma — Super Admin</span></a>
         <div class="sidebar__grupo">
             <ul class="sidebar__nav">
-                <li><a class="sidebar__enlace" href="#"><span class="sidebar__icono" aria-hidden="true">🏠</span> Panel de control</a></li>
+                <li><a class="sidebar__enlace" href="#">{% icono "home" clase="sidebar__icono" %} Panel de control</a></li>
             </ul>
         </div>
         <div class="sidebar__grupo">
             <p class="sidebar__grupo-titulo">Facturación</p>
             <ul class="sidebar__nav">
-                <li><a class="sidebar__enlace" href="#" aria-current="page"><span class="sidebar__icono" aria-hidden="true">🧾</span> Facturas</a></li>
-                <li><a class="sidebar__enlace" href="#"><span class="sidebar__icono" aria-hidden="true">💳</span> Pagos</a></li>
-                <li><a class="sidebar__enlace" href="#"><span class="sidebar__icono" aria-hidden="true">💱</span> Transferencias</a></li>
+                <li><a class="sidebar__enlace" href="#" aria-current="page">{% icono "recibo" clase="sidebar__icono" %} Facturas</a></li>
+                <li><a class="sidebar__enlace" href="#">{% icono "tarjeta" clase="sidebar__icono" %} Pagos</a></li>
+                <li><a class="sidebar__enlace" href="#">{% icono "intercambio" clase="sidebar__icono" %} Transferencias</a></li>
             </ul>
         </div>
     </aside>

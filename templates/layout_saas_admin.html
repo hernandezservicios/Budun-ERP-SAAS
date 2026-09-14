@@ -1,21 +1,26 @@
 {% extends "base.html" %}
+{% load ui_extras ui_icons %}
 {% comment %}
 Shell de la PLATAFORMA SaaS (Super Admin) — FASE DE REDISEÑO VISUAL SaaS
-2.0. Deliberadamente SEPARADO de `layout_app.html` (shell del ERP
-tenant): un Super Admin administrando Tenants/Planes/Facturación/PayPal
-de la plataforma nunca debe ver los menús operativos de un ERP
-(Inventario, Ventas, POS, RRHH, etc.) — ver "SaaS Visual Shell
-Separation" en docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md.
-Usado únicamente por las plantillas de los namespaces `billing_admin`
-(FASE 17) y `billing_platform` (FASE 16, PayPal de plataforma). El
-Portal del tenant (`billing_portal`) NO usa este shell — sigue en
-`layout_app.html` porque ahí el tenant ve su PROPIA facturación dentro
-de su sesión ERP normal, no la plataforma completa.
+2.0 / FASE — Rediseño Visual Maestro. Deliberadamente SEPARADO de
+`layout_app.html` (shell del ERP tenant): un Super Admin administrando
+Tenants/Planes/Facturación/PayPal de la plataforma nunca debe ver los
+menús operativos de un ERP (Inventario, Ventas, POS, RRHH, etc.) — ver
+"SaaS Visual Shell Separation" en
+docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md. Usado únicamente
+por las plantillas de los namespaces `billing_admin` (FASE 17) y
+`billing_platform` (FASE 16, PayPal de plataforma). El Portal del
+tenant (`billing_portal`) NO usa este shell — sigue en `layout_app.html`
+porque ahí el tenant ve su PROPIA facturación dentro de su sesión ERP
+normal, no la plataforma completa.
 
 El modificador `shell--saas` en el contenedor raíz acota CUALQUIER
 refinamiento visual (tipografía, espaciado) que sería arriesgado
 aplicar a los selectores compartidos con el ERP (h1/h2/h3 genéricos) —
 ver la sección "SaaS Visual Shell Separation" para el porqué.
+
+Iconografía: sistema SVG propio (`apps/core/templatetags/ui_icons.py`),
+nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
 {% endcomment %}
 {% block body %}
 <div class="shell shell--saas">
@@ -31,7 +36,7 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:dashboard' %}"
                        {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'billing_admin' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🏠</span> Panel de control
+                        {% icono "home" clase="sidebar__icono" %} Panel de control
                     </a>
                 </li>
             </ul>
@@ -43,19 +48,19 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:customers_list' %}"
                        {% if request.resolver_match.url_name == 'customers_list' or request.resolver_match.url_name == 'customer_detail' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🧑‍💼</span> Clientes
+                        {% icono "usuarios" clase="sidebar__icono" %} Clientes
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:tenants_list' %}"
                        {% if request.resolver_match.url_name == 'tenants_list' or request.resolver_match.url_name == 'tenant_detail' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🏢</span> Tenants
+                        {% icono "edificio" clase="sidebar__icono" %} Tenants
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:manual_sale' %}"
                        {% if request.resolver_match.url_name == 'manual_sale' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🛒</span> Venta manual
+                        {% icono "carrito" clase="sidebar__icono" %} Venta manual
                     </a>
                 </li>
             </ul>
@@ -67,13 +72,13 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:subscriptions_list' %}"
                        {% if request.resolver_match.url_name == 'subscriptions_list' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🔁</span> Suscripciones
+                        {% icono "repetir" clase="sidebar__icono" %} Suscripciones
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:plans_list' %}"
                        {% if request.resolver_match.url_name == 'plans_list' or request.resolver_match.url_name == 'plan_version_create' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">📦</span> Planes
+                        {% icono "paquete" clase="sidebar__icono" %} Planes
                     </a>
                 </li>
             </ul>
@@ -85,31 +90,31 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:invoices_list' %}"
                        {% if request.resolver_match.url_name == 'invoices_list' or request.resolver_match.url_name == 'invoice_detail' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🧾</span> Facturas
+                        {% icono "recibo" clase="sidebar__icono" %} Facturas
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:payments_list' %}"
                        {% if request.resolver_match.url_name == 'payments_list' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">💳</span> Pagos
+                        {% icono "tarjeta" clase="sidebar__icono" %} Pagos
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:transfers_queue' %}"
                        {% if request.resolver_match.url_name == 'transfers_queue' or request.resolver_match.url_name == 'proof_detail' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">💱</span> Transferencias
+                        {% icono "intercambio" clase="sidebar__icono" %} Transferencias
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:credit_notes_list' %}"
                        {% if request.resolver_match.url_name == 'credit_notes_list' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">📝</span> Notas de crédito
+                        {% icono "nota-mas" clase="sidebar__icono" %} Notas de crédito
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:refunds_list' %}"
                        {% if request.resolver_match.url_name == 'refunds_list' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">↩️</span> Reembolsos
+                        {% icono "reembolso" clase="sidebar__icono" %} Reembolsos
                     </a>
                 </li>
             </ul>
@@ -121,7 +126,7 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:reports' %}"
                        {% if request.resolver_match.url_name == 'reports' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">📊</span> Reportes
+                        {% icono "barras" clase="sidebar__icono" %} Reportes
                     </a>
                 </li>
             </ul>
@@ -133,13 +138,13 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:bank_accounts_list' %}"
                        {% if request.resolver_match.url_name == 'bank_accounts_list' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🏦</span> Cuentas bancarias
+                        {% icono "banco" clase="sidebar__icono" %} Cuentas bancarias
                     </a>
                 </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_platform:status' %}"
                        {% if request.resolver_match.namespace == 'billing_platform' %}aria-current="page"{% endif %}>
-                        <span class="sidebar__icono" aria-hidden="true">🅿️</span> PayPal (plataforma)
+                        {% icono "paypal" clase="sidebar__icono" %} PayPal (plataforma)
                     </a>
                 </li>
             </ul>
@@ -148,18 +153,21 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
 
     <header class="navbar navbar--saas">
         <button type="button" class="navbar__toggle" data-sidebar-toggle aria-expanded="false" aria-label="Abrir navegación">
-            ☰
+            {% icono "menu" titulo="Abrir navegación" %}
         </button>
         <a class="navbar__marca" href="{% url 'billing_admin:dashboard' %}">Budun SaaS</a>
-        <div class="navbar__contexto">
-            <span class="badge badge--azul">Plataforma</span>
-            <span>Super Admin</span>
-        </div>
+        <label class="navbar__buscador">
+            {% icono "buscar" titulo="Buscar" %}
+            <input type="search" placeholder="Buscar..." aria-label="Buscar en la plataforma" disabled>
+        </label>
         <div class="navbar__acciones">
             <div class="dropdown" data-dropdown>
+                {% with nombre_usuario=request.user.get_full_name|default:request.user.email|default:"Invitado" %}
                 <button type="button" class="btn btn--fantasma btn--sm" data-dropdown-trigger aria-haspopup="true" aria-expanded="false">
-                    {% firstof request.user.get_full_name request.user.email "Invitado" %}
+                    <span class="avatar-circulo">{{ nombre_usuario|iniciales }}</span>
+                    {{ nombre_usuario }}
                 </button>
+                {% endwith %}
                 <div class="dropdown__menu" data-dropdown-menu hidden role="menu">
                     <a class="dropdown__item" href="{% url 'dashboard:panel' %}" role="menuitem">Salir a mi ERP</a>
                     <a class="dropdown__item" href="{% url 'accounts:perfil' %}" role="menuitem">Mi perfil</a>

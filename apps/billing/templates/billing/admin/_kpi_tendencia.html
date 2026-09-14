@@ -1,0 +1,26 @@
+{% load ui_icons ui_extras %}
+{% comment %}
+Línea de tendencia de una KPI card — recibe `pct` (Decimal con signo o
+`None`, ya calculado por apps.billing.services.reports) e `invertido`
+(True cuando SUBIR es una mala noticia para esta métrica en concreto,
+ej. cancelaciones/reembolsos). Con `pct` None no se renderiza nada —
+nunca se inventa un "sin cambios" cuando no hay una base real de
+comparación (ver DECISIONS.md).
+{% endcomment %}
+{% if pct is not None %}
+{% if pct > 0 %}
+<p class="saas-kpi-card__tendencia {% if invertido %}saas-kpi-card__tendencia--negativa{% else %}saas-kpi-card__tendencia--positiva{% endif %}">
+    {% icono "flecha-arriba" %}{{ pct|valor_absoluto|floatformat:0 }}%
+    <span>vs. mes anterior</span>
+</p>
+{% elif pct < 0 %}
+<p class="saas-kpi-card__tendencia {% if invertido %}saas-kpi-card__tendencia--positiva{% else %}saas-kpi-card__tendencia--negativa{% endif %}">
+    {% icono "flecha-abajo" %}{{ pct|valor_absoluto|floatformat:0 }}%
+    <span>vs. mes anterior</span>
+</p>
+{% else %}
+<p class="saas-kpi-card__tendencia">
+    —<span>sin cambios</span>
+</p>
+{% endif %}
+{% endif %}

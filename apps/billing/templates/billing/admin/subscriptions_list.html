@@ -1,5 +1,5 @@
 {% extends "layout_saas_admin.html" %}
-{% load ui_extras %}
+{% load ui_extras ui_icons %}
 {% block title %}Suscripciones — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
 <nav class="migas" aria-label="Ruta de navegación">
@@ -25,6 +25,6 @@
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🔁</div><h3>No hay suscripciones registradas</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono">{% icono "repetir" %}</div><h3>No hay suscripciones registradas</h3></div>
 {% endif %}
 {% endblock %}
