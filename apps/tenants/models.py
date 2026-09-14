@@ -23,7 +23,7 @@ class Tenant(models.Model):
         política de suspensión) — nunca a mano."""
 
         PENDING_SETUP = "pending_setup", "Configuración pendiente"
-        PENDING_PAYMENT = "pending_payment", "Pago pendiente"
+        PENDING_PAYMENT = "pending_payment", "Pendiente"
         ACTIVE = "active", "Activo"
         PAST_DUE = "past_due", "Pago vencido (en gracia)"
         SUSPENDED = "suspended", "Suspendido"

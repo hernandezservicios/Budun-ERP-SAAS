@@ -34,7 +34,7 @@ class SaaSInvoice(TenantScopedModel):
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Borrador"
-        OPEN = "open", "Pendiente de pago"
+        OPEN = "open", "Pendiente"
         PAID = "paid", "Pagada"
         PARTIALLY_PAID = "partially_paid", "Parcialmente pagada"
         VOID = "void", "Anulada"
