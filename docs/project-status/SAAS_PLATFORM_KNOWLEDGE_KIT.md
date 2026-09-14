@@ -1335,6 +1335,185 @@ tocar el ERP ni reescribir cada plantilla individualmente.
   alarma se deriva siempre del valor real, nunca se fija como parte
   del diseño estático de la tarjeta.
 
+## SaaS Master Visual Language Patterns (FASE — Rediseño Visual Maestro)
+
+Cuatro patrones nuevos a partir de la implementación del Design System
+SaaS basado en una imagen de referencia maestra — la primera vez que
+este proyecto trabaja desde una referencia visual concreta en vez de
+una descripción textual.
+
+### 1. Inline SVG Icon System (sin dependencia externa)
+
+- **Problema**: la interfaz necesitaba iconografía consistente
+  (sidebar, KPI, estados vacíos) pero el proyecto no tenía ningún
+  sistema de iconos — solo emoji, explícitamente rechazados por no
+  transmitir una identidad de "producto SaaS comercial" profesional.
+- **Causa raíz**: nunca se necesitó iconografía real hasta que una
+  referencia visual concreta la exigió — el emoji era la opción "cero
+  esfuerzo" disponible desde el primer día del shell SaaS.
+- **Patrón**: un pequeño diccionario Python de trazos SVG (24×24,
+  outline, `stroke="currentColor"`) servido por un `simple_tag` de
+  Django (`{% icono "home" %}`) — el HTML final es un `<svg>` inline,
+  nunca una petición de red, un sprite externo ni una fuente de
+  iconos.
+- **Solución**: `apps/core/templatetags/ui_icons.py`, un solo
+  diccionario `_ICONOS` (nombre → contenido interior del `<svg>`) y
+  una función `icono()` que arma el `<svg>` completo con los atributos
+  comunes (`viewBox`, `stroke-width`, accesibilidad) una sola vez.
+- **Reglas**: nunca instalar una librería de iconos (Font Awesome,
+  Feather-as-a-package, un sprite SVG externo) mientras el catálogo
+  necesario siga siendo pequeño (aquí, ~25 iconos) — CLAUDE.md exige
+  justificar cualquier dependencia nueva, y un diccionario de 25
+  entradas no la justifica. Cada icono decorativo (acompañado de texto
+  visible) es `aria-hidden="true"`; un icono que es el ÚNICO contenido
+  de un control usa `titulo=` para un `<title>` accesible real.
+- **Errores comunes**: usar un símbolo tipográfico Unicode (✓, →, ×)
+  como si fuera parte del "sistema de iconos" — son texto, no iconos,
+  y está bien seguir usándolos como texto (ver "Ver todas →", "←
+  Volver") mientras no se confundan con la iconografía SVG real.
+- **Prevención**: antes de agregar un icono nuevo, revisar primero si
+  ya existe uno semánticamente equivalente en `_ICONOS` — nunca crear
+  una entrada casi duplicada (dos variantes del mismo concepto) solo
+  porque el trazo exacto no coincide pixel a pixel con la referencia.
+- **Aplicabilidad a futuros proyectos**: cualquier plataforma con un
+  presupuesto de iconos moderado (decenas, no cientos) puede evitar
+  una dependencia de iconos externa por completo con este mismo
+  patrón — reservar una librería real solo cuando el catálogo
+  necesario crezca a un tamaño que un diccionario a mano ya no pueda
+  mantener cómodamente.
+
+### 2. Component Namespace Isolation (prefijo `saas-`)
+
+- **Problema**: el dashboard necesitaba un componente de KPI card
+  completamente distinto (icono circular, tendencia) del `.kpi`/
+  `.kpi-grid` ya existente — pero `.kpi` resultó estar en uso activo
+  en TODO el ERP (dashboard, detalle de producto, POS, ventas,
+  compras), no solo en el dashboard SaaS como se asumía inicialmente.
+- **Causa raíz**: nunca se había necesitado verificar el alcance real
+  de un componente "genérico" del Design System antes de esta fase —
+  ninguna corrección visual anterior había necesitado reescribir uno.
+- **Patrón**: cuando un componente compartido necesita una versión
+  visualmente distinta para UNA superficie, se crea un componente
+  NUEVO con un prefijo de espacio de nombres (`saas-kpi-card`, nunca
+  `kpi-card-v2`/`kpi-nuevo`) — el componente compartido original
+  permanece exactamente igual, para siempre, mientras algo más lo siga
+  usando.
+- **Solución**: `grep` del nombre de clase en TODO el proyecto (no
+  solo `apps/billing`) antes de decidir si modificar un componente
+  existente o crear uno nuevo — la regla operativa: si aparece en un
+  template fuera de la superficie que se está rediseñando, se crea un
+  componente nuevo, sin excepción.
+- **Reglas**: todo componente nuevo exclusivo de la plataforma SaaS
+  lleva el prefijo `saas-` (`saas-kpi-card`, `saas-dona`,
+  `saas-linea-chart`, `saas-actividad-item`) — nunca reutilizar el
+  nombre corto de un componente ya existente aunque el nuevo se sienta
+  como "la versión mejorada" de aquel.
+- **Errores comunes**: asumir que un componente vive "solo en el
+  dashboard" porque es ahí donde se lo está mirando en este momento —
+  la verificación real es siempre un `grep`, nunca una suposición
+  basada en dónde se originó el componente.
+- **Prevención**: antes de MODIFICAR (no crear) cualquier clase CSS ya
+  documentada como parte del Design System base (FASE 5/7), buscar su
+  uso en todo el proyecto — el mismo hábito que ya se aplicaba a nivel
+  de plantilla (`layout_app.html` nunca se toca) debe aplicarse
+  también a nivel de clase CSS individual.
+- **Aplicabilidad a futuros proyectos**: cualquier proyecto con más de
+  una superficie de producto compartiendo un Design System base
+  (portal de cliente + panel interno, app móvil + web) debe adoptar un
+  prefijo de espacio de nombres por superficie desde el principio —
+  mucho más barato que descubrir la colisión después de que ambas
+  superficies ya dependen del mismo nombre de clase.
+
+### 3. Real-Data Chart Rendering Without a Charting Library
+
+- **Problema**: la referencia visual pedía una gráfica de línea
+  (ingresos) y una de dona (estado de suscripciones) — sin ninguna
+  librería de gráficas ya presente en el proyecto, y CLAUDE.md exige
+  no introducir una sin necesidad real.
+- **Causa raíz**: dos gráficas simples (6 puntos, ≤6 segmentos) no
+  justifican el peso de una librería completa (Chart.js/D3) — el caso
+  de uso real es mucho más pequeño que el problema que esas librerías
+  resuelven.
+- **Patrón**: SVG inline con la geometría calculada en Python
+  (`apps/core/templatetags/ui_charts.py`), nunca en JavaScript ni en
+  el propio template — Django ya sabe hacer aritmética de coordenadas
+  mejor que un template de por sí limitado para eso. La dona reutiliza
+  literalmente el mismo mapa de color semántico que los badges
+  (`estado_badge`), nunca una paleta paralela.
+- **Solución**: dos `simple_tag` puros (`linea_chart_datos`,
+  `dona_chart_segmentos`) que reciben datos YA agregados por
+  `apps.billing.services.reports` (nunca consultan la base de datos
+  ellos mismos — separación estricta entre "de dónde viene el dato" y
+  "cómo se dibuja") y devuelven coordenadas/arcos listos para
+  interpolar en el SVG.
+- **Reglas**: un helper de geometría de gráfica nunca decide QUÉ datos
+  mostrar (eso es responsabilidad exclusiva del servicio de reportes)
+  — solo CÓMO posicionarlos. Un mes sin actividad aparece con valor 0
+  en la gráfica, nunca se omite (el punto debe existir para que la
+  línea no se distorsione).
+- **Errores comunes**: intentar hacer la aritmética de escalado
+  (mín/máx/normalización) dentro del propio template de Django — los
+  templates no tienen operadores aritméticos completos, y forzarlo
+  lleva a lógica de presentación duplicada y difícil de probar.
+- **Prevención**: cualquier gráfica nueva que se necesite en el
+  futuro, evaluar primero si su complejidad real (número de series,
+  interactividad necesaria) sigue estando por debajo del punto donde
+  una librería se vuelve la opción más simple — y documentar esa
+  evaluación explícitamente si se decide agregar una.
+- **Aplicabilidad a futuros proyectos**: cualquier dashboard con un
+  puñado de gráficas simples y bien definidas (línea de tendencia,
+  dona de distribución, barras comparativas) puede evitar una
+  dependencia de gráficas completa con este mismo patrón — reservarla
+  para cuando se necesite algo que SVG a mano ya no pueda resolver
+  razonablemente (zoom, tooltips interactivos ricos, series grandes).
+
+### 4. Honest Trend Indicators (nunca fabricar una comparación)
+
+- **Problema**: la referencia visual muestra una flecha ↑/↓ con
+  porcentaje "vs. mes anterior" en cada KPI — pero varias métricas del
+  panel (MRR, suscripciones activas, pagos atrasados) son fotografías
+  de un instante (el valor ahora mismo), no flujos con un "mes
+  anterior" real y reconstruible sin una tabla de historial dedicada.
+- **Causa raíz**: la tentación real frente a una referencia visual
+  detallada es replicar CADA elemento visible, incluso cuando el dato
+  real que lo alimentaría no existe todavía — CLAUDE.md y esta fase
+  son explícitos: la imagen define el lenguaje visual, nunca los
+  datos.
+- **Patrón**: distinguir explícitamente "métrica de flujo" (tiene un
+  valor real para "el mes pasado", agregable sobre un rango de
+  fechas — altas, cancelaciones, ingresos, reembolsos, notas de
+  crédito) de "métrica de estado" (una foto del ahora, sin historial
+  reconstruible sin una tabla de snapshots que no existe — MRR/ARR,
+  activas, atrasadas, suspendidas, transferencias pendientes,
+  facturas vencidas). Solo las primeras muestran tendencia.
+- **Solución**: `_variacion_porcentual(actual, anterior)` devuelve
+  `None` (nunca 0 ni un string vacío) cuando no hay base real de
+  comparación; la plantilla omite la línea de tendencia por completo
+  ante `None` — nunca renderiza un "0%"/"sin cambios" fabricado.
+  Cuando SÍ hay un valor real de 0% (se comparó y de verdad no hubo
+  cambio), eso sí se muestra, porque es un hecho real, no inventado.
+- **Reglas**: ninguna KPI card muestra una tendencia a menos que exista
+  una función real que calcule esa comparación específica — "se ve
+  vacío sin la tercera línea" nunca es razón suficiente para inventar
+  un número.
+- **Errores comunes**: rellenar con "— sin cambios" cualquier métrica
+  sin tendencia calculada, asumiendo que es una forma "neutra" de
+  completar el diseño — sigue siendo una afirmación falsa (dice "lo
+  comparamos y no cambió" cuando en realidad nunca se comparó nada).
+- **Prevención**: al conectar cualquier elemento visual de la
+  referencia a datos reales, preguntar explícitamente "¿existe hoy una
+  consulta real que produzca este número, o lo estoy completando para
+  que se parezca a la imagen?" — si la respuesta es la segunda, se
+  omite el elemento (o se dice explícitamente que está preparado pero
+  no conectado, como el buscador del navbar) en vez de inventarlo.
+- **Aplicabilidad a futuros proyectos**: cualquier dashboard que
+  muestre indicadores de tendencia debe clasificar cada métrica como
+  "flujo" o "estado" antes de decidir si puede llevar una comparación
+  — una plataforma de préstamos podría comparar "desembolsos este
+  mes" (flujo, real) pero no "cartera vigente ahora mismo" (estado,
+  sin snapshot histórico) sin construir antes una tabla de snapshots
+  dedicada.
+
 ## DECISIONS LOG
 
 Registro narrativo — el detalle completo y versionado vive en

@@ -34,7 +34,26 @@ cada enlace del sidebar y cada KPI (mismo mecanismo ya usado en
 más generoso en `.main`. Scrollbar fina (`scrollbar-width: thin` +
 `::-webkit-scrollbar`) y `overflow-x: hidden` en `body` se dejaron
 GLOBALES (todo el proyecto, ERP incluido) — son mejoras neutras de
-plataforma/navegador, no cambios de identidad visual.
+plataforma/navegador, no cambios de identidad visual. (Nota: los
+iconos con emoji mencionados aquí se reemplazaron por completo en la
+fase siguiente — ver más abajo.)
+
+### Rediseño Visual Maestro (basado en imagen de referencia)
+A partir de una imagen de referencia visual maestra (nunca copiada
+literalmente — solo su lenguaje visual), la plataforma SaaS ganó: un
+sistema de iconos SVG inline propio (`{% icono %}`,
+`apps/core/templatetags/ui_icons.py`) que reemplaza TODO el emoji de
+interfaz anterior; una KPI card v2 (`.saas-kpi-card`, icono circular +
+tendencia — componente nuevo, nunca una modificación de `.kpi`/
+`.kpi-grid`, que el ERP sigue usando sin cambios); gráficas de línea y
+dona dibujadas con SVG inline (sin librería de gráficas,
+`apps/core/templatetags/ui_charts.py`) con datos 100% reales (ingresos
+últimos 6 meses, distribución de suscripciones por estado, actividad
+reciente); un buscador de navbar deliberadamente inerte (sin backend
+real todavía) y un avatar con iniciales. Ver "SaaS Master Visual
+Language Patterns" en `docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md`
+para el detalle completo de cada patrón, y `docs/design-system.md`
+para dónde vive cada pieza.
 
 ## UX
 Prioridades: experiencia de usuario > legibilidad > claridad > jerarquía > consistencia > estética.

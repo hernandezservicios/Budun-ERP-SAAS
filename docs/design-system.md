@@ -185,6 +185,61 @@ los `style=` inline que existían en casi todas las plantillas de Billing
 antes de esta fase — nunca un sistema de utilidades genérico tipo
 Tailwind, solo los anchos/márgenes que realmente se repetían.
 
+## Rediseño Visual Maestro de la plataforma SaaS
+
+Implementado a partir de una imagen de referencia visual maestra
+(sidebar azul profundo, KPI cards con icono circular + tendencia,
+gráfica de línea, gráfica de dona, feed de actividad) — usada como
+referencia de lenguaje visual, nunca copiada literalmente (ni datos,
+ni textos, ni funcionalidades). Todo lo construido aquí es exclusivo
+de `templates/layout_saas_admin.html` y las plantillas de
+`billing_admin`/`billing_platform` — el ERP no se tocó.
+
+### Sistema de iconos SVG (`{% icono %}`)
+`apps/core/templatetags/ui_icons.py` reemplaza el uso de emoji como
+iconografía de interfaz (sidebar, KPI, estados vacíos) con un pequeño
+diccionario de trazos SVG (`_ICONOS`, ~25 iconos outline 24×24) sin
+ninguna librería externa — `{% load ui_icons %}` + `{% icono "home" %}`.
+Cada icono es decorativo por defecto (`aria-hidden="true"`); pasar
+`titulo="..."` cuando el icono es el único contenido de un control
+(ej. el botón de menú móvil). Ver "Inline SVG Icon System" en
+`docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md`.
+
+### KPI Card v2 (`.saas-kpi-card`)
+Componente NUEVO — deliberadamente separado de `.kpi`/`.kpi-grid`
+(FASE 7), que sigue en uso activo en el dashboard del ERP y varias
+vistas de detalle de Ventas/Compras/Inventario/POS. Icono circular con
+color FIJO por identidad de métrica (`.saas-kpi-card__icono--azul/
+-morado/-verde/-rojo/-naranja/-teal/-gris`, reutilizando familias de
+color existentes + dos nuevas — `--color-morado-*`/`--color-teal-*` —
+agregadas solo para este uso decorativo, nunca para el sistema
+semántico de badges). Tendencia opcional (`.saas-kpi-card__tendencia`,
+ver `apps/billing/templates/billing/admin/_kpi_tendencia.html`) SOLO
+para métricas de "flujo" con una comparación real vs. mes anterior —
+nunca fabricada para métricas de "estado" (MRR, activas, atrasadas...)
+que no tienen un snapshot histórico real. Ver "SaaS KPI Card v2" y
+"Honest Trend Indicators" en el Knowledge Kit.
+
+### Gráficas SVG sin librería (`{% load ui_charts %}`)
+`apps/core/templatetags/ui_charts.py`: `linea_chart_datos` (línea +
+área de ingresos, geometría calculada en Python) y
+`dona_chart_segmentos` (dona de estado de suscripciones, reutiliza el
+mismo mapa de color de `estado_badge`) — ambos devuelven coordenadas
+listas para SVG inline, nunca una librería de gráficas nueva. Los
+datos siempre vienen ya agregados de
+`apps.billing.services.reports` — el helper de geometría nunca
+consulta la base de datos.
+
+### Buscador y avatar
+`.navbar__buscador`: input de búsqueda visual, deliberadamente
+`disabled` (mismo criterio que `.paginacion` desde FASE 5 —
+"preparado, no conectado" — no existe todavía un buscador transversal
+real). `.avatar-circulo` + filtro `iniciales` (`apps/core/templatetags/
+ui_extras.py`): iniciales del usuario en un círculo, mismo patrón que
+el resto del menú de usuario. Se omitió deliberadamente una campana de
+notificaciones: no existe ningún sistema de notificaciones real para
+el Super Admin, y mostrarla habría prometido una función inexistente.
+
 ## Qué NO se construyó en esta fase (deliberado)
 Productos, inventario, ventas, POS, compras, gastos, reportes, API de
 Inventario, PayPal, Billing — todo eso corresponde a fases posteriores.
