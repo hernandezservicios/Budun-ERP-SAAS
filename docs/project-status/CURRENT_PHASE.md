@@ -4,8 +4,8 @@
 Fase actual: 20
 Estado: PASS (cerrada, pendiente de autorización para FASE 21)
 Última fase cerrada: FASE 20 — Backups + Disaster Recovery (pg_dump/pg_restore reales, restore verification con SQL directo sobre 15 tablas, checksum SHA-256, retención diaria/semanal/mensual, cifrado y off-site opcionales, media/files, runbook, restore drill real, failure testing, monitoring, 88 tests nuevos, ver sección más abajo)
-Extensión más reciente: "FASE — REDISEÑO VISUAL MAESTRO DE LA PLATAFORMA SaaS" (ver sección más abajo)
-Próxima acción: esperar autorización explícita del usuario para iniciar FASE 21
+Extensión más reciente: "Revisión visual SaaS vista por vista — Bloque C" (Facturas, detalle de factura, Pagos, Transferencias, Comprobantes, Reembolsos, Notas de crédito — ver `PHASE_HISTORY.md`, `KNOWN_ISSUES.md` #142, `DECISIONS.md` #122)
+Próxima acción: esperar autorización explícita del usuario para el Bloque D (si el usuario define uno) o para iniciar FASE 21
 ```
 
 ## Regla
