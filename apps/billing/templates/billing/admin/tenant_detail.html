@@ -2,76 +2,114 @@
 {% load ui_extras ui_icons %}
 {% block title %}{{ tenant.name }} — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:tenants_list' %}">Tenants</a></li><li aria-current="page">{{ tenant.name }}</li></ol>
-</nav>
 <div class="encabezado-pagina">
     <div>
-        <h1>{{ tenant.name }}</h1>
-        <p class="encabezado-pagina__descripcion">
-            Estado de facturación: <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span>
-            {% if tenant.saas_customer %}
-            · Cliente SaaS: <a href="{% url 'billing_admin:customer_detail' tenant.saas_customer.pk %}">{{ tenant.saas_customer.name }}</a>
-            {% endif %}
-        </p>
+        <h1>{{ tenant.name }} <span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></h1>
+        {% if tenant.saas_customer %}
+        <p class="encabezado-pagina__descripcion">Cliente SaaS: <a href="{% url 'billing_admin:customer_detail' tenant.saas_customer.pk %}">{{ tenant.saas_customer.name }}</a></p>
+        {% endif %}
     </div>
     <div class="encabezado-pagina__acciones">
         <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:tenants_list' %}">← Volver a tenants</a>
     </div>
 </div>
 
+<div class="saas-detalle-grid{% if not subscription %} saas-detalle-grid--1col{% endif %} u-mb-6">
 {% if subscription %}
-<div class="tarjeta u-ancho-40 u-mb-6">
-    <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">{{ subscription.plan_version.plan.name }} <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></h3>
+    <div class="tarjeta">
+        <div class="tarjeta__cuerpo">
+            <div class="saas-tarjeta-encabezado">
+                <h2>Plan &amp; Suscripción</h2>
+                <span class="badge badge--azul">{{ subscription.plan_version.plan.name }}</span>
+            </div>
 
-        <p>{{ subscription.plan_version.price_amount|monto }} {{ subscription.plan_version.price_currency }} — {{ subscription.plan_version.get_frequency_display }}</p>
+            <p class="saas-precio-grande">{{ subscription.plan_version.price_amount|monto }} {{ subscription.plan_version.price_currency }} <small>/ {{ subscription.plan_version.get_frequency_display }}</small></p>
 
-        {% if subscription.current_period_start %}
-        <p>Período actual: {{ subscription.current_period_start }} — {{ subscription.current_period_end }}</p>
-        <p>Próxima renovación: {{ subscription.current_period_end }}</p>
+            <ul class="saas-meta-lista">
+                <li><span class="etiqueta">Estado de suscripción:</span> <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></li>
+                {% if subscription.current_period_start %}
+                <li><span class="etiqueta">Período vigente:</span> <span class="valor">{{ subscription.current_period_start }} – {{ subscription.current_period_end }}</span></li>
+                <li><span class="etiqueta">Próxima renovación:</span> <span class="valor">{{ subscription.current_period_end }}</span></li>
+                {% else %}
+                <li><span class="etiqueta">Período:</span> <span class="valor"><em>pendiente de activación</em></span></li>
+                {% endif %}
+                <li>
+                    <span class="etiqueta">Método de cobro:</span>
+                    {% if subscription.paypal_subscription_id %}
+                    <span class="badge badge--{{ subscription.paypal_subscription_status|estado_badge }}">{{ subscription.paypal_subscription_status|default:"desconocido"|estado_paypal }}</span>
+                    {% else %}
+                    <span class="badge badge--neutro">Pago manual</span>
+                    {% endif %}
+                </li>
+                {% if subscription.paypal_subscription_id %}
+                <li><span class="etiqueta">ID suscripción PayPal:</span> <span class="valor"><code>{{ subscription.paypal_subscription_id }}</code></span></li>
+                {% endif %}
+            </ul>
+
+            <div class="saas-acciones-tarjeta">
+                {% if subscription.status == "pending" %}
+                <form method="post">{% csrf_token %}<button type="submit" class="btn btn--primario btn--sm" name="accion" value="activar">Activar</button></form>
+                {% endif %}
+                {% if subscription.status == "suspended" or subscription.status == "past_due" %}
+                <form method="post">{% csrf_token %}<button type="submit" class="btn btn--contorno btn--sm" name="accion" value="reactivar">Reactivar</button></form>
+                {% endif %}
+                {% if subscription.status == "active" or subscription.status == "past_due" %}
+                <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-suspender-tenant">Suspender</button>
+                {% endif %}
+                {% if subscription.status != "cancelled" %}
+                <button type="button" class="btn btn--peligro-suave btn--sm" data-modal-open="modal-cancelar-tenant">Cancelar</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+    <div class="tarjeta">
+        <div class="tarjeta__encabezado">Facturas recientes</div>
+        {% if invoices %}
+        <table class="tabla">
+            <thead><tr><th>Número</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td>{{ invoice.number }}</td>
+                    <td>{{ invoice.issue_date }}</td>
+                    <td>{{ invoice.total|monto }} {{ invoice.currency }}</td>
+                    <td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
+                    <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         {% else %}
-        <p>Período: <em>pendiente de activación</em></p>
+        <div class="estado-vacio"><div class="estado-vacio__icono">{% icono "recibo" %}</div><h3>Sin facturas todavía</h3></div>
         {% endif %}
+    </div>
+</div>
 
-        <p>
-            Cobro recurrente PayPal:
-            {% if subscription.paypal_subscription_id %}
-            <span class="badge badge--{{ subscription.paypal_subscription_status|estado_badge }}">{{ subscription.paypal_subscription_status|default:"desconocido"|estado_paypal }}</span>
-            — referencia externa: <code>{{ subscription.paypal_subscription_id }}</code>
-            {% else %}
-            <span class="badge badge--neutro">Sin autorización de cobro automático (pago manual)</span>
-            {% endif %}
-        </p>
+{% if not subscription %}
+<div class="tarjeta u-mb-6">
+    <div class="tarjeta__cuerpo encabezado-pagina__acciones">
+        <form method="post">{% csrf_token %}<button type="submit" class="btn btn--contorno btn--sm" name="accion" value="reactivar">Reactivar</button></form>
+        <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-suspender-tenant">Suspender</button>
+        <button type="button" class="btn btn--peligro-suave btn--sm" data-modal-open="modal-cancelar-tenant">Cancelar</button>
     </div>
 </div>
 {% endif %}
-
-<form method="post" class="u-mb-6">
-    {% csrf_token %}
-    {% if subscription and subscription.status == "pending" %}
-    <button type="submit" class="btn btn--primario" name="accion" value="activar">Activar</button>
-    {% endif %}
-    {% if not subscription or subscription.status == "suspended" or subscription.status == "past_due" %}
-    <button type="submit" class="btn btn--contorno" name="accion" value="reactivar">Reactivar</button>
-    {% endif %}
-    {% if not subscription or subscription.status == "active" or subscription.status == "past_due" %}
-    <button type="button" class="btn btn--peligro" data-modal-open="modal-suspender-tenant">Suspender</button>
-    {% endif %}
-    {% if not subscription or subscription.status != "cancelled" %}
-    <button type="button" class="btn btn--peligro" data-modal-open="modal-cancelar-tenant">Cancelar</button>
-    {% endif %}
-</form>
 
 <dialog class="modal" id="modal-suspender-tenant">
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="accion" value="suspender">
-        <div class="modal__encabezado">
-            <h2>Suspender tenant</h2>
+        <div class="modal__encabezado modal__encabezado--alerta">
+            <span class="modal__icono-alerta">{% icono "alerta-triangulo" %}</span>
+            <div class="modal__encabezado__texto">
+                <h2>Suspender tenant</h2>
+                <p class="modal__subtitulo">Acción crítica de administración de tenant</p>
+            </div>
             <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
         </div>
-        <div class="modal__cuerpo">
+        <div class="modal__cuerpo modal__cuerpo--recuadro">
             <p>Se bloqueará el acceso de <strong>{{ tenant.name }}</strong> al ERP hasta que se reactive. ¿Confirmas la suspensión?</p>
         </div>
         <div class="modal__pie">
@@ -85,11 +123,15 @@
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="accion" value="cancelar">
-        <div class="modal__encabezado">
-            <h2>Cancelar suscripción</h2>
+        <div class="modal__encabezado modal__encabezado--alerta">
+            <span class="modal__icono-alerta">{% icono "alerta-triangulo" %}</span>
+            <div class="modal__encabezado__texto">
+                <h2>Cancelar suscripción</h2>
+                <p class="modal__subtitulo">Acción crítica de administración de tenant</p>
+            </div>
             <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
         </div>
-        <div class="modal__cuerpo">
+        <div class="modal__cuerpo modal__cuerpo--recuadro">
             <p>Se cancelará la suscripción de <strong>{{ tenant.name }}</strong>. Esta acción detiene la facturación futura (incluido el cobro recurrente de PayPal, si está autorizado). ¿Confirmas la cancelación?</p>
         </div>
         <div class="modal__pie">
@@ -98,21 +140,4 @@
         </div>
     </form>
 </dialog>
-
-<div class="encabezado-pagina"><h2>Facturas recientes</h2></div>
-{% if invoices %}
-<div class="tabla-envoltorio">
-    <table class="tabla">
-        <thead><tr><th>Número</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-        <tbody>
-            {% for invoice in invoices %}
-            <tr><td>{{ invoice.number }}</td><td>{{ invoice.total|monto }} {{ invoice.currency }}</td><td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
-                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono">{% icono "recibo" %}</div><h3>Sin facturas todavía</h3></div>
-{% endif %}
 {% endblock %}

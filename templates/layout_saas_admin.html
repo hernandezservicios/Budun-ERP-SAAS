@@ -21,29 +21,45 @@ ver la sección "SaaS Visual Shell Separation" para el porqué.
 
 Iconografía: sistema SVG propio (`apps/core/templatetags/ui_icons.py`),
 nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
+
+Tipografía (FASE 7.3 — implementación visual completa): Geist (encabezados)
++ Inter (cuerpo), cargadas vía Google Fonts en `extra_head` — mismas
+familias usadas en el diseño Stitch aprobado. Marca del sidebar (icono
+de cuadrícula en caja azul + "Budun ERP") y el bloque de usuario del
+topbar (avatar + nombre + "Super Admin") reproducen el Master Shell de
+Stitch (screenId a7cf5c0731344ff1a1ce69e1b0e9022d) — ver la sección
+"FASE 7.3" de docs/project-status/STITCH-SAAS-SCREEN-MAP.md.
 {% endcomment %}
+{% block extra_head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+{% endblock %}
 {% block body %}
 <div class="shell shell--saas">
     <div class="sidebar__respaldo" data-sidebar-backdrop></div>
     <aside class="sidebar sidebar--saas" aria-label="Navegación de la plataforma SaaS">
         <a class="sidebar__marca" href="{% url 'billing_admin:dashboard' %}">
-            Budun SaaS
-            <span class="sidebar__marca__contexto">Plataforma — Super Admin</span>
+            <span class="sidebar__marca__icono" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zm-9 9h7v7H4v-7zm9 0h7v7h-7v-7z"/></svg>
+            </span>
+            <span class="sidebar__marca__texto">Budun ERP</span>
         </a>
 
         <div class="sidebar__grupo">
+            <p class="sidebar__grupo-titulo">Inicio</p>
             <ul class="sidebar__nav">
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:dashboard' %}"
                        {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'billing_admin' %}aria-current="page"{% endif %}>
-                        {% icono "home" clase="sidebar__icono" %} Panel de control
+                        {% icono "home" clase="sidebar__icono" %} Dashboard
                     </a>
                 </li>
             </ul>
         </div>
 
         <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Clientes y empresas</p>
+            <p class="sidebar__grupo-titulo">Clientes y tenants</p>
             <ul class="sidebar__nav">
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:customers_list' %}"
@@ -57,28 +73,28 @@ nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
                         {% icono "edificio" clase="sidebar__icono" %} Tenants
                     </a>
                 </li>
+            </ul>
+        </div>
+
+        <div class="sidebar__grupo">
+            <p class="sidebar__grupo-titulo">Comercial</p>
+            <ul class="sidebar__nav">
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:manual_sale' %}"
                        {% if request.resolver_match.url_name == 'manual_sale' %}aria-current="page"{% endif %}>
                         {% icono "carrito" clase="sidebar__icono" %} Venta manual
                     </a>
                 </li>
-            </ul>
-        </div>
-
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Suscripciones y planes</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:subscriptions_list' %}"
-                       {% if request.resolver_match.url_name == 'subscriptions_list' %}aria-current="page"{% endif %}>
-                        {% icono "repetir" clase="sidebar__icono" %} Suscripciones
-                    </a>
-                </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:plans_list' %}"
                        {% if request.resolver_match.url_name == 'plans_list' or request.resolver_match.url_name == 'plan_version_create' %}aria-current="page"{% endif %}>
                         {% icono "paquete" clase="sidebar__icono" %} Planes
+                    </a>
+                </li>
+                <li>
+                    <a class="sidebar__enlace" href="{% url 'billing_admin:subscriptions_list' %}"
+                       {% if request.resolver_match.url_name == 'subscriptions_list' %}aria-current="page"{% endif %}>
+                        {% icono "repetir" clase="sidebar__icono" %} Suscripciones
                     </a>
                 </li>
             </ul>
@@ -106,15 +122,21 @@ nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
                     </a>
                 </li>
                 <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:credit_notes_list' %}"
-                       {% if request.resolver_match.url_name == 'credit_notes_list' %}aria-current="page"{% endif %}>
-                        {% icono "nota-mas" clase="sidebar__icono" %} Notas de crédito
-                    </a>
-                </li>
-                <li>
                     <a class="sidebar__enlace" href="{% url 'billing_admin:refunds_list' %}"
                        {% if request.resolver_match.url_name == 'refunds_list' %}aria-current="page"{% endif %}>
                         {% icono "reembolso" clase="sidebar__icono" %} Reembolsos
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="sidebar__grupo">
+            <p class="sidebar__grupo-titulo">Finanzas</p>
+            <ul class="sidebar__nav">
+                <li>
+                    <a class="sidebar__enlace" href="{% url 'billing_admin:bank_accounts_list' %}"
+                       {% if request.resolver_match.url_name == 'bank_accounts_list' %}aria-current="page"{% endif %}>
+                        {% icono "banco" clase="sidebar__icono" %} Cuentas bancarias
                     </a>
                 </li>
             </ul>
@@ -133,18 +155,12 @@ nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
         </div>
 
         <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Configuración</p>
+            <p class="sidebar__grupo-titulo">Integraciones</p>
             <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:bank_accounts_list' %}"
-                       {% if request.resolver_match.url_name == 'bank_accounts_list' %}aria-current="page"{% endif %}>
-                        {% icono "banco" clase="sidebar__icono" %} Cuentas bancarias
-                    </a>
-                </li>
                 <li>
                     <a class="sidebar__enlace" href="{% url 'billing_platform:status' %}"
                        {% if request.resolver_match.namespace == 'billing_platform' %}aria-current="page"{% endif %}>
-                        {% icono "paypal" clase="sidebar__icono" %} PayPal (plataforma)
+                        {% icono "paypal" clase="sidebar__icono" %} PayPal
                     </a>
                 </li>
             </ul>
@@ -155,23 +171,21 @@ nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
         <button type="button" class="navbar__toggle" data-sidebar-toggle aria-expanded="false" aria-label="Abrir navegación">
             {% icono "menu" titulo="Abrir navegación" %}
         </button>
-        <a class="navbar__marca" href="{% url 'billing_admin:dashboard' %}">Budun SaaS</a>
-        <label class="navbar__buscador">
-            {% icono "buscar" titulo="Buscar" %}
-            <input type="search" placeholder="Buscar..." aria-label="Buscar en la plataforma" disabled>
-        </label>
+        <a class="navbar__marca" href="{% url 'billing_admin:dashboard' %}">Budun ERP</a>
         <div class="navbar__acciones">
             <div class="dropdown" data-dropdown>
                 {% with nombre_usuario=request.user.get_full_name|default:request.user.email|default:"Invitado" %}
-                <button type="button" class="btn btn--fantasma btn--sm" data-dropdown-trigger aria-haspopup="true" aria-expanded="false">
+                <button type="button" class="navbar__usuario-boton" data-dropdown-trigger aria-haspopup="true" aria-expanded="false">
                     <span class="avatar-circulo">{{ nombre_usuario|iniciales }}</span>
-                    {{ nombre_usuario }}
+                    <span class="navbar__usuario-texto">
+                        <span class="navbar__usuario-nombre">{{ nombre_usuario }}</span>
+                        <span class="navbar__usuario-rol">Super Admin</span>
+                    </span>
                 </button>
                 {% endwith %}
                 <div class="dropdown__menu" data-dropdown-menu hidden role="menu">
-                    <a class="dropdown__item" href="{% url 'dashboard:panel' %}" role="menuitem">Salir a mi ERP</a>
-                    <a class="dropdown__item" href="{% url 'accounts:perfil' %}" role="menuitem">Mi perfil</a>
-                    <a class="dropdown__item" href="{% url 'accounts:password_change' %}" role="menuitem">Cambiar contraseña</a>
+                    <a class="dropdown__item" href="{% url 'billing_admin:profile' %}" role="menuitem">Mi perfil</a>
+                    <a class="dropdown__item" href="{% url 'billing_admin:password_change' %}" role="menuitem">Cambiar contraseña</a>
                     <form action="{% url 'accounts:logout' %}" method="post">
                         {% csrf_token %}
                         <button type="submit" class="dropdown__item" role="menuitem">Cerrar sesión</button>
@@ -182,7 +196,7 @@ nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
     </header>
 
     <main class="main" id="contenido-principal">
-        <div class="main__contenido">
+        <div class="main__contenido{% block main_contenido_clase %}{% endblock %}">
             {% block app_content %}{% endblock %}
         </div>
     </main>

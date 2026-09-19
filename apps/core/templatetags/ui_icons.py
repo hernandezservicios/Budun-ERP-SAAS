@@ -43,6 +43,7 @@ _ICONOS = {
     "engranaje": '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.1 5.9l-1.6 1.6M7.5 16.5l-1.6 1.6M18.1 18.1l-1.6-1.6M7.5 7.5 5.9 5.9"/>',
     "buscar": '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3"/>',
     "chevron-abajo": '<path d="m6 9 6 6 6-6"/>',
+    "chevron-derecha": '<path d="m9 6 6 6-6 6"/>',
     "menu": '<path d="M4 6.5h16M4 12h16M4 17.5h16"/>',
     "cerrar": '<path d="M6 6l12 12M18 6 6 18"/>',
     "flecha-izquierda": '<path d="M19 12H5"/><path d="m11 18-6-6 6-6"/>',

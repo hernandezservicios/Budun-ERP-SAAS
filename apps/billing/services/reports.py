@@ -15,7 +15,6 @@ from django.utils import timezone
 
 from ..models import (
     BillingRefund,
-    CreditNote,
     PaymentProof,
     PlanVersion,
     SaaSCustomer,
@@ -107,11 +106,6 @@ def get_billing_dashboard_summary(*, today=None):
         status=BillingRefund.Status.COMPLETED, completed_at__gte=inicio_mes_anterior_dt, completed_at__lt=inicio_mes_dt,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-    credit_notes_this_month = CreditNote.all_objects.filter(created_at__gte=inicio_mes_dt).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    credit_notes_last_month = CreditNote.all_objects.filter(
-        created_at__gte=inicio_mes_anterior_dt, created_at__lt=inicio_mes_dt,
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-
     return {
         "mrr": mrr,
         "arr": mrr * 12,
@@ -129,8 +123,6 @@ def get_billing_dashboard_summary(*, today=None):
         "revenue_change_pct": _variacion_porcentual(revenue_this_month, revenue_last_month),
         "refunds_this_month": refunds_this_month,
         "refunds_change_pct": _variacion_porcentual(refunds_this_month, refunds_last_month),
-        "credit_notes_this_month": credit_notes_this_month,
-        "credit_notes_change_pct": _variacion_porcentual(credit_notes_this_month, credit_notes_last_month),
         "overdue_invoices": SaaSInvoice.all_objects.filter(
             status__in=[SaaSInvoice.Status.OPEN, SaaSInvoice.Status.PARTIALLY_PAID], due_date__lt=hoy,
         ).count(),
@@ -179,9 +171,10 @@ def get_subscription_status_breakdown():
 def get_recent_platform_activity(*, limit=6):
     """Actividad reciente REAL de la plataforma, construida agregando
     eventos que los propios modelos de Billing ya registran (nunca un
-    log nuevo/paralelo): nueva suscripción, pago confirmado, nota de
-    crédito emitida, cliente SaaS registrado — combinados y ordenados
-    por fecha real. Nunca se inventa un evento ni un texto genérico."""
+    log nuevo/paralelo): nueva suscripción, pago confirmado, cliente
+    SaaS registrado — combinados y ordenados por fecha real. Nunca se
+    inventa un evento ni un texto genérico. (Notas de crédito retiradas
+    del SaaS Super Admin — ver STITCH-SAAS-SCREEN-MAP.md.)"""
     eventos = []
     for s in Subscription.all_objects.select_related("tenant", "plan_version__plan").order_by("-created_at")[:limit]:
         eventos.append({
@@ -192,11 +185,6 @@ def get_recent_platform_activity(*, limit=6):
         eventos.append({
             "tipo": "pago", "titulo": "Pago recibido",
             "subtitulo": f"{p.amount} {p.currency} — {p.tenant}", "cuando": p.received_at,
-        })
-    for cn in CreditNote.all_objects.select_related("tenant").order_by("-created_at")[:limit]:
-        eventos.append({
-            "tipo": "nota_credito", "titulo": "Nota de crédito emitida",
-            "subtitulo": f"{cn.amount} {cn.currency} — {cn.tenant}", "cuando": cn.created_at,
         })
     for c in SaaSCustomer.objects.order_by("-created_at")[:limit]:
         eventos.append({

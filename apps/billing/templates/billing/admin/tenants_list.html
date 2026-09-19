@@ -2,9 +2,6 @@
 {% load ui_extras ui_icons %}
 {% block title %}Tenants — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Tenants</li></ol>
-</nav>
 <div class="encabezado-pagina"><h1>Tenants</h1></div>
 {% if tenants %}
 <div class="tabla-envoltorio">
@@ -16,7 +13,7 @@
                 <td>{{ tenant.name }}</td>
                 <td><span class="badge badge--{{ tenant.billing_status|estado_badge }}">{{ tenant.get_billing_status_display }}</span></td>
                 <td><span class="badge {% if tenant.is_active %}badge--verde{% else %}badge--neutro{% endif %}">{{ tenant.is_active|yesno:"Sí,No" }}</span></td>
-                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:tenant_detail' tenant.pk %}">Ver</a></td>
+                <td><a class="tabla__accion-enlace" href="{% url 'billing_admin:tenant_detail' tenant.pk %}">Ver{% icono "chevron-derecha" %}</a></td>
             </tr>
             {% endfor %}
         </tbody>

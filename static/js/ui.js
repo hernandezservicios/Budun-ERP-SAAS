@@ -71,6 +71,12 @@
             if (!destino) return;
             boton.addEventListener("click", function () {
                 destino.showModal();
+                // Un <dialog> cerrado es `display:none` — cualquier
+                // textarea auto-ajustable dentro medía `scrollHeight` 0
+                // al cargar la página, quedando colapsada hasta que el
+                // usuario escribía. Reajustar recién ahora que el modal
+                // ya tiene layout real.
+                ajustarTextareasEn(destino);
             });
         });
 
@@ -122,6 +128,32 @@
         });
     }
 
+    /* --- Textareas auto-ajustables (solo shell SaaS) --------------------
+       Django renderiza `rows="10"` por defecto en cualquier Textarea sin
+       widget propio (Descripción/Características de Planes, Notas de
+       Cuentas bancarias, etc.) — Stitch las muestra compactas y crecen
+       solo si el contenido lo requiere. Acotado a `.shell--saas .campo
+       textarea` explícitamente: nunca toca los formularios del ERP, que
+       comparten la misma clase `.campo` pero no este comportamiento. */
+    function ajustarAltura(textarea) {
+        textarea.style.height = "auto";
+        var maxAltura = parseFloat(getComputedStyle(textarea).maxHeight) || Infinity;
+        textarea.style.height = Math.min(textarea.scrollHeight, maxAltura) + "px";
+    }
+
+    function ajustarTextareasEn(contenedor) {
+        contenedor.querySelectorAll(".campo textarea").forEach(ajustarAltura);
+    }
+
+    function initAutoGrowTextareas() {
+        document.querySelectorAll(".shell--saas .campo textarea").forEach(function (textarea) {
+            textarea.addEventListener("input", function () {
+                ajustarAltura(textarea);
+            });
+            ajustarAltura(textarea);
+        });
+    }
+
     /* --- Toasts: auto-cierre + botón de cerrar -------------------------- */
     function initToasts() {
         document.querySelectorAll(".toast").forEach(function (toast) {
@@ -140,5 +172,6 @@
         initModals();
         initTabs();
         initToasts();
+        initAutoGrowTextareas();
     });
 })();

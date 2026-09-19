@@ -1,35 +1,49 @@
 {% extends "layout_saas_admin.html" %}
 {% block title %}Venta manual — Billing SaaS — Budun{% endblock %}
+{% block main_contenido_clase %} main__contenido--estrecho{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Venta manual</li></ol>
-</nav>
-<div class="encabezado-pagina">
+<div class="encabezado-pagina encabezado-pagina--mb-8">
     <div>
         <h1>Venta manual</h1>
-        <p class="encabezado-pagina__descripcion">Crea un cliente SaaS, un tenant y su suscripción. El tenant queda pendiente de pago hasta que se confirme la primera factura.</p>
+        <p class="encabezado-pagina__descripcion">Crea un cliente SaaS, un tenant y su suscripción. El tenant queda
+            pendiente de pago hasta que se confirme la primera factura.</p>
     </div>
     <div class="encabezado-pagina__acciones">
-        <a class="btn btn--fantasma btn--sm" href="{% url 'billing_admin:dashboard' %}">← Volver al panel</a>
+        <a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:dashboard' %}">← Volver al panel</a>
     </div>
 </div>
-<div class="tarjeta u-ancho-32">
-    <div class="tarjeta__cuerpo">
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <h3 class="panel-seccion__titulo">Cliente SaaS</h3>
+<div class="tarjeta saas-formulario-tarjeta">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="saas-formulario-seccion">
+            <div class="saas-formulario-seccion__encabezado">
+                <h2>Cliente SaaS</h2>
+                <p>Información fiscal y de contacto principal de la cuenta cliente en la plataforma.</p>
+            </div>
             {% include "customers/_campo.html" with field=form.customer_name %}
             {% include "customers/_campo.html" with field=form.customer_email %}
+        </div>
 
-            <h3 class="panel-seccion__titulo u-mt-4">Tenant</h3>
+        <div class="saas-formulario-seccion">
+            <div class="saas-formulario-seccion__encabezado">
+                <h2>Tenant</h2>
+                <p>Instancia operativa y paquete de licenciamiento asignado para la nueva cuenta.</p>
+            </div>
             {% include "customers/_campo.html" with field=form.tenant_name %}
             {% include "customers/_campo.html" with field=form.plan_version %}
+        </div>
 
-            <h3 class="panel-seccion__titulo u-mt-4">Propietario (Owner)</h3>
+        <div class="saas-formulario-seccion">
+            <div class="saas-formulario-seccion__encabezado">
+                <h2>Propietario (Owner)</h2>
+                <p>Usuario responsable asignado a la administración interna del tenant.</p>
+            </div>
             {% include "customers/_campo.html" with field=form.owner_email %}
+        </div>
 
-            <button type="submit" class="btn btn--primario u-mt-2">Registrar venta manual</button>
-        </form>
-    </div>
+        <div class="saas-formulario-pie">
+            <button type="submit" class="btn btn--primario">Registrar venta manual</button>
+        </div>
+    </form>
 </div>
 {% endblock %}

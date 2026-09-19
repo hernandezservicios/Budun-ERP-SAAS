@@ -490,47 +490,11 @@ class ProofApprovalAdminViewTests(TestCase):
         self.assertEqual(self.proof.status, PaymentProof.Status.APPROVED)
 
 
-class IssueCreditNoteAdminViewTests(TestCase):
-    def setUp(self):
-        self.superadmin = User.objects.create_superuser(email="super.credit@example.com", password="clave-de-prueba-987")
-        self.tenant, self.owner = crear_tenant_con_owner()
-        self.saas_customer = crear_saas_customer()
-        self.tenant.saas_customer = self.saas_customer
-        self.tenant.save(update_fields=["saas_customer"])
-        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
-
-    def test_emitir_nota_de_credito_desde_admin(self):
-        from apps.billing.models import CreditNote
-
-        respuesta = self.client.post(
-            reverse("billing_admin:issue_credit_note", args=[self.saas_customer.pk]),
-            {"amount": "15.00", "currency": "USD", "reason": "ajuste comercial"},
-        )
-        self.assertRedirects(respuesta, reverse("billing_admin:customer_detail", args=[self.saas_customer.pk]))
-        self.assertEqual(CreditNote.all_objects.filter(tenant=self.tenant).count(), 1)
-
-    def test_emitir_nota_de_credito_para_cliente_sin_tenant_muestra_error_amigable_no_500(self):
-        # FASE DE CORRECCIÓN 5: `CreditNote.tenant` no es nulo -- antes de
-        # esta corrección, un SaaSCustomer sin ningún tenant asociado
-        # producía un IntegrityError sin manejar (500).
-        from apps.billing.models import CreditNote, SaaSCustomer
-
-        cliente_sin_tenant = SaaSCustomer.objects.create(name="Cliente sin tenant", email="sin.tenant@example.com")
-        respuesta = self.client.post(
-            reverse("billing_admin:issue_credit_note", args=[cliente_sin_tenant.pk]),
-            {"amount": "15.00", "currency": "USD", "reason": "ajuste"},
-        )
-        # `assertRedirects` sigue el redirect internamente para confirmar
-        # que la página destino carga (200) -- eso YA consume el mensaje
-        # de la sesión, así que un `.get()` propio posterior nunca lo
-        # encontraría. Mismo patrón que el resto de este archivo para
-        # verificar el mensaje: solo el status code aquí, un único
-        # `.get()` explícito después.
-        self.assertEqual(respuesta.status_code, 302)
-        self.assertEqual(respuesta.url, reverse("billing_admin:customer_detail", args=[cliente_sin_tenant.pk]))
-        respuesta_seguida = self.client.get(respuesta.url)
-        self.assertContains(respuesta_seguida, "no tiene ningún tenant asociado")
-        self.assertEqual(CreditNote.all_objects.count(), 0)
+# NOTA (retiro de Notas de crédito del SaaS Super Admin): `IssueCreditNoteAdminViewTests`
+# probaba `IssueCreditNoteView`/`billing_admin:issue_credit_note`, retirados junto con
+# el resto de la UI manual de Notas de crédito del Super Admin — la emisión automática
+# de notas de crédito (downgrade de plan) y su aplicación siguen cubiertas por
+# `apps/billing/tests/test_credits.py`, que no se tocó.
 
 
 class PlanManagementViewTests(TestCase):

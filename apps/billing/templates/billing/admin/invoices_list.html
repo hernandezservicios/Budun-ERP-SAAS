@@ -2,9 +2,6 @@
 {% load ui_extras ui_icons %}
 {% block title %}Facturas — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Facturas</li></ol>
-</nav>
 <div class="encabezado-pagina"><h1>Facturas</h1></div>
 {% if invoices %}
 <div class="tabla-envoltorio">
@@ -13,7 +10,7 @@
         <tbody>
             {% for invoice in invoices %}
             <tr><td>{{ invoice.number }}</td><td>{{ invoice.tenant }}</td><td>{{ invoice.total|monto }} {{ invoice.currency }}</td><td>{{ invoice.due_date }}</td><td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
-                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td></tr>
+                <td><a class="tabla__accion-enlace" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver{% icono "chevron-derecha" %}</a></td></tr>
             {% endfor %}
         </tbody>
     </table>

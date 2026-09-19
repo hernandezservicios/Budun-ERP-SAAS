@@ -1,17 +1,20 @@
 {% extends "layout_saas_admin.html" %}
+{% load ui_extras %}
 {% block title %}Cuentas bancarias — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Cuentas bancarias</li></ol>
-</nav>
-<div class="encabezado-pagina"><h1>Cuentas bancarias de la plataforma</h1></div>
+<div class="encabezado-pagina">
+    <div><h1>Cuentas bancarias de la plataforma</h1></div>
+    <div class="encabezado-pagina__acciones">
+        <button type="button" class="btn btn--primario" data-modal-open="modal-nueva-cuenta">+ Nueva cuenta</button>
+    </div>
+</div>
 <div class="tabla-envoltorio u-mb-6">
     <table class="tabla">
         <thead><tr><th>Banco</th><th>País</th><th>Moneda</th><th>Titular</th><th>Cuenta</th><th>Estado</th><th></th></tr></thead>
         <tbody>
             {% for cuenta, form_editar in filas %}
             <tr>
-                <td>{{ cuenta.bank_name }}</td><td>{{ cuenta.country }}</td><td>{{ cuenta.currency }}</td><td>{{ cuenta.account_holder }}</td><td>{{ cuenta.account_number }}</td>
+                <td>{{ cuenta.bank_name }}</td><td>{{ cuenta.country }}</td><td>{{ cuenta.currency }}</td><td>{{ cuenta.account_holder }}</td><td>{{ cuenta.account_number|enmascarar_cuenta }}</td>
                 <td><span class="badge {% if cuenta.is_active %}badge--verde{% else %}badge--neutro{% endif %}">{{ cuenta.is_active|yesno:"Activa,Inactiva" }}</span></td>
                 <td>
                     <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-editar-cuenta-{{ cuenta.pk }}">Editar</button>
@@ -41,7 +44,10 @@
     <form method="post" action="{% url 'billing_admin:bank_account_update' cuenta.pk %}">
         {% csrf_token %}
         <div class="modal__encabezado">
-            <h2>Editar cuenta bancaria</h2>
+            <div>
+                <h2>Editar cuenta bancaria</h2>
+                <p class="modal__subtitulo">Modifica los datos bancarios para recepción de transferencias.</p>
+            </div>
             <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
         </div>
         <div class="modal__cuerpo">
@@ -57,16 +63,22 @@
 </dialog>
 {% endfor %}
 
-<div class="tarjeta u-ancho-32">
-    <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">Nueva cuenta</h3>
-        <form method="post" novalidate>
-            {% csrf_token %}
+<dialog class="modal" id="modal-nueva-cuenta">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="modal__encabezado">
+            <h2>Nueva cuenta</h2>
+            <button type="button" class="modal__cerrar" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal__cuerpo">
             {% for field in form %}
             {% include "customers/_campo.html" with field=field %}
             {% endfor %}
+        </div>
+        <div class="modal__pie">
+            <button type="button" class="btn btn--contorno" data-modal-close>Cancelar</button>
             <button type="submit" class="btn btn--primario">Crear</button>
-        </form>
-    </div>
-</div>
+        </div>
+    </form>
+</dialog>
 {% endblock %}

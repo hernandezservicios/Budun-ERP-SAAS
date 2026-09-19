@@ -3,10 +3,9 @@
 
 {% block title %}PayPal (plataforma) — Billing SaaS — Budun{% endblock %}
 
+{% block main_contenido_clase %} main__contenido--ancho{% endblock %}
+
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">PayPal (plataforma)</li></ol>
-</nav>
 
 <div class="encabezado-pagina">
     <div>
@@ -64,7 +63,7 @@
                 <td>{{ t.amount|monto }} {{ t.currency }}</td>
                 <td><span class="badge badge--{{ t.status|estado_badge }}">{{ t.get_status_display }}</span></td>
                 <td>{{ t.created_at }}</td>
-                <td><a class="btn btn--contorno" href="{% url 'billing_platform:transaction_detail' t.pk %}">Ver</a></td>
+                <td><a class="tabla__accion-enlace" href="{% url 'billing_platform:transaction_detail' t.pk %}">Ver{% icono "chevron-derecha" %}</a></td>
             </tr>
             {% endfor %}
         </tbody>

@@ -2,9 +2,6 @@
 {% load ui_extras ui_icons %}
 {% block title %}Pagos — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Pagos</li></ol>
-</nav>
 <div class="encabezado-pagina"><h1>Pagos</h1></div>
 {% if payments %}
 <div class="tabla-envoltorio">

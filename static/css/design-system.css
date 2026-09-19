@@ -33,7 +33,8 @@
 }
 
 .navbar__marca {
-    display: none; /* la marca vive en el sidebar en desktop */
+    display: none;
+    /* la marca vive en el sidebar en desktop */
     font-weight: 600;
     color: var(--color-primario);
     text-decoration: none;
@@ -201,7 +202,7 @@
     margin-top: 0.1rem;
 }
 
-.sidebar--saas .sidebar__grupo + .sidebar__grupo {
+.sidebar--saas .sidebar__grupo+.sidebar__grupo {
     margin-top: var(--espacio-2);
 }
 
@@ -258,15 +259,15 @@
    la versión gris oscura por defecto (heredada de `html`) sería
    invisible sobre este fondo. */
 .sidebar--saas {
-    scrollbar-color: rgb(255 255 255 / 0.25) transparent;
+    scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
 }
 
 .sidebar--saas::-webkit-scrollbar-thumb {
-    background: rgb(255 255 255 / 0.25);
+    background: rgba(0, 0, 0, 0.25);
 }
 
 .sidebar--saas::-webkit-scrollbar-thumb:hover {
-    background: rgb(255 255 255 / 0.4);
+    background: rgba(0, 0, 0, 0.4);
 }
 
 .navbar--saas .navbar__marca {
@@ -282,6 +283,193 @@
    conserva su padding original de `.main`. */
 .shell--saas .main {
     padding: var(--espacio-8);
+}
+
+/* Ancho de contenido: Stitch usa max-w-7xl (1280px) en la mayoría de
+   pantallas (Dashboard/Clientes/Tenants/Reportes/Facturas, verificado
+   en su HTML real) — más ancho que los 1100px genéricos del ERP. */
+.shell--saas .main__contenido {
+    max-width: 1280px;
+}
+
+/* Pantallas de Detalle (Customer Detail, screenId
+   6f1bfc8c86c840e9a1797178d6b7e4a9) usan max-w-5xl (1024px) en el
+   Stitch real — más angosto que el resto. Opt-in vía
+   `{% block main_contenido_clase %}`, nunca el ancho por defecto.
+
+   BUG REAL CORREGIDO: estos modificadores se definían como una sola
+   clase (`.main__contenido--estrecho`, especificidad 0-1-0), pero la
+   regla base de arriba es `.shell--saas .main__contenido`
+   (especificidad 0-2-0) — la base SIEMPRE ganaba sin importar el
+   orden en el archivo, así que ninguna pantalla angosta (Venta
+   manual, Customer Detail, Invoice Detail, Proof Detail, PayPal
+   Checkout/Detalle de transacción) reducía realmente su ancho.
+   Repetir `.main__contenido` eleva la especificidad a 0-3-0, por
+   encima de la regla base de forma inequívoca. */
+.shell--saas .main__contenido.main__contenido--estrecho {
+    max-width: 1024px;
+}
+
+.shell--saas .main__contenido.main__contenido--muy-estrecho {
+    max-width: 896px;
+}
+
+.shell--saas .main__contenido.main__contenido--medio {
+    max-width: 1152px;
+}
+
+.shell--saas .main__contenido.main__contenido--ancho {
+    max-width: 1400px;
+}
+
+.shell--saas .main__contenido.main__contenido--completo {
+    max-width: none;
+}
+
+/* Separador bajo el encabezado de una pantalla de Detalle (Customer
+   Detail, Tenant Detail en su versión aprobada) — opt-in, nunca en
+   `.encabezado-pagina` por defecto (los listados no lo llevan). */
+/* --- Venta manual: tarjeta de formulario con 3 secciones agrupadas
+   (Cliente SaaS/Tenant/Owner), cada una con su propio encabezado +
+   separador, campos en columna con 20px de espacio entre sí y 32px
+   entre secciones — reproduce el HTML real de Stitch (screenId
+   598fbca7485d498a8afc604c7a42d735), no una aproximación genérica. */
+.saas-formulario-tarjeta {
+    border-radius: 1rem;
+    padding: 1.75rem;
+}
+
+.saas-formulario-seccion+.saas-formulario-seccion {
+    margin-top: var(--espacio-8);
+}
+
+.saas-formulario-seccion__encabezado {
+    padding-bottom: var(--espacio-3);
+    margin-bottom: var(--espacio-5);
+    border-bottom: 1px solid var(--gris-100);
+}
+
+.saas-formulario-seccion__encabezado h2 {
+    font-size: var(--texto-base);
+    margin: 0;
+}
+
+.saas-formulario-seccion__encabezado p {
+    font-size: var(--texto-xs);
+    color: var(--color-texto-tenue);
+    margin: 0.15rem 0 0;
+}
+
+.saas-formulario-seccion .campo {
+    margin-bottom: var(--espacio-5);
+}
+
+.saas-formulario-seccion .campo:last-child {
+    margin-bottom: 0;
+}
+
+.saas-formulario-seccion .campo label {
+    font-size: var(--texto-xs);
+    font-weight: 600;
+    margin-bottom: 0.375rem;
+}
+
+.saas-formulario-seccion .campo input,
+.saas-formulario-seccion .campo select {
+    height: 2.75rem;
+    border-radius: 0.75rem;
+}
+
+.saas-formulario-pie {
+    padding-top: var(--espacio-4);
+    margin-top: var(--espacio-8);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.encabezado-pagina--mb-8 {
+    margin-bottom: var(--espacio-8);
+}
+
+.encabezado-pagina--separador {
+    padding-bottom: var(--espacio-6);
+    margin-bottom: var(--espacio-8);
+    border-bottom: 1px solid var(--color-borde);
+}
+
+/* Composición espacial de Detalle de Cliente: Stitch envuelve Tenants/
+   Suscripciones/Nota de crédito en un único `<div class="space-y-8">`
+   (32px entre cada bloque hermano, vía margin-top en todos menos el
+   primero — nunca gaps sueltos por bloque, evita el bug de una clase
+   `u-mb-8` inexistente que dejaba los bloques sin separación real). */
+.saas-secciones-espaciadas > * + * {
+    margin-top: var(--espacio-8);
+}
+
+/* --- Detalle de Cliente: listas "tarjeta blanca con separadores"
+   (Tenants/Suscripciones) — antes `.actividad-lista` genérica sin
+   tarjeta ni hover, no coincidía con el Stitch real. --- */
+.saas-seccion-titulo {
+    font-size: var(--texto-sm);
+    font-weight: 600;
+    color: var(--gris-900);
+    margin: 0 0 var(--espacio-3);
+}
+
+/* El título "Emitir nota de crédito" dentro de la tarjeta usa 16px de
+   separación en Stitch (mb-4), no los 12px (mb-3) de Tenants/
+   Suscripciones — valor distinto, verificado en el HTML real. */
+.saas-seccion-titulo--formulario {
+    margin-bottom: var(--espacio-4);
+}
+
+.saas-lista-tarjeta {
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-lg);
+    box-shadow: var(--sombra-sm);
+    overflow: hidden;
+}
+
+.saas-lista-tarjeta__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--espacio-3);
+    padding: 0.875rem var(--espacio-5);
+    border-bottom: 1px solid var(--gris-100);
+    font-size: var(--texto-sm);
+}
+
+.saas-lista-tarjeta__item:last-child {
+    border-bottom: none;
+}
+
+.saas-lista-tarjeta__item:hover {
+    background: rgb(248 250 252 / 0.7);
+}
+
+.saas-lista-tarjeta__enlace {
+    font-weight: 500;
+    color: var(--color-primario);
+    text-decoration: none;
+}
+
+.saas-lista-tarjeta__enlace:hover {
+    text-decoration: underline;
+}
+
+.saas-lista-tarjeta__texto {
+    font-weight: 500;
+    color: var(--gris-800);
+}
+
+/* Formulario "Emitir nota de crédito": Monto (2/3) + Moneda (1/3) en
+   una fila, Motivo debajo a ancho completo — igual que Stitch. */
+.saas-form-credito__fila {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: var(--espacio-3);
 }
 
 @media (max-width: 640px) {
@@ -326,45 +514,6 @@
 
 .navbar__contexto strong {
     color: var(--color-texto);
-}
-
-/* ============================================================
-   NAVBAR — buscador (FASE — Rediseño Visual Maestro). Preparado/
-   inerte a propósito (mismo criterio que `.paginacion` desde FASE 5):
-   no existe todavía un buscador transversal real de la plataforma —
-   nunca se envía como si buscara algo. Ver docs/design-system.md.
-   ============================================================ */
-.navbar__buscador {
-    display: flex;
-    align-items: center;
-    gap: var(--espacio-2);
-    background: var(--gris-50);
-    border: 1px solid var(--color-borde);
-    border-radius: var(--radio-md);
-    padding: 0.5rem var(--espacio-3);
-    max-width: 22rem;
-    width: 100%;
-    color: var(--color-texto-tenue);
-}
-
-.navbar__buscador input {
-    border: none;
-    background: transparent;
-    outline: none;
-    width: 100%;
-    font: inherit;
-    color: var(--color-texto);
-    font-size: var(--texto-sm);
-}
-
-.navbar__buscador input::placeholder {
-    color: var(--color-texto-tenue);
-}
-
-@media (max-width: 1024px) {
-    .navbar__buscador {
-        display: none;
-    }
 }
 
 /* ============================================================
@@ -432,7 +581,7 @@
 .saas-kpi-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: var(--espacio-5);
+    gap: var(--espacio-4);
 }
 
 .saas-kpi-card {
@@ -461,13 +610,40 @@
     height: 1.35rem;
 }
 
-.saas-kpi-card__icono--azul { background: var(--color-azul-100); color: var(--color-azul-700); }
-.saas-kpi-card__icono--morado { background: var(--color-morado-100); color: var(--color-morado-700); }
-.saas-kpi-card__icono--verde { background: var(--color-verde-100); color: var(--color-verde-800); }
-.saas-kpi-card__icono--rojo { background: var(--color-peligro-100); color: var(--color-peligro-700); }
-.saas-kpi-card__icono--naranja { background: var(--color-advertencia-100); color: var(--color-advertencia-700); }
-.saas-kpi-card__icono--teal { background: var(--color-teal-100); color: var(--color-teal-700); }
-.saas-kpi-card__icono--gris { background: var(--gris-100); color: var(--gris-600); }
+.saas-kpi-card__icono--azul {
+    background: var(--color-azul-100);
+    color: var(--color-azul-700);
+}
+
+.saas-kpi-card__icono--morado {
+    background: var(--color-morado-100);
+    color: var(--color-morado-700);
+}
+
+.saas-kpi-card__icono--verde {
+    background: var(--color-verde-100);
+    color: var(--color-verde-800);
+}
+
+.saas-kpi-card__icono--rojo {
+    background: var(--color-peligro-100);
+    color: var(--color-peligro-700);
+}
+
+.saas-kpi-card__icono--naranja {
+    background: var(--color-advertencia-100);
+    color: var(--color-advertencia-700);
+}
+
+.saas-kpi-card__icono--teal {
+    background: var(--color-teal-100);
+    color: var(--color-teal-700);
+}
+
+.saas-kpi-card__icono--gris {
+    background: var(--gris-100);
+    color: var(--gris-600);
+}
 
 .saas-kpi-card__cuerpo {
     min-width: 0;
@@ -503,8 +679,13 @@
     height: 0.9em;
 }
 
-.saas-kpi-card__tendencia--positiva { color: var(--color-verde-700); }
-.saas-kpi-card__tendencia--negativa { color: var(--color-peligro-700); }
+.saas-kpi-card__tendencia--positiva {
+    color: var(--color-verde-700);
+}
+
+.saas-kpi-card__tendencia--negativa {
+    color: var(--color-peligro-700);
+}
 
 .saas-kpi-card__tendencia span {
     color: var(--color-texto-tenue);
@@ -568,17 +749,45 @@
 /* Variantes de color de segmento/leyenda de la dona — mismas 5
    variantes semánticas que `.badge--*` (ver `estado_badge`), nunca un
    valor de color calculado inline en la plantilla. */
-.saas-dona__segmento--verde { stroke: var(--color-verde-700); }
-.saas-dona__segmento--advertencia { stroke: var(--color-advertencia-700); }
-.saas-dona__segmento--peligro { stroke: var(--color-peligro-700); }
-.saas-dona__segmento--azul { stroke: var(--color-azul-700); }
-.saas-dona__segmento--neutro { stroke: var(--gris-400); }
+.saas-dona__segmento--verde {
+    stroke: var(--color-verde-700);
+}
 
-.saas-dona__punto--verde { background: var(--color-verde-700); }
-.saas-dona__punto--advertencia { background: var(--color-advertencia-700); }
-.saas-dona__punto--peligro { background: var(--color-peligro-700); }
-.saas-dona__punto--azul { background: var(--color-azul-700); }
-.saas-dona__punto--neutro { background: var(--gris-400); }
+.saas-dona__segmento--advertencia {
+    stroke: var(--color-advertencia-700);
+}
+
+.saas-dona__segmento--peligro {
+    stroke: var(--color-peligro-700);
+}
+
+.saas-dona__segmento--azul {
+    stroke: var(--color-azul-700);
+}
+
+.saas-dona__segmento--neutro {
+    stroke: var(--gris-400);
+}
+
+.saas-dona__punto--verde {
+    background: var(--color-verde-700);
+}
+
+.saas-dona__punto--advertencia {
+    background: var(--color-advertencia-700);
+}
+
+.saas-dona__punto--peligro {
+    background: var(--color-peligro-700);
+}
+
+.saas-dona__punto--azul {
+    background: var(--color-azul-700);
+}
+
+.saas-dona__punto--neutro {
+    background: var(--gris-400);
+}
 
 .u-text-derecha {
     text-align: right;
@@ -645,18 +854,19 @@
 .saas-dashboard-fila {
     display: grid;
     grid-template-columns: 1.4fr 1fr 1fr;
-    gap: var(--espacio-5);
+    gap: var(--espacio-6);
     align-items: stretch;
 }
 
 .saas-dashboard-fila--2col {
     display: grid;
     grid-template-columns: 1.4fr 1fr;
-    gap: var(--espacio-5);
+    gap: var(--espacio-6);
     align-items: stretch;
 }
 
 @media (max-width: 1024px) {
+
     .saas-dashboard-fila,
     .saas-dashboard-fila--2col {
         grid-template-columns: 1fr;
@@ -997,6 +1207,23 @@ textarea.input,
     cursor: not-allowed;
 }
 
+/* Textareas compactas en el shell SaaS: el widget `Textarea` de Django
+   renderiza `rows="10"` por defecto cuando el ModelForm no especifica
+   uno propio — eso, sumado a `width:100%` sin límite de alto, produce
+   una caja gigante para Descripción/Características/Notas aunque
+   Stitch las muestra compactas (`rows="3"`, `resize-none`). Acotado a
+   `.shell--saas` — nunca toca los formularios del ERP, que comparten
+   `.campo textarea` pero no esta regla. El auto-ajuste real (crece con
+   el contenido, nunca al revés) lo hace `initAutoGrowTextareas` en
+   `ui.js`; esto solo fija el rango compacto/máximo y el scroll interno
+   más allá de ese máximo. */
+.shell--saas .campo textarea {
+    min-height: 4.5rem;
+    max-height: 16rem;
+    resize: none;
+    overflow-y: auto;
+}
+
 .input.campo-invalido,
 .select.campo-invalido {
     border-color: var(--color-peligro-700);
@@ -1173,10 +1400,21 @@ textarea.input,
     font-size: var(--texto-sm);
 }
 
-.toast--exito { border-left: 4px solid var(--color-verde-700); }
-.toast--peligro { border-left: 4px solid var(--color-peligro-700); }
-.toast--advertencia { border-left: 4px solid var(--color-advertencia-700); }
-.toast--info { border-left: 4px solid var(--color-azul-700); }
+.toast--exito {
+    border-left: 4px solid var(--color-verde-700);
+}
+
+.toast--peligro {
+    border-left: 4px solid var(--color-peligro-700);
+}
+
+.toast--advertencia {
+    border-left: 4px solid var(--color-advertencia-700);
+}
+
+.toast--info {
+    border-left: 4px solid var(--color-azul-700);
+}
 
 .toast__cerrar {
     margin-left: auto;
@@ -1383,16 +1621,28 @@ textarea.input,
    ============================================================ */
 
 dialog.modal {
-    border: none;
-    border-radius: var(--radio-lg);
-    box-shadow: var(--sombra-lg);
+    border: 1px solid rgb(226 232 240 / 0.9);
+    border-radius: 1rem;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
     padding: 0;
     width: min(480px, calc(100vw - 2rem));
     margin: auto;
 }
 
+/* Solo dentro de `.shell--saas`: overlay más oscuro + desenfoque,
+   igual que el HTML real de Stitch (`bg-slate-900/60
+   backdrop-blur-[2px]`, verificado en varios modales aprobados:
+   Cancelar tenant, Reembolsar pago, Editar cuenta bancaria). El
+   `/estilo/` (design_system.html) fuera del shell SaaS conserva el
+   overlay genérico anterior. */
 dialog.modal::backdrop {
     background: rgb(15 23 42 / 0.45);
+}
+
+.shell--saas dialog.modal::backdrop {
+    background: rgb(15 23 42 / 0.6);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
 }
 
 .modal__encabezado {
@@ -1406,6 +1656,60 @@ dialog.modal::backdrop {
 .modal__encabezado h2 {
     margin: 0;
     font-size: var(--texto-lg);
+}
+
+/* Modal de acción crítica (Suspender/Cancelar tenant) — icono de
+   alerta + título + subtítulo, cuerpo en recuadro gris — igual que el
+   HTML real de Stitch (screenId cebc37bd...), distinto del encabezado
+   simple título+cerrar que usan el resto de modales. */
+.modal__encabezado--alerta {
+    align-items: flex-start;
+    gap: var(--espacio-4);
+    padding: var(--espacio-5) var(--espacio-5) var(--espacio-3);
+    border-bottom: none;
+}
+
+.modal__encabezado--alerta h2 {
+    font-size: var(--texto-lg);
+    margin: 0;
+}
+
+.modal__encabezado__texto {
+    flex: 1;
+    min-width: 0;
+}
+
+.modal__icono-alerta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: var(--radio-completo);
+    background: var(--color-peligro-100);
+    color: var(--color-peligro-700);
+    flex-shrink: 0;
+}
+
+.modal__subtitulo {
+    font-size: var(--texto-xs);
+    color: var(--color-texto-tenue);
+    margin: 0.15rem 0 0;
+}
+
+.modal__cuerpo--recuadro {
+    padding-top: 0;
+}
+
+.modal__cuerpo--recuadro p {
+    background: var(--gris-50);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-lg);
+    padding: var(--espacio-4);
+    font-size: var(--texto-xs);
+    line-height: 1.6;
+    color: var(--gris-700);
+    margin: 0;
 }
 
 .modal__cerrar {
@@ -1469,7 +1773,9 @@ dialog.modal::backdrop {
 }
 
 @keyframes giro {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .skeleton {
@@ -1480,8 +1786,13 @@ dialog.modal::backdrop {
 }
 
 @keyframes skeleton-onda {
-    0% { background-position: 100% 50%; }
-    100% { background-position: 0 50%; }
+    0% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0 50%;
+    }
 }
 
 .skeleton--linea {
@@ -1514,20 +1825,77 @@ dialog.modal::backdrop {
    Nunca un sistema de utilidades genérico tipo Tailwind completo,
    solo los casos reales que existían antes como CSS inline.
    ============================================================ */
-.u-ancho-32 { max-width: 32rem; }
-.u-ancho-40 { max-width: 40rem; }
-.u-mb-2 { margin-bottom: var(--espacio-2); }
-.u-mb-4 { margin-bottom: var(--espacio-4); }
-.u-mb-6 { margin-bottom: var(--espacio-6); }
-.u-mt-2 { margin-top: var(--espacio-2); }
-.u-mt-4 { margin-top: var(--espacio-4); }
-.u-mt-6 { margin-top: var(--espacio-6); }
-.u-inline-block { display: inline-block; }
-.u-inline { display: inline; }
-.u-mr-2 { margin-right: var(--espacio-2); }
-.u-mr-3 { margin-right: var(--espacio-3); }
-.u-ml-2 { margin-left: var(--espacio-2); }
-.u-campo-corto { width: 5rem; }
+.u-ancho-32 {
+    max-width: 32rem;
+}
+
+.u-ancho-36 {
+    max-width: 36rem;
+}
+
+.u-ancho-40 {
+    max-width: 40rem;
+}
+
+.u-mb-2 {
+    margin-bottom: var(--espacio-2);
+}
+
+.u-mb-4 {
+    margin-bottom: var(--espacio-4);
+}
+
+.u-mb-5 {
+    margin-bottom: var(--espacio-5);
+}
+
+.u-mb-6 {
+    margin-bottom: var(--espacio-6);
+}
+
+.u-mb-8 {
+    margin-bottom: var(--espacio-8);
+}
+
+.u-mt-2 {
+    margin-top: var(--espacio-2);
+}
+
+.u-mt-4 {
+    margin-top: var(--espacio-4);
+}
+
+.u-mt-6 {
+    margin-top: var(--espacio-6);
+}
+
+.u-mt-8 {
+    margin-top: var(--espacio-8);
+}
+
+.u-inline-block {
+    display: inline-block;
+}
+
+.u-inline {
+    display: inline;
+}
+
+.u-mr-2 {
+    margin-right: var(--espacio-2);
+}
+
+.u-mr-3 {
+    margin-right: var(--espacio-3);
+}
+
+.u-ml-2 {
+    margin-left: var(--espacio-2);
+}
+
+.u-campo-corto {
+    width: 5rem;
+}
 
 /* ============================================================
    LANDING (FASE 6) — reutiliza tokens y componentes existentes,
@@ -1919,12 +2287,29 @@ dialog.modal::backdrop {
     font-size: 1.1em;
 }
 
-.kpi--peligro { border-left-color: var(--color-peligro-700); }
-.kpi--peligro .kpi__valor { color: var(--color-peligro-800); }
-.kpi--advertencia { border-left-color: var(--color-advertencia-700); }
-.kpi--advertencia .kpi__valor { color: var(--color-advertencia-800); }
-.kpi--exito { border-left-color: var(--color-verde-700); }
-.kpi--exito .kpi__valor { color: var(--color-verde-800); }
+.kpi--peligro {
+    border-left-color: var(--color-peligro-700);
+}
+
+.kpi--peligro .kpi__valor {
+    color: var(--color-peligro-800);
+}
+
+.kpi--advertencia {
+    border-left-color: var(--color-advertencia-700);
+}
+
+.kpi--advertencia .kpi__valor {
+    color: var(--color-advertencia-800);
+}
+
+.kpi--exito {
+    border-left-color: var(--color-verde-700);
+}
+
+.kpi--exito .kpi__valor {
+    color: var(--color-verde-800);
+}
 
 /* ============================================================
    AUTENTICACIÓN — layout público simple (login, registro, etc.)
@@ -1967,4 +2352,459 @@ dialog.modal::backdrop {
     padding: var(--espacio-3) var(--espacio-4);
     margin-bottom: var(--espacio-5);
     font-size: var(--texto-sm);
+}
+
+/* ============================================================
+   FASE 7.3 — IMPLEMENTACIÓN VISUAL COMPLETA DEL SAAS.
+   Todo lo siguiente está acotado a `.shell--saas`/`.sidebar--saas`/
+   `.navbar--saas` — nunca toca el shell del ERP (`layout_app.html`,
+   `.sidebar` sin modificador). Reproduce el Master Shell real de
+   Stitch (screenId a7cf5c0731344ff1a1ce69e1b0e9022d, verificado
+   pantalla por pantalla): tipografía Geist/Inter, azul de marca
+   #2563EB, sidebar #0B0F14, indicador activo con borde izquierdo azul
+   (no blanco), marca con icono, topbar sin buscador con bloque de
+   usuario avatar+nombre+rol, y el patrón de tabla "tarjeta blanca"
+   reutilizado por la mayoría de los listados SaaS.
+   ============================================================ */
+
+.shell--saas {
+    font-family: 'Inter', var(--fuente-base);
+    --color-primario: #2563EB;
+    --color-primario-hover: #1D4ED8;
+    --alto-navbar: 64px;
+}
+
+/* Layout real: sidebar `position: fixed` + contenido con `margin-left`,
+   igual que el HTML real generado por Stitch (verificado descargando
+   dashboard.html/customers_list.html) — reemplaza el CSS Grid +
+   `position: sticky` compartido con el ERP, que en pantallas SaaS
+   largas producía una barra de scroll adicional alrededor del
+   sidebar. Acotado a escritorio (≥1025px): el comportamiento móvil
+   (menú de hamburguesa con `transform: translateX`) ya usaba
+   `position: fixed` y queda intacto sin cambios. */
+@media (min-width: 1025px) {
+    .shell--saas {
+        display: block;
+    }
+
+    .shell--saas .sidebar--saas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: var(--ancho-sidebar);
+        height: 100vh;
+        z-index: 30;
+    }
+
+    .shell--saas .navbar--saas {
+        margin-left: var(--ancho-sidebar);
+    }
+
+    .shell--saas .main {
+        margin-left: var(--ancho-sidebar);
+    }
+}
+
+/* Scrollbar del sidebar: delgada y discreta como en Stitch (6px, no
+   los 10px por defecto de `base.css`) — solo aparece si el contenido
+   de la navegación realmente excede la altura de la ventana. */
+.sidebar--saas::-webkit-scrollbar {
+    width: 6px;
+}
+
+.shell--saas h1,
+.shell--saas h2,
+.shell--saas h3,
+.shell--saas .sidebar__marca__texto,
+.shell--saas .navbar__usuario-nombre,
+.shell--saas .tabla th,
+.shell--saas .saas-kpi-card__valor,
+.shell--saas .saas-dona__centro-valor {
+    font-family: 'Geist', 'Inter', var(--fuente-base);
+}
+
+.shell--saas h1 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* --- Sidebar: colores exactos del Master Shell (no azul-950) --- */
+.sidebar--saas {
+    background: #0B0F14;
+    border-right-color: #1E2630;
+}
+
+.sidebar--saas .sidebar__marca {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    height: auto;
+    padding: var(--espacio-6) var(--espacio-5) var(--espacio-4);
+    border-bottom-color: #1E2630;
+}
+
+.sidebar__marca__icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radio-md);
+    background: #2563EB;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.sidebar__marca__icono svg {
+    width: 1.15rem;
+    height: 1.15rem;
+}
+
+.sidebar__marca__texto {
+    font-weight: 700;
+    font-size: 1.0625rem;
+    letter-spacing: -0.01em;
+}
+
+.sidebar--saas .sidebar__grupo-titulo {
+    color: #64748B;
+    font-size: 0.625rem;
+    padding-top: 0;
+    padding-bottom: 0.375rem;
+}
+
+.sidebar--saas .sidebar__nav {
+    padding-top: 0;
+    padding-bottom: 0;
+    gap: 0.125rem;
+}
+
+/* Separación real entre grupos del sidebar: `space-y-5` (20px) en el
+   HTML real de Stitch (verificado en dashboard.html/customers_list.html)
+   — NUNCA comprimir esto para evitar el scroll interno; si el
+   contenido del sidebar es más alto que el viewport, el scroll interno
+   es el comportamiento correcto (Stitch tendría el mismo problema en
+   un navegador real — sus capturas solo lo ocultan por usar un lienzo
+   del alto de toda la página). */
+.sidebar--saas .sidebar__grupo+.sidebar__grupo {
+    margin-top: var(--espacio-5);
+}
+
+.sidebar--saas .sidebar__enlace {
+    color: #9CA3AF;
+    font-size: 0.8125rem;
+    border-left: 3px solid transparent;
+    padding-top: var(--espacio-2);
+    padding-bottom: var(--espacio-2);
+    padding-left: calc(var(--espacio-3) - 3px);
+}
+
+.sidebar--saas .sidebar__enlace:hover {
+    background: rgb(255 255 255 / 0.05);
+    color: #fff;
+}
+
+.sidebar--saas .sidebar__enlace[aria-current="page"] {
+    background: rgb(255 255 255 / 0.10);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: none;
+    border-left-color: #2563EB;
+}
+
+/* --- Topbar: sin buscador, bloque de usuario avatar+nombre+rol --- */
+.navbar--saas {
+    box-shadow: var(--sombra-sm);
+}
+
+.navbar__usuario-boton {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+
+.navbar__usuario-texto {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.3;
+}
+
+.navbar__usuario-nombre {
+    font-weight: 600;
+    font-size: var(--texto-sm);
+    color: var(--gris-900);
+}
+
+.navbar__usuario-rol {
+    font-size: 0.6875rem;
+    color: var(--gris-500);
+}
+
+.shell--saas .avatar-circulo {
+    background: #2563EB;
+    color: #fff;
+}
+
+/* --- Patrón de listado "tarjeta blanca" (Clientes/Tenants/Planes/
+   Suscripciones/Facturas/Pagos/Notas de crédito/Reembolsos/Cuentas
+   bancarias/Transferencias, etc.) — reemplaza el `.tabla-envoltorio`
+   genérico del ERP dentro del shell SaaS únicamente. --- */
+.shell--saas .tabla-envoltorio {
+    border-radius: var(--radio-lg);
+    border-color: rgb(226 232 240 / 0.8);
+    box-shadow: var(--sombra-sm);
+}
+
+.shell--saas .tabla th {
+    background: #fff;
+    border-bottom-color: var(--gris-100);
+    color: var(--gris-400);
+    font-size: 0.6875rem;
+    letter-spacing: 0.05em;
+    padding: 0.9rem var(--espacio-6);
+}
+
+.shell--saas .tabla td {
+    padding: var(--espacio-4) var(--espacio-6);
+    border-bottom-color: var(--gris-100);
+    white-space: normal;
+}
+
+.shell--saas .tabla tbody tr:hover {
+    background: rgb(248 250 252 / 0.7);
+}
+
+/* Enlace de acción de tabla (ej. "Ver") — texto azul + chevron, en vez
+   de un botón con contorno, siguiendo el patrón real de Stitch para
+   todas las filas de listado con navegación de solo lectura. Mismo
+   destino/href que antes, solo cambia la presentación visual. */
+.tabla__accion-enlace {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    color: var(--color-primario, var(--color-azul-700));
+    text-decoration: none;
+    font-weight: 600;
+    font-size: var(--texto-sm);
+}
+
+.tabla__accion-enlace:hover {
+    color: var(--color-primario-hover, var(--color-azul-800));
+}
+
+.tabla__accion-enlace .icono-svg {
+    width: 0.95em;
+    height: 0.95em;
+    transition: transform 0.12s ease;
+}
+
+.tabla__accion-enlace:hover .icono-svg {
+    transform: translateX(2px);
+}
+
+/* Punto de color antes del texto del badge — mismo tono que el texto
+   (currentColor), reproduce el indicador de estado que Stitch usa en
+   toda fila con badge de estado, sin tocar ninguna plantilla (todas
+   usan `.badge badge--{{ x|estado_badge }}` ya existente). */
+.shell--saas .badge::before {
+    content: "";
+    width: 0.4em;
+    height: 0.4em;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+/* --- Planes: etiqueta de sección + fila de versión de precio en caja
+   (screenId 225cfabbac2442779bd0f69bd0a24879) --- */
+.saas-etiqueta-seccion {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gris-400);
+    margin: 0 0 var(--espacio-2);
+}
+
+/* --- Planes: formulario "Nueva versión de precio" en una fila (3
+   campos con ancho fijo + botón), igual que el Stitch aprobado —
+   mismos nombres de campo reales de `PlanVersionForm`
+   (frequency/price_amount/price_currency), mismo POST/validación. --- */
+.saas-form-fila {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--espacio-3);
+}
+
+.saas-form-fila .campo {
+    margin-bottom: 0;
+}
+
+.saas-form-fila__campo--frequency {
+    width: 10rem;
+}
+
+.saas-form-fila__campo--price_amount {
+    width: 8rem;
+}
+
+.saas-form-fila__campo--price_currency {
+    width: 6rem;
+}
+
+/* Modal "Nuevo plan": Orden/Máx. usuarios/Máx. productos en una fila
+   de 3 columnas — igual que el HTML real de Stitch (screenId
+   07aa8a54d0f34c5bbd1ad90c9ee57902). */
+.saas-form-fila-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--espacio-3);
+    margin-bottom: var(--espacio-4);
+}
+
+.saas-form-fila-3 .campo {
+    margin-bottom: 0;
+}
+
+/* --- Reportes: tarjeta única título+resumen+tabla (screenId
+   921073fb9c7e4aaabfc93e08420e61c3) — reutiliza `.tarjeta`/
+   `.tarjeta__encabezado`, solo ajusta el margen del h2 dentro del
+   encabezado de la tarjeta para el resumen debajo. --- */
+.saas-reporte-tarjeta .tarjeta__encabezado h2 {
+    margin: 0 0 0.2rem;
+}
+
+.saas-reporte-tarjeta .tabla th:first-child,
+.saas-reporte-tarjeta .tabla td:first-child {
+    padding-left: var(--espacio-5);
+}
+
+.saas-fila-precio {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--espacio-3);
+    background: rgb(248 250 252 / 0.7);
+    border: 1px solid var(--gris-100);
+    border-radius: var(--radio-md);
+    padding: var(--espacio-3) var(--espacio-4);
+    margin-bottom: var(--espacio-2);
+    font-size: var(--texto-sm);
+}
+
+/* --- Tenant Detail: grid 2 columnas 5/7 (screenId
+   cebc37bd583a46e29d6b1a5011d22545, Master Screen aprobada desde el
+   inicio del proyecto — FASE 7.5A). --- */
+.saas-detalle-grid {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    gap: var(--espacio-6);
+    align-items: start;
+}
+
+.saas-detalle-grid--1col {
+    grid-template-columns: 1fr;
+}
+
+@media (max-width: 900px) {
+    .saas-detalle-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.saas-tarjeta-encabezado {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--espacio-3);
+    padding-bottom: var(--espacio-3);
+    margin-bottom: var(--espacio-4);
+    border-bottom: 1px solid var(--gris-100);
+}
+
+.saas-tarjeta-encabezado h2 {
+    font-size: var(--texto-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0;
+}
+
+.saas-precio-grande {
+    font-size: var(--texto-2xl);
+    font-weight: 700;
+    color: var(--gris-900);
+    margin: 0;
+}
+
+.saas-precio-grande small {
+    font-size: var(--texto-sm);
+    font-weight: 400;
+    color: var(--color-texto-tenue);
+}
+
+.saas-meta-lista {
+    margin: var(--espacio-3) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.saas-meta-lista li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--espacio-3);
+    padding: var(--espacio-2) 0;
+    border-bottom: 1px solid var(--gris-100);
+    font-size: var(--texto-xs);
+}
+
+.saas-meta-lista li:last-child {
+    border-bottom: none;
+}
+
+.saas-meta-lista .etiqueta {
+    color: var(--color-texto-tenue);
+}
+
+.saas-meta-lista .valor {
+    font-weight: 500;
+    color: var(--gris-800);
+}
+
+.saas-acciones-tarjeta {
+    display: flex;
+    gap: var(--espacio-2);
+    padding-top: var(--espacio-4);
+    margin-top: var(--espacio-4);
+    border-top: 1px solid var(--gris-100);
+}
+
+.saas-acciones-tarjeta .btn {
+    flex: 1;
+}
+
+/* Variante de botón "peligro suave" (fondo/borde rojo claro, texto
+   rojo) — botones disparadores de Suspender/Cancelar en Tenant Detail
+   usan este estilo de contorno en el Stitch aprobado; el botón sólido
+   `.btn--peligro` se conserva para la confirmación dentro del modal,
+   que sí es sólida en Stitch. */
+.btn--peligro-suave {
+    background: var(--color-peligro-50);
+    border-color: var(--color-peligro-100);
+    color: var(--color-peligro-800);
+}
+
+.btn--peligro-suave:hover:not(:disabled) {
+    background: var(--color-peligro-100);
 }

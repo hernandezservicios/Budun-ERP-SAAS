@@ -14,19 +14,21 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse_lazy
 from django.utils.text import slugify
 from django.views import View
 
 from apps.accounts import services as account_services
+from apps.accounts.views import AccountPasswordChangeView, AccountPasswordChangeDoneView
+from apps.accounts.views import ProfileView as AccountsProfileView
 from apps.customers.file_validation import nombre_original_seguro
 from apps.tenants.models import Membership, Tenant
 from apps.tenants.permissions import SuperuserRequiredMixin
 
-from .admin_forms import BankAccountForm, CreditNoteIssueForm, ManualTenantSaleForm, PlanForm, PlanVersionForm, ProofRejectForm, RefundRequestForm
+from .admin_forms import BankAccountForm, ManualTenantSaleForm, PlanForm, PlanVersionForm, ProofRejectForm, RefundRequestForm
 from .models import (
     BankAccount,
     BillingRefund,
-    CreditNote,
     Plan,
     PlanVersion,
     SaaSCustomer,
@@ -34,7 +36,6 @@ from .models import (
     SaaSPayment,
     Subscription,
 )
-from .services import credits as credit_services
 from .services import invoicing as invoicing_services
 from .services import recurring as recurring_services
 from .services import refunds as refund_services
@@ -291,7 +292,7 @@ class InvoicesListView(LoginRequiredMixin, SuperuserRequiredMixin, View):
 
 class InvoiceDetailView(LoginRequiredMixin, SuperuserRequiredMixin, View):
     def get(self, request, pk):
-        from .models import CreditNoteApplication, SaaSInvoiceLine, SaaSPaymentAllocation
+        from .models import SaaSInvoiceLine, SaaSPaymentAllocation
         from .services.invoicing import get_invoice_balance_due
 
         invoice = get_object_or_404(SaaSInvoice.all_objects.select_related("tenant", "subscription"), pk=pk)
@@ -299,7 +300,6 @@ class InvoiceDetailView(LoginRequiredMixin, SuperuserRequiredMixin, View):
             "invoice": invoice, "saldo": get_invoice_balance_due(invoice),
             "lines": SaaSInvoiceLine.all_objects.filter(invoice=invoice),
             "allocations": SaaSPaymentAllocation.all_objects.filter(invoice=invoice).select_related("payment"),
-            "credit_applications": CreditNoteApplication.all_objects.filter(invoice=invoice).select_related("credit_note"),
         })
 
 
@@ -388,49 +388,8 @@ class ProofDownloadView(LoginRequiredMixin, SuperuserRequiredMixin, View):
 
 
 # ---------------------------------------------------------------------
-# Notas de crédito / Refunds
+# Refunds
 # ---------------------------------------------------------------------
-
-class CreditNotesListView(LoginRequiredMixin, SuperuserRequiredMixin, View):
-    def get(self, request):
-        # BLOQUE C (revisión visual): se anota el saldo disponible de
-        # cada nota reutilizando el servicio ya existente — el listado
-        # mostraba el monto emitido pero nunca si la nota ya estaba
-        # agotada, dato real que el Super Admin necesita para decidir
-        # si todavía puede aplicarse a una factura.
-        credit_notes = list(
-            CreditNote.all_objects.select_related("tenant", "saas_customer").order_by("-created_at")[:100]
-        )
-        for nota in credit_notes:
-            nota.saldo_disponible = credit_services.get_unapplied_credit_note_amount(nota)
-        return render(request, "billing/admin/credit_notes_list.html", {
-            "credit_notes": credit_notes,
-        })
-
-
-class IssueCreditNoteView(LoginRequiredMixin, SuperuserRequiredMixin, View):
-    def post(self, request, customer_id):
-        customer = get_object_or_404(SaaSCustomer, pk=customer_id)
-        form = CreditNoteIssueForm(request.POST)
-        if not form.is_valid():
-            messages.error(request, "Revisa el monto/motivo.")
-            return redirect("billing_admin:customer_detail", pk=customer_id)
-        tenant = customer.tenants.first()
-        if tenant is None:
-            # FASE DE CORRECCIÓN 5: `CreditNote.tenant` no es nulo (es un
-            # `TenantScopedModel`) — antes de esta corrección, un
-            # `SaaSCustomer` sin ningún Tenant asociado todavía (el
-            # formulario nunca lo impedía) producía un `IntegrityError`
-            # sin manejar (500) en vez de un mensaje claro.
-            messages.error(request, "Este cliente SaaS todavía no tiene ningún tenant asociado — no se puede emitir una nota de crédito.")
-            return redirect("billing_admin:customer_detail", pk=customer_id)
-        credit_services.issue_credit_note(
-            tenant=tenant, saas_customer=customer, amount=form.cleaned_data["amount"], currency=form.cleaned_data["currency"],
-            reason=form.cleaned_data["reason"], user=request.user,
-        )
-        messages.success(request, "Nota de crédito emitida.")
-        return redirect("billing_admin:customer_detail", pk=customer_id)
-
 
 class RefundsListView(LoginRequiredMixin, SuperuserRequiredMixin, View):
     def get(self, request):
@@ -538,3 +497,48 @@ class ReportsView(LoginRequiredMixin, SuperuserRequiredMixin, View):
             "suscripciones": report_services.get_subscriptions_report(),
             "aging": report_services.get_invoice_aging_report(),
         })
+
+
+# ---------------------------------------------------------------------
+# Perfil del Super Admin dentro del contexto SaaS
+#
+# Reutiliza `apps.accounts.views.ProfileView` tal cual (mismo
+# `ProfileForm`/`get_object`/`get_context_data` — nunca una segunda
+# vista de edición de perfil) y solo sustituye el template y el
+# `success_url` para que un Super Admin que llega aquí desde el menú
+# del avatar del shell SaaS nunca caiga en `layout_app.html` (shell del
+# ERP del tenant) ni salga de vuelta a él al guardar. `accounts:perfil`
+# (usado por cualquier usuario ERP normal) queda sin ningún cambio.
+# ---------------------------------------------------------------------
+
+class SuperAdminProfileView(SuperuserRequiredMixin, AccountsProfileView):
+    """`SuperuserRequiredMixin` basta aquí — `AccountsProfileView` (alias
+    de `apps.accounts.views.ProfileView`) ya incluye `LoginRequiredMixin`
+    en su propia base; repetirlo rompería el MRO."""
+
+    template_name = "accounts/perfil_saas.html"
+    success_url = reverse_lazy("billing_admin:profile")
+
+
+# ---------------------------------------------------------------------
+# Cambio de contraseña del Super Admin dentro del contexto SaaS
+#
+# CORRECCIÓN 2 (hallazgo real): la primera corrección dejó "Mi perfil"
+# dentro del shell SaaS, pero "Cambiar contraseña" seguía usando
+# `accounts:password_change`/`password_change_form.html`, que extiende
+# `base.html` (tarjeta de auth sin sidebar) y cuyo "Volver a mi perfil"
+# (igual que el de `password_change_done.html`) apunta a
+# `accounts:perfil` — una fuga de vuelta al shell ERP. Mismo patrón que
+# `SuperAdminProfileView`: reutiliza el `PasswordChangeForm`/lógica real
+# de Django tal cual (`AccountPasswordChangeView`/`...DoneView`), solo
+# sustituye template y destinos para que todo el viaje "Cambiar
+# contraseña" ocurra sin salir nunca del shell SaaS.
+# ---------------------------------------------------------------------
+
+class SuperAdminPasswordChangeView(SuperuserRequiredMixin, AccountPasswordChangeView):
+    template_name = "accounts/password_change_form_saas.html"
+    success_url = reverse_lazy("billing_admin:password_change_done")
+
+
+class SuperAdminPasswordChangeDoneView(SuperuserRequiredMixin, AccountPasswordChangeDoneView):
+    template_name = "accounts/password_change_done_saas.html"

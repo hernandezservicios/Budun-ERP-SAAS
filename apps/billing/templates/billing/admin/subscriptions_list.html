@@ -2,9 +2,6 @@
 {% load ui_extras ui_icons %}
 {% block title %}Suscripciones — Billing SaaS — Budun{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Suscripciones</li></ol>
-</nav>
 <div class="encabezado-pagina"><h1>Suscripciones</h1></div>
 {% if resumen.rows %}
 <div class="tabla-envoltorio">
@@ -18,7 +15,7 @@
                 <td>{{ fila.frecuencia }}</td>
                 <td><span class="badge badge--{{ fila.estado_codigo|estado_badge }}">{{ fila.estado }}</span></td>
                 <td>{{ fila.periodo_fin|default:"—" }}</td>
-                <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:tenant_detail' fila.tenant_id %}">Ver</a></td>
+                <td><a class="tabla__accion-enlace" href="{% url 'billing_admin:tenant_detail' fila.tenant_id %}">Ver{% icono "chevron-derecha" %}</a></td>
             </tr>
             {% endfor %}
         </tbody>

@@ -1,10 +1,8 @@
 {% extends "layout_saas_admin.html" %}
 {% load ui_extras ui_icons %}
 {% block title %}Reembolsos — Billing SaaS — Budun{% endblock %}
+{% block main_contenido_clase %} main__contenido--completo{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li aria-current="page">Reembolsos</li></ol>
-</nav>
 <div class="encabezado-pagina"><h1>Reembolsos</h1></div>
 {% if refunds %}
 <div class="tabla-envoltorio">

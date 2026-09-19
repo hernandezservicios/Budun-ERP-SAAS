@@ -2,7 +2,21 @@
   "mcpServers": {
     "paypal": {
       "command": "npx",
-      "args": ["-y", "@paypal/mcp"]
+      "args": [
+        "-y",
+        "@paypal/mcp"
+      ]
+    },
+    "stitch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@_davideast/stitch-mcp",
+        "proxy"
+      ],
+      "env": {
+        "STITCH_API_KEY": "AQ.Ab8RN6KYpQsT3xLZ4zPgG6dWtfBfhyEAh6dz_npn0hL-EUo_gg"
+      }
     }
   }
 }

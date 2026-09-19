@@ -1,10 +1,8 @@
 {% extends "layout_saas_admin.html" %}
 {% load ui_extras %}
 {% block title %}Comprobante {{ proof.reference }} — Budun{% endblock %}
+{% block main_contenido_clase %} main__contenido--estrecho{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:transfers_queue' %}">Transferencias</a></li><li aria-current="page">{{ proof.reference }}</li></ol>
-</nav>
 <div class="encabezado-pagina">
     <div><h1>Comprobante {{ proof.reference }}</h1></div>
     <div class="encabezado-pagina__acciones">

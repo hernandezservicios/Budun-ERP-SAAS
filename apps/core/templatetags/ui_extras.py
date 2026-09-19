@@ -153,3 +153,17 @@ def monto(valor):
     except (InvalidOperation, TypeError, ValueError):
         return valor
     return f"{numero:,.2f}"
+
+
+@register.filter
+def enmascarar_cuenta(numero):
+    """Enmascara un número de cuenta bancaria para su presentación en el
+    listado de Cuentas bancarias (`bank_accounts_list.html`) — muestra
+    únicamente los últimos 4 caracteres. Puramente presentacional:
+    `BankAccount.account_number` sigue almacenado completo; el modal de
+    edición de esa misma pantalla renderiza el campo real del form sin
+    este filtro, nunca enmascarado."""
+    texto = str(numero or "")
+    if len(texto) <= 4:
+        return texto
+    return "····" + texto[-4:]

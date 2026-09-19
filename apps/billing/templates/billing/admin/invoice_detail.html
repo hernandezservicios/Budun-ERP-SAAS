@@ -1,18 +1,18 @@
 {% extends "layout_saas_admin.html" %}
 {% load ui_extras %}
 {% block title %}Factura {{ invoice.number }} — Budun{% endblock %}
+{% block main_contenido_clase %} main__contenido--estrecho{% endblock %}
 {% block app_content %}
-<nav class="migas" aria-label="Ruta de navegación">
-    <ol><li><a href="{% url 'billing_admin:dashboard' %}">Billing SaaS</a></li><li><a href="{% url 'billing_admin:invoices_list' %}">Facturas</a></li><li aria-current="page">{{ invoice.number }}</li></ol>
-</nav>
-<div class="encabezado-pagina">
+<div class="encabezado-pagina encabezado-pagina--mb-8">
     <div>
         <h1>Factura {{ invoice.number }}</h1>
         <p class="encabezado-pagina__descripcion">
-            Tenant: {{ invoice.tenant }} · Estado: <span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span> · Saldo pendiente: {{ saldo|monto }} {{ invoice.currency }}
+            Tenant: {{ invoice.tenant }} · Estado: <span class="badge badge--{{ invoice.status|estado_badge }}">{{
+                invoice.get_status_display }}</span> · Saldo pendiente: {{ saldo|monto }} {{ invoice.currency }}
         </p>
         <p class="encabezado-pagina__descripcion">
-            Período: {{ invoice.period_start }} — {{ invoice.period_end }} · Emitida: {{ invoice.issue_date }} · Vence: {{ invoice.due_date }}
+            Período: {{ invoice.period_start }} — {{ invoice.period_end }} · Emitida: {{ invoice.issue_date }} · Vence:
+            {{ invoice.due_date }}
         </p>
     </div>
     <div class="encabezado-pagina__acciones">
@@ -20,19 +20,32 @@
     </div>
 </div>
 
-<div class="encabezado-pagina"><h2>Líneas</h2></div>
+<div class="encabezado-pagina">
+    <h2>Líneas</h2>
+</div>
 <div class="tabla-envoltorio u-mb-6">
     <table class="tabla">
-        <thead><tr><th>Descripción</th><th>Cantidad</th><th>Monto</th></tr></thead>
-        <tbody>{% for line in lines %}<tr><td>{{ line.description }}</td><td>{{ line.quantity }}</td><td>{{ line.amount|monto }}</td></tr>{% endfor %}</tbody>
+        <thead>
+            <tr>
+                <th>Descripción</th>
+                <th>Cantidad</th>
+                <th>Monto</th>
+            </tr>
+        </thead>
+        <tbody>{% for line in lines %}<tr>
+                <td>{{ line.description }}</td>
+                <td>{{ line.quantity }}</td>
+                <td>{{ line.amount|monto }}</td>
+            </tr>{% endfor %}</tbody>
     </table>
 </div>
 
-<div class="tarjeta u-ancho-32 u-mb-6">
+<div class="tarjeta u-ancho-32 u-mb-8">
     <div class="tarjeta__cuerpo">
         <p>Subtotal: {{ invoice.subtotal|monto }} {{ invoice.currency }}</p>
         {% if invoice.discount_total %}
-        <p>Descuento: −{{ invoice.discount_total|monto }} {{ invoice.currency }}{% if invoice.coupon_code_snapshot %} (cupón {{ invoice.coupon_code_snapshot }}){% endif %}</p>
+        <p>Descuento: −{{ invoice.discount_total|monto }} {{ invoice.currency }}{% if invoice.coupon_code_snapshot %}
+            (cupón {{ invoice.coupon_code_snapshot }}){% endif %}</p>
         {% endif %}
         {% if invoice.tax_total %}
         <p>Impuesto: {{ invoice.tax_total|monto }} {{ invoice.currency }}</p>
@@ -41,19 +54,28 @@
     </div>
 </div>
 
-<div class="encabezado-pagina"><h2>Pagos aplicados</h2></div>
-<div class="tabla-envoltorio u-mb-6">
-    <table class="tabla">
-        <thead><tr><th>Pago</th><th>Método</th><th>Monto</th><th>Estado</th></tr></thead>
-        <tbody>{% for allocation in allocations %}<tr><td>{{ allocation.payment }}</td><td>{{ allocation.payment.get_method_display }}</td><td>{{ allocation.amount|monto }}</td><td><span class="badge badge--{{ allocation.status|estado_badge }}">{{ allocation.get_status_display }}</span></td></tr>{% empty %}<tr><td colspan="4">Sin pagos aplicados.</td></tr>{% endfor %}</tbody>
-    </table>
+<div class="encabezado-pagina">
+    <h2>Pagos aplicados</h2>
 </div>
-
-<div class="encabezado-pagina"><h2>Notas de crédito aplicadas</h2></div>
-<div class="tabla-envoltorio">
+<div class="tabla-envoltorio u-mb-8">
     <table class="tabla">
-        <thead><tr><th>Nota</th><th>Monto</th></tr></thead>
-        <tbody>{% for application in credit_applications %}<tr><td>{{ application.credit_note.number }}</td><td>{{ application.amount|monto }}</td></tr>{% empty %}<tr><td colspan="2">Ninguna.</td></tr>{% endfor %}</tbody>
+        <thead>
+            <tr>
+                <th>Pago</th>
+                <th>Método</th>
+                <th>Monto</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>{% for allocation in allocations %}<tr>
+                <td>{{ allocation.payment }}</td>
+                <td>{{ allocation.payment.get_method_display }}</td>
+                <td>{{ allocation.amount|monto }}</td>
+                <td><span class="badge badge--{{ allocation.status|estado_badge }}">{{ allocation.get_status_display
+                        }}</span></td>
+            </tr>{% empty %}<tr>
+                <td colspan="4">Sin pagos aplicados.</td>
+            </tr>{% endfor %}</tbody>
     </table>
 </div>
 {% endblock %}

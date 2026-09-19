@@ -13,8 +13,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.billing.models import BankAccount, Tenant
-from apps.core.templatetags.ui_extras import estado_badge, estado_paypal, monto
+from apps.billing.models import BankAccount, Plan, Tenant
+from apps.core.templatetags.ui_extras import enmascarar_cuenta, estado_badge, estado_paypal, monto
 
 from ._helpers_saas import crear_tenant_con_owner
 
@@ -49,15 +49,25 @@ class ShellSaaSSeparadoDelErpTests(TestCase):
             self.assertNotContains(respuesta, texto)
 
     def test_sidebar_saas_agrupa_por_seccion_con_destinos_reales(self):
+        """FASE 7.2 — grupos alineados al diseño Stitch aprobado (branding
+        "Budun ERP" sin tagline, agrupación Inicio/Clientes y tenants/
+        Comercial/Facturación/Finanzas/Reportes/Integraciones). No existe
+        un enlace real de "Configuración" — el título de grupo homónimo
+        que agrupaba Cuentas bancarias+PayPal se dividió en "Finanzas"/
+        "Integraciones" para igualar Stitch; no se inventó ningún destino
+        ficticio para reemplazarlo."""
         respuesta = self.client.get(reverse("billing_admin:dashboard"))
-        # Grupos pedidos en la sección 5 de la fase — solo los que tienen
-        # destinos reales (nunca enlaces ficticios).
-        for grupo in ["Clientes y empresas", "Suscripciones y planes", "Facturación", "Reportes", "Configuración"]:
+        # Grupos reales — solo los que tienen destinos reales (nunca
+        # enlaces ficticios).
+        for grupo in ["Inicio", "Clientes y tenants", "Comercial", "Facturación", "Finanzas", "Reportes", "Integraciones"]:
             self.assertContains(respuesta, grupo)
+        self.assertContains(respuesta, "Budun ERP")
+        self.assertNotContains(respuesta, "Budun SaaS")
+        self.assertNotContains(respuesta, "Plataforma — Super Admin")
         # Cada destino real listado en admin_urls.py debe estar enlazado.
         for nombre_url in [
             "tenants_list", "customers_list", "plans_list", "subscriptions_list",
-            "invoices_list", "payments_list", "transfers_queue", "credit_notes_list",
+            "invoices_list", "payments_list", "transfers_queue",
             "refunds_list", "reports", "manual_sale", "bank_accounts_list",
         ]:
             self.assertContains(respuesta, reverse(f"billing_admin:{nombre_url}"))
@@ -74,6 +84,95 @@ class ShellSaaSSeparadoDelErpTests(TestCase):
         self.assertNotContains(respuesta, 'sidebar--saas')
         self.assertContains(respuesta, 'class="sidebar"')
 
+    def test_menu_del_avatar_saas_ya_no_ofrece_salir_al_erp(self):
+        """Hallazgo real corregido: el menú del avatar del shell SaaS
+        enlazaba a `dashboard:panel` ("Salir a mi ERP"), a `accounts:perfil`
+        ("Mi perfil", que usa `layout_app.html`) y a `accounts:password_change`
+        ("Cambiar contraseña", que usa `base.html` y cuyo "volver" regresaba a
+        `accounts:perfil`) — todos mezclaban el contexto SaaS con el del ERP
+        del tenant. Ahora los 3 ítems del menú (Mi perfil/Cambiar
+        contraseña/Cerrar sesión) permanecen dentro de `billing_admin`."""
+        respuesta = self.client.get(reverse("billing_admin:dashboard"))
+        self.assertNotContains(respuesta, "Salir a mi ERP")
+        self.assertNotContains(respuesta, reverse("accounts:perfil"))
+        self.assertNotContains(respuesta, reverse("accounts:password_change"))
+        self.assertContains(respuesta, reverse("billing_admin:profile"))
+        self.assertContains(respuesta, reverse("billing_admin:password_change"))
+
+    def test_perfil_del_super_admin_usa_el_shell_saas_y_no_el_del_erp(self):
+        respuesta = self.client.get(reverse("billing_admin:profile"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'sidebar--saas')
+        for texto in _TEXTOS_EXCLUSIVOS_DEL_ERP:
+            self.assertNotContains(respuesta, texto)
+        # Mismo ProfileForm real (3 campos), sin mezclar datos de tenant/empresa.
+        self.assertContains(respuesta, "Guardar cambios")
+        self.assertNotContains(respuesta, "Configurar mi empresa")
+
+    def test_guardar_perfil_del_super_admin_redirige_dentro_del_shell_saas(self):
+        respuesta = self.client.post(reverse("billing_admin:profile"), {
+            "first_name": "Carlos", "last_name": "Mendizábal", "email": self.superadmin.email,
+        })
+        self.assertRedirects(respuesta, reverse("billing_admin:profile"))
+
+    def test_perfil_del_super_admin_exige_superusuario(self):
+        tenant, owner = crear_tenant_con_owner(slug="tenant-perfil-saas-403")
+        self.client.logout()
+        self.client.login(username=owner.email, password="clave-de-prueba-987")
+        respuesta = self.client.get(reverse("billing_admin:profile"))
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_perfil_saas_enlaza_cambiar_contrasena_dentro_del_shell_saas(self):
+        respuesta = self.client.get(reverse("billing_admin:profile"))
+        self.assertContains(respuesta, reverse("billing_admin:password_change"))
+        self.assertNotContains(respuesta, reverse("accounts:password_change"))
+
+    def test_cambiar_contrasena_del_super_admin_usa_el_shell_saas(self):
+        respuesta = self.client.get(reverse("billing_admin:password_change"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'sidebar--saas')
+        for texto in _TEXTOS_EXCLUSIVOS_DEL_ERP:
+            self.assertNotContains(respuesta, texto)
+        # El "volver" debe quedarse en SaaS, nunca regresar a `accounts:perfil`.
+        self.assertContains(respuesta, reverse("billing_admin:profile"))
+        self.assertNotContains(respuesta, reverse("accounts:perfil"))
+
+    def test_cambiar_contrasena_del_super_admin_exitoso_permanece_en_saas(self):
+        respuesta = self.client.post(reverse("billing_admin:password_change"), {
+            "old_password": "clave-de-prueba-987",
+            "new_password1": "otra-clave-nueva-654",
+            "new_password2": "otra-clave-nueva-654",
+        })
+        self.assertRedirects(respuesta, reverse("billing_admin:password_change_done"))
+        pagina_final = self.client.get(reverse("billing_admin:password_change_done"))
+        self.assertContains(pagina_final, 'sidebar--saas')
+        self.assertContains(pagina_final, reverse("billing_admin:profile"))
+        self.assertNotContains(pagina_final, reverse("accounts:perfil"))
+        # La sesión sigue activa y la nueva contraseña quedó efectivamente aplicada.
+        self.client.logout()
+        self.assertTrue(self.client.login(username=self.superadmin.email, password="otra-clave-nueva-654"))
+
+    def test_cambiar_contrasena_del_super_admin_exige_superusuario(self):
+        tenant, owner = crear_tenant_con_owner(slug="tenant-password-saas-403")
+        self.client.logout()
+        self.client.login(username=owner.email, password="clave-de-prueba-987")
+        respuesta = self.client.get(reverse("billing_admin:password_change"))
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_flujo_erp_de_perfil_y_contrasena_sigue_intacto(self):
+        """El ERP (`accounts:perfil`/`accounts:password_change`, usados por
+        cualquier usuario normal) no debe verse afectado por la corrección
+        del shell SaaS — sigue usando `layout_app.html`/`base.html` como
+        siempre."""
+        tenant, owner = crear_tenant_con_owner(slug="tenant-erp-intacto")
+        self.client.logout()
+        self.client.login(username=owner.email, password="clave-de-prueba-987")
+        perfil = self.client.get(reverse("accounts:perfil"))
+        self.assertContains(perfil, 'class="sidebar"')
+        self.assertNotContains(perfil, 'sidebar--saas')
+        cambiar = self.client.get(reverse("accounts:password_change"))
+        self.assertNotContains(cambiar, 'sidebar--saas')
+
 
 class DashboardTextoHumanoTests(TestCase):
     """Sección 7: ningún término técnico/abreviado crudo (MRR, ARR,
@@ -89,7 +188,7 @@ class DashboardTextoHumanoTests(TestCase):
             "Ingresos recurrentes mensuales", "Ingresos recurrentes anuales", "Ingresos del mes",
             "Suscripciones activas", "Altas este mes", "Pagos atrasados",
             "Suspendidas", "Cancelaciones este mes", "Transferencias pendientes",
-            "Facturas vencidas", "Reembolsos del mes", "Notas de crédito del mes",
+            "Facturas vencidas", "Reembolsos del mes",
         ]:
             self.assertContains(respuesta, texto)
 
@@ -184,7 +283,7 @@ class RevisionVisualFaseATests(TestCase):
         contenido = respuesta.content.decode()
         self.assertNotIn("kpi--advertencia", contenido)
         self.assertNotIn("kpi--peligro", contenido)
-        self.assertEqual(contenido.count('class="saas-kpi-card"'), 12)
+        self.assertEqual(contenido.count('class="saas-kpi-card"'), 11)
 
     def test_dashboard_ya_no_muestra_los_acronimos_mrr_arr_en_el_texto_de_ayuda(self):
         respuesta = self.client.get(reverse("billing_admin:dashboard"))
@@ -192,14 +291,21 @@ class RevisionVisualFaseATests(TestCase):
         self.assertNotIn("MRR —", contenido)
         self.assertNotIn("ARR —", contenido)
 
-    def test_sidebar_agrupa_venta_manual_junto_a_clientes_y_tenants(self):
-        """Venta manual crea un Tenant real — pertenece conceptualmente
-        al grupo 'Clientes y empresas', no a 'Configuración'."""
+    def test_sidebar_agrupa_venta_manual_junto_a_planes_y_suscripciones(self):
+        """Hallazgo original de este bloque: Venta manual crea un Tenant
+        real, por lo que se agrupó junto a Clientes/Tenants (nunca junto a
+        'Configuración', un título de grupo que ni siquiera enlaza a nada).
+        FASE 7.2 — reubicado dentro del grupo 'Comercial' (junto a Planes/
+        Suscripciones) para igualar la agrupación del diseño Stitch
+        aprobado. Sigue sin estar bajo 'Finanzas'/'Integraciones' (los
+        títulos que reemplazaron a 'Configuración')."""
         respuesta = self.client.get(reverse("billing_admin:dashboard"))
         contenido = respuesta.content.decode()
-        inicio_grupo = contenido.index("Clientes y empresas")
-        fin_grupo = contenido.index("Suscripciones y planes")
+        inicio_grupo = contenido.index("Comercial")
+        fin_grupo = contenido.index("Facturación")
         self.assertIn("Venta manual", contenido[inicio_grupo:fin_grupo])
+        self.assertIn("Planes", contenido[inicio_grupo:fin_grupo])
+        self.assertIn("Suscripciones", contenido[inicio_grupo:fin_grupo])
 
     def test_tenants_list_muestra_estado_vacio_real_cuando_no_hay_tenants(self):
         respuesta = self.client.get(reverse("billing_admin:tenants_list"))
@@ -304,6 +410,85 @@ class BankAccountEditarDesactivarTests(TestCase):
 
         campo = PaymentProof._meta.get_field("bank_account")
         self.assertIs(campo.remote_field.on_delete, django_models.PROTECT)
+
+
+class PlanesYCuentasBancariasModalTests(TestCase):
+    """FASE 3 (implementación visual): "Nuevo plan" y "Nueva cuenta" pasan
+    de formulario inline a modal (mismo patrón `data-modal-open`/`<dialog>`
+    ya usado en el resto del proyecto — sin backend/URL/form nuevos), y la
+    columna "Cuenta" del listado de Cuentas bancarias se enmascara solo en
+    presentación — el dato real (`BankAccount.account_number`) y el modal
+    de edición siguen completos."""
+
+    def setUp(self):
+        self.superadmin = User.objects.create_superuser(email="super.modales@example.com", password="clave-de-prueba-987")
+        self.client.login(username=self.superadmin.email, password="clave-de-prueba-987")
+
+    def test_planes_tiene_boton_y_modal_nuevo_plan_sin_subtitulo_inventado(self):
+        respuesta = self.client.get(reverse("billing_admin:plans_list"))
+        self.assertContains(respuesta, "+ Nuevo plan")
+        self.assertContains(respuesta, 'data-modal-open="modal-nuevo-plan"')
+        self.assertContains(respuesta, 'id="modal-nuevo-plan"')
+        # El <h1> real nunca tuvo subtítulo — no se debe haber inventado ninguno.
+        self.assertNotContains(respuesta, "Configuración de catálogo de planes")
+
+    def test_crear_plan_invalido_no_crea_nada_y_muestra_el_mensaje_real(self):
+        total_antes = Plan.objects.count()
+        respuesta = self.client.post(reverse("billing_admin:plans_list"), {"name": "", "slug": ""}, follow=True)
+        self.assertContains(respuesta, "Revisa los datos del plan.")
+        self.assertEqual(Plan.objects.count(), total_antes)
+
+    def test_crear_plan_valido_desde_el_modal_funciona_igual_que_antes(self):
+        respuesta = self.client.post(reverse("billing_admin:plans_list"), {
+            "name": "Plan de Prueba Modal", "slug": "plan-prueba-modal", "description": "",
+            "is_active": "on", "sort_order": "0",
+        }, follow=True)
+        self.assertContains(respuesta, "Plan creado.")
+        self.assertTrue(Plan.objects.filter(slug="plan-prueba-modal").exists())
+
+    def test_cuentas_bancarias_tiene_boton_y_modal_nueva_cuenta(self):
+        respuesta = self.client.get(reverse("billing_admin:bank_accounts_list"))
+        self.assertContains(respuesta, "+ Nueva cuenta")
+        self.assertContains(respuesta, 'data-modal-open="modal-nueva-cuenta"')
+        self.assertContains(respuesta, 'id="modal-nueva-cuenta"')
+
+    def test_columna_cuenta_del_listado_muestra_el_numero_enmascarado(self):
+        BankAccount.objects.create(
+            bank_name="BHD León", country="República Dominicana", currency="USD",
+            account_holder="Budun Global Dominicana S.R.L.", account_number="1015236789015616", is_active=True,
+        )
+        respuesta = self.client.get(reverse("billing_admin:bank_accounts_list"))
+        self.assertContains(respuesta, "····5616")
+
+    def test_modal_de_editar_cuenta_sigue_mostrando_el_numero_completo(self):
+        cuenta = BankAccount.objects.create(
+            bank_name="BHD León", country="República Dominicana", currency="USD",
+            account_holder="Budun Global Dominicana S.R.L.", account_number="1015236789015616", is_active=True,
+        )
+        respuesta = self.client.get(reverse("billing_admin:bank_accounts_list"))
+        # El campo del modal de edición renderiza el valor real del form
+        # ligado a la instancia — nunca pasa por el filtro de enmascaramiento.
+        self.assertContains(respuesta, f'value="{cuenta.account_number}"')
+
+    def test_crear_cuenta_invalida_no_crea_nada_y_muestra_el_mensaje_real(self):
+        total_antes = BankAccount.objects.count()
+        respuesta = self.client.post(reverse("billing_admin:bank_accounts_list"), {"bank_name": ""}, follow=True)
+        self.assertContains(respuesta, "Revisa los datos de la cuenta.")
+        self.assertEqual(BankAccount.objects.count(), total_antes)
+
+    def test_crear_cuenta_valida_desde_el_modal_funciona_igual_que_antes(self):
+        respuesta = self.client.post(reverse("billing_admin:bank_accounts_list"), {
+            "bank_name": "Banco Nuevo Modal", "country": "RD", "currency": "USD",
+            "account_holder": "Budun SRL", "account_number": "9999888877776666",
+            "account_type": "", "is_active": "on", "priority": "0", "notes": "",
+        }, follow=True)
+        self.assertContains(respuesta, "Cuenta bancaria creada.")
+        self.assertTrue(BankAccount.objects.filter(account_number="9999888877776666").exists())
+
+    def test_filtro_enmascarar_cuenta_no_toca_el_valor_real_solo_la_presentacion(self):
+        self.assertEqual(enmascarar_cuenta("1015236789015616"), "····5616")
+        self.assertEqual(enmascarar_cuenta("123"), "123")
+        self.assertEqual(enmascarar_cuenta(""), "")
 
 
 class RevisionVisualFaseBTests(TestCase):
@@ -533,6 +718,9 @@ class RevisionVisualFaseCTests(TestCase):
         )
         respuesta = self.client.get(reverse("billing_admin:transfers_queue"))
         self.assertContains(respuesta, "Banco Auditoria")
+        # FASE 6 — "Revisar" pasó de contorno gris a azul sólido (btn--primario),
+        # mismo destino real (proof_detail), solo cambia la presentación.
+        self.assertContains(respuesta, 'class="btn btn--primario btn--sm"')
 
     def test_transfers_queue_estado_vacio_sin_emoji(self):
         """Hallazgo real: el barrido de emojis de la FASE REDISEÑO VISUAL
@@ -544,6 +732,17 @@ class RevisionVisualFaseCTests(TestCase):
         self.assertIn("Sin transferencias pendientes", contenido)
         self.assertNotIn("✅", contenido)
         self.assertIn("icono-svg", contenido)
+
+    def test_transfers_queue_usa_titulo_corto_y_boton_revisar_azul_solido(self):
+        """FASE 6 — implementación visual: el diseño Stitch final aprobado
+        (editado manualmente por el usuario) acorta el título a
+        "Transferencias" y cambia "Revisar" de contorno gris a azul sólido
+        (`btn--primario`) — mismo enlace/URL/destino real, solo cambia la
+        presentación."""
+        respuesta = self.client.get(reverse("billing_admin:transfers_queue"))
+        contenido = respuesta.content.decode()
+        self.assertIn("<h1>Transferencias</h1>", contenido)
+        self.assertNotIn("Transferencias por verificar", contenido)
 
     def test_proof_detail_aprobar_usa_modal_de_confirmacion(self):
         """"Aprobar" ya no es un envío directo de un clic — abre un modal
@@ -630,29 +829,8 @@ class RevisionVisualFaseCTests(TestCase):
         self.assertIn(f'id="modal-completar-{refund.pk}"', contenido)
         self.assertIn(reverse("billing_admin:complete_refund", args=[refund.pk]), contenido)
 
-    def test_credit_notes_list_muestra_estado_vacio_real_cuando_no_hay_notas(self):
-        respuesta = self.client.get(reverse("billing_admin:credit_notes_list"))
-        self.assertContains(respuesta, "Sin notas de crédito todavía")
-        self.assertContains(respuesta, "estado-vacio")
-
-    def test_credit_notes_list_muestra_saldo_disponible_y_estado_real(self):
-        """Hallazgo real: el listado mostraba el monto emitido de cada
-        nota pero nunca si ya estaba aplicada (parcial o totalmente) —
-        dato que ya existía como servicio
-        (`get_unapplied_credit_note_amount`) y ahora se anota en la
-        vista (`CreditNotesListView`), sin crear ninguna regla nueva."""
-        from apps.billing.services import credits as credit_services
-
-        from ._helpers_saas import crear_saas_customer
-
-        tenant, owner = crear_tenant_con_owner(slug="tenant-nota-saldo")
-        saas_customer = crear_saas_customer(email="cliente.nota.saldo@example.com")
-        credit_services.issue_credit_note(
-            tenant=tenant, saas_customer=saas_customer, amount=Decimal("15.00"), currency="USD",
-            reason="Ajuste de auditoría",
-        )
-        respuesta = self.client.get(reverse("billing_admin:credit_notes_list"))
-        contenido = respuesta.content.decode()
-        self.assertIn("15.00 USD", contenido)
-        self.assertIn("Disponible", contenido)
-        self.assertIn("Ajuste de auditoría", contenido)
+    # NOTA (retiro de Notas de crédito del SaaS Super Admin): las pruebas
+    # `test_credit_notes_list_muestra_estado_vacio_real_cuando_no_hay_notas` y
+    # `test_credit_notes_list_muestra_saldo_disponible_y_estado_real` probaban
+    # `CreditNotesListView`/`billing_admin:credit_notes_list`, retirados junto con el
+    # resto de la UI manual de Notas de crédito del Super Admin.
