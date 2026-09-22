@@ -18,7 +18,7 @@
         <p class="saas-etiqueta-seccion u-mt-4">Versiones de precio</p>
         {% for version in plan.versions.all %}
         <div class="saas-fila-precio">
-            <span><strong>{{ version.price_amount|monto }} {{ version.price_currency }}</strong> — {{ version.get_frequency_display }}</span>
+            <span><strong class="u-cifra">{{ version.price_amount|monto }} {{ version.price_currency }}</strong> — {{ version.get_frequency_display }}</span>
             {% if version.is_current %}<span class="badge badge--verde">Vigente</span>{% endif %}
         </div>
         {% empty %}<p>Sin precios configurados.</p>{% endfor %}

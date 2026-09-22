@@ -18,12 +18,12 @@
 {% if subscription %}
     <div class="tarjeta">
         <div class="tarjeta__cuerpo">
-            <div class="saas-tarjeta-encabezado">
-                <h2>Plan &amp; Suscripción</h2>
+            <div class="saas-card__encabezado">
+                <h2 class="saas-card__titulo">Plan &amp; Suscripción</h2>
                 <span class="badge badge--azul">{{ subscription.plan_version.plan.name }}</span>
             </div>
 
-            <p class="saas-precio-grande">{{ subscription.plan_version.price_amount|monto }} {{ subscription.plan_version.price_currency }} <small>/ {{ subscription.plan_version.get_frequency_display }}</small></p>
+            <p class="saas-precio-grande"><span class="u-cifra">{{ subscription.plan_version.price_amount|monto }} {{ subscription.plan_version.price_currency }}</span> <small>/ {{ subscription.plan_version.get_frequency_display }}</small></p>
 
             <ul class="saas-meta-lista">
                 <li><span class="etiqueta">Estado de suscripción:</span> <span class="badge badge--{{ subscription.status|estado_badge }}">{{ subscription.get_status_display }}</span></li>
@@ -65,34 +65,42 @@
 {% endif %}
 
     <div class="tarjeta">
-        <div class="tarjeta__encabezado">Facturas recientes</div>
-        {% if invoices %}
-        <table class="tabla">
-            <thead><tr><th>Número</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-            <tbody>
-                {% for invoice in invoices %}
-                <tr>
-                    <td>{{ invoice.number }}</td>
-                    <td>{{ invoice.issue_date }}</td>
-                    <td>{{ invoice.total|monto }} {{ invoice.currency }}</td>
-                    <td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
-                    <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="estado-vacio"><div class="estado-vacio__icono">{% icono "recibo" %}</div><h3>Sin facturas todavía</h3></div>
-        {% endif %}
+        <div class="tarjeta__cuerpo">
+            <div class="saas-card__encabezado">
+                <h2 class="saas-card__titulo">Facturas recientes</h2>
+            </div>
+            {% if invoices %}
+            <div class="tabla-envoltorio">
+                <table class="tabla">
+                    <thead><tr><th>Número</th><th>Fecha</th><th class="u-text-derecha">Total</th><th>Estado</th><th></th></tr></thead>
+                    <tbody>
+                        {% for invoice in invoices %}
+                        <tr>
+                            <td>{{ invoice.number }}</td>
+                            <td>{{ invoice.issue_date }}</td>
+                            <td class="u-text-derecha u-cifra">{{ invoice.total|monto }} {{ invoice.currency }}</td>
+                            <td><span class="badge badge--{{ invoice.status|estado_badge }}">{{ invoice.get_status_display }}</span></td>
+                            <td><a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:invoice_detail' invoice.pk %}">Ver</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="estado-vacio"><div class="estado-vacio__icono">{% icono "recibo" %}</div><h3>Sin facturas todavía</h3></div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
 {% if not subscription %}
 <div class="tarjeta u-mb-6">
-    <div class="tarjeta__cuerpo encabezado-pagina__acciones">
-        <form method="post">{% csrf_token %}<button type="submit" class="btn btn--contorno btn--sm" name="accion" value="reactivar">Reactivar</button></form>
-        <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-suspender-tenant">Suspender</button>
-        <button type="button" class="btn btn--peligro-suave btn--sm" data-modal-open="modal-cancelar-tenant">Cancelar</button>
+    <div class="tarjeta__cuerpo">
+        <div class="saas-acciones-tarjeta">
+            <form method="post">{% csrf_token %}<button type="submit" class="btn btn--contorno btn--sm" name="accion" value="reactivar">Reactivar</button></form>
+            <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-suspender-tenant">Suspender</button>
+            <button type="button" class="btn btn--peligro-suave btn--sm" data-modal-open="modal-cancelar-tenant">Cancelar</button>
+        </div>
     </div>
 </div>
 {% endif %}

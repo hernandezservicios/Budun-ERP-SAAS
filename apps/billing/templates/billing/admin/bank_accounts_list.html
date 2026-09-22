@@ -14,7 +14,7 @@
         <tbody>
             {% for cuenta, form_editar in filas %}
             <tr>
-                <td>{{ cuenta.bank_name }}</td><td>{{ cuenta.country }}</td><td>{{ cuenta.currency }}</td><td>{{ cuenta.account_holder }}</td><td>{{ cuenta.account_number|enmascarar_cuenta }}</td>
+                <td>{{ cuenta.bank_name }}</td><td>{{ cuenta.country }}</td><td>{{ cuenta.currency }}</td><td>{{ cuenta.account_holder }}</td><td class="u-cifra">{{ cuenta.account_number|enmascarar_cuenta }}</td>
                 <td><span class="badge {% if cuenta.is_active %}badge--verde{% else %}badge--neutro{% endif %}">{{ cuenta.is_active|yesno:"Activa,Inactiva" }}</span></td>
                 <td>
                     <button type="button" class="btn btn--contorno btn--sm" data-modal-open="modal-editar-cuenta-{{ cuenta.pk }}">Editar</button>

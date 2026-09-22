@@ -9,8 +9,8 @@
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Transacción <span class="badge badge--{{ transaccion.status|estado_badge }}">{{ transaccion.get_status_display }}</span></h3>
         <p>Tenant: {{ transaccion.tenant|default:"—" }} · Plan: {{ transaccion.plan_id }}</p>
-        <p>Monto: {{ transaccion.amount|monto }} {{ transaccion.currency }}</p>
-        {% if transaccion.failure_reason %}<p class="badge badge--peligro">{{ transaccion.failure_reason }}</p>{% endif %}
+        <p>Monto: <span class="u-cifra">{{ transaccion.amount|monto }} {{ transaccion.currency }}</span></p>
+        {% if transaccion.failure_reason %}<div class="alerta alerta--peligro">{{ transaccion.failure_reason }}</div>{% endif %}
         <p>
             <a class="btn btn--contorno" href="{% url 'billing_platform:transaction_detail' transaccion.pk %}">Ver detalle</a>
             <a class="btn btn--fantasma" href="{% url 'billing_platform:status' %}">← Volver a PayPal</a>

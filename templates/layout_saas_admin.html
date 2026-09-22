@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% load ui_extras ui_icons %}
 {% comment %}
-Shell de la PLATAFORMA SaaS (Super Admin) — FASE DE REDISEÑO VISUAL SaaS
-2.0 / FASE — Rediseño Visual Maestro. Deliberadamente SEPARADO de
-`layout_app.html` (shell del ERP tenant): un Super Admin administrando
-Tenants/Planes/Facturación/PayPal de la plataforma nunca debe ver los
-menús operativos de un ERP (Inventario, Ventas, POS, RRHH, etc.) — ver
-"SaaS Visual Shell Separation" en
+Shell de la PLATAFORMA SaaS (Super Admin) — FASE E, Master Shell del
+Budun Design System V1 — Hybrid (docs/design-system-v1-hybrid.md).
+Deliberadamente SEPARADO de `layout_app.html` (shell del ERP tenant):
+un Super Admin administrando Tenants/Planes/Facturación/PayPal de la
+plataforma nunca debe ver los menús operativos de un ERP (Inventario,
+Ventas, POS, RRHH, etc.) — ver "SaaS Visual Shell Separation" en
 docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md. Usado únicamente
 por las plantillas de los namespaces `billing_admin` (FASE 17) y
 `billing_platform` (FASE 16, PayPal de plataforma). El Portal del
@@ -15,156 +15,186 @@ porque ahí el tenant ve su PROPIA facturación dentro de su sesión ERP
 normal, no la plataforma completa.
 
 El modificador `shell--saas` en el contenedor raíz acota CUALQUIER
-refinamiento visual (tipografía, espaciado) que sería arriesgado
-aplicar a los selectores compartidos con el ERP (h1/h2/h3 genéricos) —
-ver la sección "SaaS Visual Shell Separation" para el porqué.
+refinamiento visual (tipografía, espaciado, color) que sería arriesgado
+aplicar a los selectores compartidos con el ERP (h1/h2/h3 genéricos,
+`--color-primario`, `--color-saas-sidebar-*`) — ver la sección
+"SaaS Visual Shell Separation" para el porqué.
 
 Iconografía: sistema SVG propio (`apps/core/templatetags/ui_icons.py`),
 nunca emoji — ver "SaaS Icon System" en el Knowledge Kit.
 
-Tipografía (FASE 7.3 — implementación visual completa): Geist (encabezados)
-+ Inter (cuerpo), cargadas vía Google Fonts en `extra_head` — mismas
-familias usadas en el diseño Stitch aprobado. Marca del sidebar (icono
-de cuadrícula en caja azul + "Budun ERP") y el bloque de usuario del
-topbar (avatar + nombre + "Super Admin") reproducen el Master Shell de
-Stitch (screenId a7cf5c0731344ff1a1ce69e1b0e9022d) — ver la sección
-"FASE 7.3" de docs/project-status/STITCH-SAAS-SCREEN-MAP.md.
+Tipografía: Public Sans (encabezados + cuerpo) + JetBrains Mono
+(cifras/datos numéricos tabulares) — tokens de la dirección D — Hybrid,
+aprobada en FASE 7 tras el Design Lab (scratch/budun-design-lab.html,
+fuera del repositorio de producto). Stitch dejó de ser la autoridad
+visual a partir de esa fase; el Design System V1 es ahora la única
+fuente de verdad visual del Super Admin SaaS.
+
+Sidebar: compacto 76px (solo iconos) / expandido 228px (icono + texto),
+con toggle real (`data-sidebar-ancho-toggle`) — distinto del toggle
+móvil ya existente (`data-sidebar-toggle`, panel off-canvas en
+`ui.js:initSidebar()`, que sigue intacto y sin relación con este). Ver
+`docs/design-system-v1-hybrid.md` §10.
 {% endcomment %}
 {% block extra_head %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 {% endblock %}
 {% block body %}
 <div class="shell shell--saas">
     <div class="sidebar__respaldo" data-sidebar-backdrop></div>
     <aside class="sidebar sidebar--saas" aria-label="Navegación de la plataforma SaaS">
-        <a class="sidebar__marca" href="{% url 'billing_admin:dashboard' %}">
-            <span class="sidebar__marca__icono" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zm-9 9h7v7H4v-7zm9 0h7v7h-7v-7z"/></svg>
-            </span>
-            <span class="sidebar__marca__texto">Budun ERP</span>
-        </a>
+        <div class="sidebar__nav-scroll">
+            <a class="sidebar__marca" href="{% url 'billing_admin:dashboard' %}">
+                <span class="sidebar__marca__icono" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zm-9 9h7v7H4v-7zm9 0h7v7h-7v-7z"/></svg>
+                </span>
+                <span class="sidebar__marca__texto">Budun ERP</span>
+            </a>
 
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Inicio</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:dashboard' %}"
-                       {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'billing_admin' %}aria-current="page"{% endif %}>
-                        {% icono "home" clase="sidebar__icono" %} Dashboard
-                    </a>
-                </li>
-            </ul>
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Inicio</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:dashboard' %}" title="Dashboard"
+                           {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'billing_admin' %}aria-current="page"{% endif %}>
+                            {% icono "home" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Dashboard</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Clientes y tenants</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:tenants_list' %}" title="Tenants"
+                           {% if request.resolver_match.url_name == 'tenants_list' or request.resolver_match.url_name == 'tenant_detail' %}aria-current="page"{% endif %}>
+                            {% icono "edificio" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Tenants</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:customers_list' %}" title="Clientes"
+                           {% if request.resolver_match.url_name == 'customers_list' or request.resolver_match.url_name == 'customer_detail' %}aria-current="page"{% endif %}>
+                            {% icono "usuarios" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Clientes</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Comercial</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:manual_sale' %}" title="Venta manual"
+                           {% if request.resolver_match.url_name == 'manual_sale' %}aria-current="page"{% endif %}>
+                            {% icono "carrito" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Venta manual</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:plans_list' %}" title="Planes"
+                           {% if request.resolver_match.url_name == 'plans_list' or request.resolver_match.url_name == 'plan_version_create' %}aria-current="page"{% endif %}>
+                            {% icono "paquete" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Planes</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:subscriptions_list' %}" title="Suscripciones"
+                           {% if request.resolver_match.url_name == 'subscriptions_list' %}aria-current="page"{% endif %}>
+                            {% icono "repetir" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Suscripciones</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Facturación</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:invoices_list' %}" title="Facturas"
+                           {% if request.resolver_match.url_name == 'invoices_list' or request.resolver_match.url_name == 'invoice_detail' %}aria-current="page"{% endif %}>
+                            {% icono "recibo" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Facturas</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Finanzas</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:payments_list' %}" title="Pagos"
+                           {% if request.resolver_match.url_name == 'payments_list' %}aria-current="page"{% endif %}>
+                            {% icono "tarjeta" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Pagos</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:transfers_queue' %}" title="Transferencias"
+                           {% if request.resolver_match.url_name == 'transfers_queue' or request.resolver_match.url_name == 'proof_detail' %}aria-current="page"{% endif %}>
+                            {% icono "intercambio" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Transferencias</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:refunds_list' %}" title="Reembolsos"
+                           {% if request.resolver_match.url_name == 'refunds_list' %}aria-current="page"{% endif %}>
+                            {% icono "reembolso" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Reembolsos</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:bank_accounts_list' %}" title="Cuentas bancarias"
+                           {% if request.resolver_match.url_name == 'bank_accounts_list' %}aria-current="page"{% endif %}>
+                            {% icono "banco" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Cuentas bancarias</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Reportes</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:reports' %}" title="Reportes"
+                           {% if request.resolver_match.url_name == 'reports' %}aria-current="page"{% endif %}>
+                            {% icono "barras" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Reportes</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Configuración / cuenta</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:profile' %}" title="Mi perfil"
+                           {% if request.resolver_match.url_name == 'profile' %}aria-current="page"{% endif %}>
+                            {% icono "perfil" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Mi perfil</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_admin:password_change' %}" title="Cambiar contraseña"
+                           {% if request.resolver_match.url_name == 'password_change' or request.resolver_match.url_name == 'password_change_done' %}aria-current="page"{% endif %}>
+                            {% icono "candado" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">Cambiar contraseña</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar__grupo">
+                <p class="sidebar__grupo-titulo">Integraciones</p>
+                <ul class="sidebar__nav">
+                    <li>
+                        <a class="sidebar__enlace" href="{% url 'billing_platform:status' %}" title="PayPal"
+                           {% if request.resolver_match.namespace == 'billing_platform' %}aria-current="page"{% endif %}>
+                            {% icono "paypal" clase="sidebar__icono" %}<span class="sidebar__enlace-texto">PayPal</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </div>
 
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Clientes y tenants</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:customers_list' %}"
-                       {% if request.resolver_match.url_name == 'customers_list' or request.resolver_match.url_name == 'customer_detail' %}aria-current="page"{% endif %}>
-                        {% icono "usuarios" clase="sidebar__icono" %} Clientes
-                    </a>
-                </li>
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:tenants_list' %}"
-                       {% if request.resolver_match.url_name == 'tenants_list' or request.resolver_match.url_name == 'tenant_detail' %}aria-current="page"{% endif %}>
-                        {% icono "edificio" clase="sidebar__icono" %} Tenants
-                    </a>
-                </li>
-            </ul>
-        </div>
-
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Comercial</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:manual_sale' %}"
-                       {% if request.resolver_match.url_name == 'manual_sale' %}aria-current="page"{% endif %}>
-                        {% icono "carrito" clase="sidebar__icono" %} Venta manual
-                    </a>
-                </li>
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:plans_list' %}"
-                       {% if request.resolver_match.url_name == 'plans_list' or request.resolver_match.url_name == 'plan_version_create' %}aria-current="page"{% endif %}>
-                        {% icono "paquete" clase="sidebar__icono" %} Planes
-                    </a>
-                </li>
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:subscriptions_list' %}"
-                       {% if request.resolver_match.url_name == 'subscriptions_list' %}aria-current="page"{% endif %}>
-                        {% icono "repetir" clase="sidebar__icono" %} Suscripciones
-                    </a>
-                </li>
-            </ul>
-        </div>
-
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Facturación</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:invoices_list' %}"
-                       {% if request.resolver_match.url_name == 'invoices_list' or request.resolver_match.url_name == 'invoice_detail' %}aria-current="page"{% endif %}>
-                        {% icono "recibo" clase="sidebar__icono" %} Facturas
-                    </a>
-                </li>
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:payments_list' %}"
-                       {% if request.resolver_match.url_name == 'payments_list' %}aria-current="page"{% endif %}>
-                        {% icono "tarjeta" clase="sidebar__icono" %} Pagos
-                    </a>
-                </li>
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:transfers_queue' %}"
-                       {% if request.resolver_match.url_name == 'transfers_queue' or request.resolver_match.url_name == 'proof_detail' %}aria-current="page"{% endif %}>
-                        {% icono "intercambio" clase="sidebar__icono" %} Transferencias
-                    </a>
-                </li>
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:refunds_list' %}"
-                       {% if request.resolver_match.url_name == 'refunds_list' %}aria-current="page"{% endif %}>
-                        {% icono "reembolso" clase="sidebar__icono" %} Reembolsos
-                    </a>
-                </li>
-            </ul>
-        </div>
-
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Finanzas</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:bank_accounts_list' %}"
-                       {% if request.resolver_match.url_name == 'bank_accounts_list' %}aria-current="page"{% endif %}>
-                        {% icono "banco" clase="sidebar__icono" %} Cuentas bancarias
-                    </a>
-                </li>
-            </ul>
-        </div>
-
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Reportes</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_admin:reports' %}"
-                       {% if request.resolver_match.url_name == 'reports' %}aria-current="page"{% endif %}>
-                        {% icono "barras" clase="sidebar__icono" %} Reportes
-                    </a>
-                </li>
-            </ul>
-        </div>
-
-        <div class="sidebar__grupo">
-            <p class="sidebar__grupo-titulo">Integraciones</p>
-            <ul class="sidebar__nav">
-                <li>
-                    <a class="sidebar__enlace" href="{% url 'billing_platform:status' %}"
-                       {% if request.resolver_match.namespace == 'billing_platform' %}aria-current="page"{% endif %}>
-                        {% icono "paypal" clase="sidebar__icono" %} PayPal
-                    </a>
-                </li>
-            </ul>
-        </div>
+        <button type="button" class="sidebar__toggle-ancho" data-sidebar-ancho-toggle aria-expanded="false" aria-label="Expandir navegación">
+            {% icono "chevron-derecha" %}
+        </button>
     </aside>
 
     <header class="navbar navbar--saas">

@@ -30,6 +30,51 @@
         });
     }
 
+    /* --- Sidebar SaaS: ancho compacto/expandido (FASE E — Master Shell,
+       Design System V1 Hybrid) ------------------------------------------
+       Completamente distinto del toggle móvil de arriba (atributo
+       `data-sidebar-ancho-toggle`, nunca `data-sidebar-toggle`): este
+       alterna el ANCHO del sidebar en escritorio (76px ↔ 228px, via el
+       atributo `data-sidebar-modo` en `.shell--saas`), el de arriba
+       abre/cierra el panel off-canvas en tablet/móvil. Persiste la
+       preferencia en localStorage para que no se reinicie a compacto en
+       cada navegación real (recarga completa de página, no es una SPA). */
+    function initSidebarAnchoToggle() {
+        var shell = document.querySelector(".shell--saas");
+        var boton = document.querySelector("[data-sidebar-ancho-toggle]");
+        if (!shell || !boton) return;
+
+        var CLAVE_ALMACEN = "budun-saas-sidebar-modo";
+
+        function aplicar(modo) {
+            shell.setAttribute("data-sidebar-modo", modo);
+            var expandido = modo === "expandido";
+            boton.setAttribute("aria-expanded", expandido ? "true" : "false");
+            boton.setAttribute("aria-label", expandido ? "Contraer navegación" : "Expandir navegación");
+        }
+
+        var guardado = null;
+        try {
+            guardado = localStorage.getItem(CLAVE_ALMACEN);
+        } catch (e) {
+            /* localStorage no disponible (navegación privada, etc.) — se
+               usa el modo compacto por defecto sin persistencia. */
+        }
+        aplicar(guardado === "expandido" ? "expandido" : "compacto");
+
+        boton.addEventListener("click", function () {
+            var actual = shell.getAttribute("data-sidebar-modo") === "expandido" ? "expandido" : "compacto";
+            var siguiente = actual === "expandido" ? "compacto" : "expandido";
+            aplicar(siguiente);
+            try {
+                localStorage.setItem(CLAVE_ALMACEN, siguiente);
+            } catch (e) {
+                /* Sin persistencia disponible — el toggle sigue
+                   funcionando dentro de la misma carga de página. */
+            }
+        });
+    }
+
     /* --- Dropdown ------------------------------------------------------ */
     function initDropdowns() {
         var dropdowns = document.querySelectorAll("[data-dropdown]");
@@ -168,6 +213,7 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         initSidebar();
+        initSidebarAnchoToggle();
         initDropdowns();
         initModals();
         initTabs();

@@ -58,6 +58,14 @@ _ICONOS = {
     "recibo": '<path d="M6 3h12v18l-2.5-1.6L13 21l-1.5-1.6L10 21l-2.5-1.6L6 21Z"/><path d="M9 8h6M9 11.5h6M9 15h4"/>',
     "actividad": '<path d="M3 12h4l2-7 4 14 2-7h6"/>',
     "grafico-torta": '<path d="M12 3v9l7.5 4.3"/><circle cx="12" cy="12" r="8.5"/>',
+    # FASE E — Master Shell (Design System V1 Hybrid): el sidebar SaaS
+    # ahora enlaza "Mi perfil"/"Cambiar contraseña" también desde la
+    # navegación (antes solo vivían en el dropdown del topbar). Ningún
+    # icono existente encajaba (usuarios/usuario-mas son de 2 personas,
+    # pensados para "Clientes") — se agregan estos 2, mismo estilo
+    # outline 24x24 del resto del catálogo.
+    "perfil": '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="10" r="3"/><path d="M6.7 18.5a5.7 5.7 0 0 1 10.6 0"/>',
+    "candado": '<rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
 }
 
 

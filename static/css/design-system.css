@@ -182,6 +182,15 @@
    secciones (`.sidebar__grupo`). Nunca se mezcla con el `.sidebar` gris
    del ERP en la misma vista — ver "SaaS Visual Shell Separation" en
    docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md.
+
+   NOTA (auditoría FASE E): la mayoría de las declaraciones de color de
+   este bloque quedan sobrescritas más abajo por el bloque "Sidebar:
+   colores Hybrid" (FASE 7.3 → FASE E, mayor especificidad/orden
+   posterior) — se dejan intactas en vez de borrarlas porque
+   `.sidebar__enlace { border-radius; transition }` al final de este
+   bloque SÍ sigue activo (nadie más lo redeclara). Fuera de alcance de
+   esta fase tocar `--color-saas-sidebar-*` en base.css (ver nota en el
+   bloque `.shell--saas` más abajo).
    ============================================================ */
 
 .sidebar--saas {
@@ -255,20 +264,13 @@
     opacity: 0.9;
 }
 
-/* Scrollbar clara sobre el fondo azul profundo del sidebar SaaS —
-   la versión gris oscura por defecto (heredada de `html`) sería
-   invisible sobre este fondo. */
-.sidebar--saas {
-    scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
-}
-
-.sidebar--saas::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.25);
-}
-
-.sidebar--saas::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.4);
-}
+/* NOTA (FASE E — Master Shell): `.sidebar--saas` ya no hace scroll
+   directamente (ver `overflow: hidden` en el bloque de colores Hybrid
+   más abajo) — el scroll real ahora vive en `.sidebar__nav-scroll`,
+   con su barra visualmente oculta (Design System V1, no una barra
+   clara/oscura visible). Las reglas de scrollbar que existían aquí
+   para el `.sidebar--saas` antiguo quedaron sin efecto por diseño, no
+   por descuido — se retiran en vez de dejarlas como código muerto. */
 
 .navbar--saas .navbar__marca {
     color: var(--color-saas-sidebar-fondo);
@@ -329,16 +331,17 @@
 /* Separador bajo el encabezado de una pantalla de Detalle (Customer
    Detail, Tenant Detail en su versión aprobada) — opt-in, nunca en
    `.encabezado-pagina` por defecto (los listados no lo llevan). */
-/* --- Venta manual: tarjeta de formulario con 3 secciones agrupadas
-   (Cliente SaaS/Tenant/Owner), cada una con su propio encabezado +
-   separador, campos en columna con 20px de espacio entre sí y 32px
-   entre secciones — reproduce el HTML real de Stitch (screenId
-   598fbca7485d498a8afc604c7a42d735), no una aproximación genérica. */
-.saas-formulario-tarjeta {
-    border-radius: 1rem;
-    padding: 1.75rem;
-}
-
+/* --- Venta manual: 3 secciones agrupadas (Cliente SaaS/Tenant/Owner)
+   dentro de una `.tarjeta` + `.tarjeta__cuerpo` estándar — FASE
+   siguiente (auditoría Hybrid): antes tenía su propia clase
+   `.saas-formulario-tarjeta` con radio (1rem) y padding (1.75rem)
+   hardcodeados en vez de los tokens `--radio-lg`/`--espacio-*` que
+   usa cualquier otra tarjeta del sistema — un radio de tarjeta
+   distinto sin ninguna razón funcional es exactamente lo que el
+   Design System V1 prohíbe. Retirada: ahora es una `.tarjeta`
+   idéntica a las de Dashboard/Tenant Detail. Cada sección conserva
+   su propio encabezado + separador, campos en columna con 20px de
+   espacio entre sí y 32px entre secciones. */
 .saas-formulario-seccion+.saas-formulario-seccion {
     margin-top: var(--espacio-8);
 }
@@ -349,7 +352,13 @@
     border-bottom: 1px solid var(--gris-100);
 }
 
-.saas-formulario-seccion__encabezado h2 {
+/* Especificidad explícita `.shell--saas ...`: sin esto, la regla
+   compartida `.shell--saas h2 { font-size: var(--texto-lg) }` (misma
+   especificidad 0-1-1, pero definida más abajo en el archivo) le
+   ganaba por orden de aparición y anulaba en silencio este tamaño —
+   mismo bug-class ya encontrado y corregido en FASE F para las
+   cifras de KPI del Dashboard. */
+.shell--saas .saas-formulario-seccion__encabezado h2 {
     font-size: var(--texto-base);
     margin: 0;
 }
@@ -374,11 +383,13 @@
     margin-bottom: 0.375rem;
 }
 
-.saas-formulario-seccion .campo input,
-.saas-formulario-seccion .campo select {
-    height: 2.75rem;
-    border-radius: 0.75rem;
-}
+/* FASE siguiente (auditoría Hybrid): se retiró la altura/radio de
+   input propios de esta pantalla (2.75rem/0.75rem, ninguno un token
+   del sistema) — hacía que los campos de Venta manual se vieran más
+   altos y redondeados que los de cualquier otro formulario SaaS
+   (Planes, Cuentas bancarias). Ahora hereda `.campo input`/`.campo
+   select` tal cual (compartido con el ERP, nunca tocado), igual que
+   el resto de formularios de la plataforma. */
 
 .saas-formulario-pie {
     padding-top: var(--espacio-4);
@@ -544,7 +555,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--espacio-3);
-    margin-bottom: var(--espacio-4);
+    margin-bottom: var(--espacio-5);
 }
 
 .saas-card__titulo {
@@ -570,98 +581,56 @@
 }
 
 /* ============================================================
-   KPI CARD SaaS v2 — icono circular + valor + tendencia (FASE —
-   Rediseño Visual Maestro). Deliberadamente un componente NUEVO y
-   NUNCA una modificación de `.kpi`/`.kpi-grid` (FASE 7): ese
-   componente lo usa también el dashboard del ERP y varias vistas de
-   detalle de Ventas/Compras/Inventario/POS — tocarlo habría alterado
-   el ERP, algo explícitamente prohibido en esta fase. Ver "SaaS KPI
-   Card v2" en docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md.
+   KPI CARD SaaS (FASE F — migración a Design System V1 Hybrid).
+   Reemplaza el "v2" de la fase anterior (icono circular en 7 colores
+   distintos sin significado semántico consistente — dos métricas de
+   ingresos, por ejemplo, tenían colores distintos sin ninguna razón
+   funcional: exactamente el "icono decorativo sin función"/"color
+   arbitrario" que docs/design-system-v1-hybrid.md §17 prohíbe). El
+   componente Hybrid aprobado en la galería de referencia es
+   deliberadamente sobrio: etiqueta + cifra grande + tendencia, sin
+   icono — la jerarquía tipográfica es lo que distingue cada tarjeta,
+   no un color decorativo. Sigue siendo un componente EXCLUSIVO del
+   dashboard SaaS (nunca modifica `.kpi`/`.kpi-grid`, compartido con
+   el ERP).
    ============================================================ */
 .saas-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: var(--espacio-4);
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: var(--espacio-3);
 }
 
 .saas-kpi-card {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--espacio-4);
+    /* Salvaguarda contra el mismo "grid blowout" ya documentado en el
+       Design Lab: un hijo de grid conserva `min-width:auto` por
+       defecto, así que una cifra larga (mono, tabular-nums, sin punto
+       de quiebre natural) podría forzar su track más allá de
+       `minmax(210px, 1fr)`. */
+    min-width: 0;
     background: var(--color-superficie);
     border: 1px solid var(--color-borde);
     border-radius: var(--radio-lg);
     box-shadow: var(--sombra-sm);
-    padding: var(--espacio-5);
-}
-
-.saas-kpi-card__icono {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: var(--radio-completo);
-    flex-shrink: 0;
-}
-
-.saas-kpi-card__icono .icono-svg {
-    width: 1.35rem;
-    height: 1.35rem;
-}
-
-.saas-kpi-card__icono--azul {
-    background: var(--color-azul-100);
-    color: var(--color-azul-700);
-}
-
-.saas-kpi-card__icono--morado {
-    background: var(--color-morado-100);
-    color: var(--color-morado-700);
-}
-
-.saas-kpi-card__icono--verde {
-    background: var(--color-verde-100);
-    color: var(--color-verde-800);
-}
-
-.saas-kpi-card__icono--rojo {
-    background: var(--color-peligro-100);
-    color: var(--color-peligro-700);
-}
-
-.saas-kpi-card__icono--naranja {
-    background: var(--color-advertencia-100);
-    color: var(--color-advertencia-700);
-}
-
-.saas-kpi-card__icono--teal {
-    background: var(--color-teal-100);
-    color: var(--color-teal-700);
-}
-
-.saas-kpi-card__icono--gris {
-    background: var(--gris-100);
-    color: var(--gris-600);
-}
-
-.saas-kpi-card__cuerpo {
-    min-width: 0;
-    flex: 1;
+    padding: var(--espacio-4);
 }
 
 .saas-kpi-card__etiqueta {
-    font-size: var(--texto-sm);
+    font-size: var(--texto-xs);
+    font-weight: 600;
     color: var(--color-texto-tenue);
-    margin: 0 0 var(--espacio-1);
+    margin: 0 0 var(--espacio-2);
 }
 
 .saas-kpi-card__valor {
+    font-family: var(--fuente-mono, var(--fuente-base));
+    font-variant-numeric: tabular-nums;
     font-size: var(--texto-2xl);
-    font-weight: 700;
+    font-weight: 800;
+    letter-spacing: -0.01em;
     color: var(--gris-900);
-    line-height: 1.2;
-    margin: 0 0 var(--espacio-1);
+    line-height: 1.15;
+    margin: 0;
+    overflow-wrap: break-word;
 }
 
 .saas-kpi-card__tendencia {
@@ -671,7 +640,7 @@
     font-size: var(--texto-xs);
     font-weight: 600;
     color: var(--color-texto-tenue);
-    margin: 0;
+    margin: var(--espacio-2) 0 0;
 }
 
 .saas-kpi-card__tendencia .icono-svg {
@@ -762,7 +731,7 @@
 }
 
 .saas-dona__segmento--azul {
-    stroke: var(--color-azul-700);
+    stroke: var(--color-primario);
 }
 
 .saas-dona__segmento--neutro {
@@ -782,7 +751,7 @@
 }
 
 .saas-dona__punto--azul {
-    background: var(--color-azul-700);
+    background: var(--color-primario);
 }
 
 .saas-dona__punto--neutro {
@@ -793,13 +762,37 @@
     text-align: right;
 }
 
+/* Cifras de negocio (montos/cantidades/IDs) — docs/design-system-v1-hybrid.md
+   §6. Acotada a `.shell--saas` porque depende de `--fuente-mono`
+   (token local, ver el bloque `.shell--saas` más abajo) — fuera de
+   ese contexto no tiene ningún efecto (nunca toca el ERP). */
+.shell--saas .u-cifra {
+    font-family: var(--fuente-mono);
+    font-variant-numeric: tabular-nums;
+}
+
 /* ============================================================
    GRÁFICA DE DONA SaaS — SVG inline (stroke-dasharray por segmento).
    ============================================================ */
 .saas-dona {
+    /* FASE F — auditoría responsive: antes tenía `flex-shrink: 0` +
+       un `<svg width="140" height="140">` fijo en el template, así
+       que en una columna de grid angosta (ventana de escritorio
+       reducida con el sidebar expandido) se negaba a encoger y
+       desbordaba su tarjeta. `viewBox` ya preservaba el aspecto
+       1:1 — ahora el tamaño lo controla CSS (`width:100%`,
+       `max-width` como techo), genuinamente fluido en vez de una
+       salvaguarda que solo evita el desborde sin resolver el fondo. */
     position: relative;
     display: inline-flex;
-    flex-shrink: 0;
+    width: 100%;
+    max-width: 140px;
+}
+
+.saas-dona svg {
+    display: block;
+    width: 100%;
+    height: auto;
 }
 
 .saas-dona__centro {
@@ -865,6 +858,17 @@
     align-items: stretch;
 }
 
+/* Salvaguarda de grid (Dashboard únicamente, no toca `.tarjeta`
+   compartida): la dona tiene un SVG de ancho fijo (140px) — en una
+   ventana de escritorio angosta con el sidebar expandido, el track
+   de 1fr más angosto podría quedar por debajo de eso. `min-width:0`
+   deja que el track respete el espacio real disponible en vez de
+   forzarse más ancho por el contenido. */
+.saas-dashboard-fila > .tarjeta,
+.saas-dashboard-fila--2col > .tarjeta {
+    min-width: 0;
+}
+
 @media (max-width: 1024px) {
 
     .saas-dashboard-fila,
@@ -884,6 +888,12 @@
     gap: var(--espacio-3);
 }
 
+/* FASE F: un solo tratamiento neutro para los 3 tipos de evento
+   reales (suscripción/pago/cliente) en vez de 3 colores decorativos
+   sin significado semántico (reutilizaban `.saas-kpi-card__icono--*`,
+   ahora retirado — ver comentario del bloque KPI). El título/subtítulo
+   de cada evento ya comunica de qué se trata; el color no necesita
+   hacerlo también. */
 .saas-actividad-item__icono {
     display: inline-flex;
     align-items: center;
@@ -892,6 +902,8 @@
     height: 2.2rem;
     border-radius: var(--radio-completo);
     flex-shrink: 0;
+    background: var(--gris-100);
+    color: var(--color-texto-tenue);
 }
 
 .saas-actividad-item__icono .icono-svg {
@@ -2355,23 +2367,57 @@ dialog.modal::backdrop {
 }
 
 /* ============================================================
-   FASE 7.3 — IMPLEMENTACIÓN VISUAL COMPLETA DEL SAAS.
-   Todo lo siguiente está acotado a `.shell--saas`/`.sidebar--saas`/
-   `.navbar--saas` — nunca toca el shell del ERP (`layout_app.html`,
-   `.sidebar` sin modificador). Reproduce el Master Shell real de
-   Stitch (screenId a7cf5c0731344ff1a1ce69e1b0e9022d, verificado
-   pantalla por pantalla): tipografía Geist/Inter, azul de marca
-   #2563EB, sidebar #0B0F14, indicador activo con borde izquierdo azul
-   (no blanco), marca con icono, topbar sin buscador con bloque de
-   usuario avatar+nombre+rol, y el patrón de tabla "tarjeta blanca"
-   reutilizado por la mayoría de los listados SaaS.
+   FASE 7.3 (histórico) → FASE E — MASTER SHELL DEL BUDUN DESIGN
+   SYSTEM V1 (HYBRID). Todo lo siguiente está acotado a
+   `.shell--saas`/`.sidebar--saas`/`.navbar--saas` — nunca toca el
+   shell del ERP (`layout_app.html`, `.sidebar` sin modificador).
+   FASE 7.3 reproducía el Master Shell de Stitch (screenId
+   a7cf5c0731344ff1a1ce69e1b0e9022d); desde FASE 7, Stitch dejó de ser
+   autoridad visual y este bloque implementa en su lugar
+   docs/design-system-v1-hybrid.md: tipografía Public Sans, sidebar
+   Hybrid #101216 con indicador activo con borde izquierdo azul
+   (`--color-primario`, #2A4CD6), marca con icono, topbar sin buscador
+   con bloque de usuario avatar+nombre+rol (sin cambios de FASE 7.3), y
+   el patrón de tabla "tarjeta blanca" reutilizado por la mayoría de
+   los listados SaaS (sin cambios de FASE 7.3 — la tabla es alcance de
+   pantallas individuales, no del Master Shell).
    ============================================================ */
 
+/* Budun Design System V1 — Hybrid (FASE 7 → FASE E Master Shell,
+   docs/design-system-v1-hybrid.md). Reemplaza los tokens Stitch de
+   FASE 7.3 (Geist/Inter, azul #2563EB) — Stitch dejó de ser autoridad
+   visual a partir de FASE 7. Nota transparente: `base.css` define
+   `--color-saas-sidebar-*` (líneas 87-92) pensados originalmente para
+   este sidebar, pero en la práctica quedaron sobrescritos por valores
+   hardcodeados desde FASE 7.3 (ver el bloque "Sidebar: colores" más
+   abajo) — `base.css` está fuera del alcance de archivos autorizados
+   de esta fase (solo design-system.css/layout_saas_admin.html/ui.js),
+   así que se documenta aquí en vez de dejarlo como hallazgo silencioso. */
 .shell--saas {
-    font-family: 'Inter', var(--fuente-base);
-    --color-primario: #2563EB;
-    --color-primario-hover: #1D4ED8;
+    font-family: 'Public Sans', var(--fuente-base);
+    --color-primario: #2A4CD6;
+    --color-primario-hover: #2140B8;
     --alto-navbar: 64px;
+    /* Cifras de negocio (montos, cantidades, IDs) — docs/design-system-v1-hybrid.md
+       §6: mono + tabular-nums para que las columnas alineen dígito por
+       dígito. Cargada vía Google Fonts en layout_saas_admin.html
+       (FASE E, junto a Public Sans). Token nuevo — no existía un
+       equivalente en base.css (`--fuente-base` es la única familia
+       tipográfica global, sin variante mono). */
+    --fuente-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    /* Sidebar Hybrid: compacto por defecto, expandido vía toggle real
+       (data-sidebar-ancho-toggle en layout_saas_admin.html + JS en
+       ui.js). Variable propia --ancho-sidebar-saas, deliberadamente
+       DISTINTA de --ancho-sidebar (compartida con el ERP, base.css:128,
+       nunca tocada) — el sidebar SaaS nunca hereda ni afecta el ancho
+       del sidebar del ERP. */
+    --ancho-sidebar-saas-compacto: 76px;
+    --ancho-sidebar-saas-expandido: 228px;
+    --ancho-sidebar-saas: var(--ancho-sidebar-saas-compacto);
+}
+.shell--saas[data-sidebar-modo="expandido"] {
+    --ancho-sidebar-saas: var(--ancho-sidebar-saas-expandido);
 }
 
 /* Layout real: sidebar `position: fixed` + contenido con `margin-left`,
@@ -2392,25 +2438,56 @@ dialog.modal::backdrop {
         top: 0;
         left: 0;
         bottom: 0;
-        width: var(--ancho-sidebar);
+        width: var(--ancho-sidebar-saas);
         height: 100vh;
         z-index: 30;
+        transition: width .16s ease-out;
     }
 
     .shell--saas .navbar--saas {
-        margin-left: var(--ancho-sidebar);
+        margin-left: var(--ancho-sidebar-saas);
+        transition: margin-left .16s ease-out;
     }
 
     .shell--saas .main {
-        margin-left: var(--ancho-sidebar);
+        margin-left: var(--ancho-sidebar-saas);
+        transition: margin-left .16s ease-out;
     }
-}
 
-/* Scrollbar del sidebar: delgada y discreta como en Stitch (6px, no
-   los 10px por defecto de `base.css`) — solo aparece si el contenido
-   de la navegación realmente excede la altura de la ventana. */
-.sidebar--saas::-webkit-scrollbar {
-    width: 6px;
+    /* Modo compacto (por defecto, sin necesidad del atributo): oculta
+       marca/etiqueta de grupo/texto de enlace, deja solo el icono
+       centrado — nunca texto truncado con ellipsis, texto realmente
+       ausente del layout. Acotado a escritorio: en tablet/móvil
+       (<1025px) el sidebar sigue siendo el panel off-canvas existente
+       a ancho completo, sin este comportamiento icon-only. */
+    .shell--saas .sidebar__marca__texto,
+    .shell--saas .sidebar__grupo-titulo,
+    .shell--saas .sidebar__enlace-texto {
+        display: none;
+    }
+    .shell--saas .sidebar__marca,
+    .shell--saas .sidebar__enlace {
+        justify-content: center;
+    }
+    .shell--saas .sidebar__toggle-ancho {
+        display: flex;
+    }
+
+    /* Modo expandido: revierte el modo icon-only. Mayor especificidad
+       ([data-sidebar-modo="expandido"] + clase) para ganarle sin
+       ambigüedad a las reglas icon-only de arriba, mismo patrón ya
+       usado en el Design Lab. */
+    .shell--saas[data-sidebar-modo="expandido"] .sidebar__marca__texto,
+    .shell--saas[data-sidebar-modo="expandido"] .sidebar__enlace-texto {
+        display: inline;
+    }
+    .shell--saas[data-sidebar-modo="expandido"] .sidebar__grupo-titulo {
+        display: block;
+    }
+    .shell--saas[data-sidebar-modo="expandido"] .sidebar__marca,
+    .shell--saas[data-sidebar-modo="expandido"] .sidebar__enlace {
+        justify-content: flex-start;
+    }
 }
 
 .shell--saas h1,
@@ -2418,10 +2495,21 @@ dialog.modal::backdrop {
 .shell--saas h3,
 .shell--saas .sidebar__marca__texto,
 .shell--saas .navbar__usuario-nombre,
-.shell--saas .tabla th,
-.shell--saas .saas-kpi-card__valor,
+.shell--saas .tabla th {
+    font-family: 'Public Sans', var(--fuente-base);
+}
+
+/* FASE F: `.saas-kpi-card__valor`/`.saas-dona__centro-valor` salieron
+   de la lista de arriba a propósito — son cifras de negocio (docs/
+   design-system-v1-hybrid.md §6), deben usar `--fuente-mono`, no
+   Public Sans. Antes compartían esa regla con h1/h2/h3 con mayor
+   especificidad (`.shell--saas .saas-kpi-card__valor`, 0-2-0) que la
+   declaración mono de su propio componente (0-1-0) — le ganaba
+   siempre, sin importar el orden en el archivo, y dejaba el mono
+   silenciosamente sin efecto. Corregido separando ambas reglas.*/
 .shell--saas .saas-dona__centro-valor {
-    font-family: 'Geist', 'Inter', var(--fuente-base);
+    font-family: var(--fuente-mono, var(--fuente-base));
+    font-variant-numeric: tabular-nums;
 }
 
 .shell--saas h1 {
@@ -2429,10 +2517,16 @@ dialog.modal::backdrop {
     letter-spacing: -0.01em;
 }
 
-/* --- Sidebar: colores exactos del Master Shell (no azul-950) --- */
+/* --- Sidebar: colores Hybrid (Design System V1), no Stitch --- */
 .sidebar--saas {
-    background: #0B0F14;
-    border-right-color: #1E2630;
+    background: #101216;
+    border-right-color: #22252C;
+    /* El scroll ahora vive en `.sidebar__nav-scroll` (ver abajo), no
+       aquí — evita doble-scroll y deja el toggle de ancho fuera de la
+       región desplazable, siempre accesible. Sobrescribe el
+       `overflow-y: auto` de `.sidebar` base (compartido con el ERP,
+       que sí sigue haciendo scroll directo sobre sí mismo sin cambios). */
+    overflow: hidden;
 }
 
 .sidebar--saas .sidebar__marca {
@@ -2441,7 +2535,9 @@ dialog.modal::backdrop {
     gap: 0.65rem;
     height: auto;
     padding: var(--espacio-6) var(--espacio-5) var(--espacio-4);
-    border-bottom-color: #1E2630;
+    border-bottom-color: #22252C;
+    flex-shrink: 0;
+    min-width: 0;
 }
 
 .sidebar__marca__icono {
@@ -2451,7 +2547,7 @@ dialog.modal::backdrop {
     width: 2rem;
     height: 2rem;
     border-radius: var(--radio-md);
-    background: #2563EB;
+    background: var(--color-primario);
     color: #fff;
     flex-shrink: 0;
 }
@@ -2465,13 +2561,20 @@ dialog.modal::backdrop {
     font-weight: 700;
     font-size: 1.0625rem;
     letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .sidebar--saas .sidebar__grupo-titulo {
-    color: #64748B;
+    color: #6D7078;
     font-size: 0.625rem;
     padding-top: 0;
     padding-bottom: 0.375rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sidebar--saas .sidebar__nav {
@@ -2480,24 +2583,35 @@ dialog.modal::backdrop {
     gap: 0.125rem;
 }
 
-/* Separación real entre grupos del sidebar: `space-y-5` (20px) en el
-   HTML real de Stitch (verificado en dashboard.html/customers_list.html)
-   — NUNCA comprimir esto para evitar el scroll interno; si el
-   contenido del sidebar es más alto que el viewport, el scroll interno
-   es el comportamiento correcto (Stitch tendría el mismo problema en
-   un navegador real — sus capturas solo lo ocultan por usar un lienzo
-   del alto de toda la página). */
+/* Separación real entre grupos del sidebar: 16px (--espacio-4),
+   escala normalizada en docs/design-system-v1-hybrid.md §3 — NUNCA
+   comprimir esto para evitar el scroll interno; con 8 grupos/15 ítems
+   reales el contenido del sidebar excede la altura de la ventana en
+   muchas resoluciones, y el scroll interno (ver `.sidebar__nav-scroll`)
+   es el comportamiento correcto, nunca un motivo para achicar el
+   spacing hasta que "quepa". */
+.sidebar--saas .sidebar__grupo {
+    flex-shrink: 0;
+    min-width: 0;
+}
 .sidebar--saas .sidebar__grupo+.sidebar__grupo {
-    margin-top: var(--espacio-5);
+    margin-top: var(--espacio-4);
 }
 
 .sidebar--saas .sidebar__enlace {
-    color: #9CA3AF;
+    color: #AEB1BC;
     font-size: 0.8125rem;
     border-left: 3px solid transparent;
     padding-top: var(--espacio-2);
     padding-bottom: var(--espacio-2);
     padding-left: calc(var(--espacio-3) - 3px);
+    min-width: 0;
+}
+
+.sidebar__enlace-texto {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sidebar--saas .sidebar__enlace:hover {
@@ -2506,11 +2620,75 @@ dialog.modal::backdrop {
 }
 
 .sidebar--saas .sidebar__enlace[aria-current="page"] {
-    background: rgb(255 255 255 / 0.10);
+    background: #1C2A66;
     color: #fff;
     font-weight: 600;
     box-shadow: none;
-    border-left-color: #2563EB;
+    border-left-color: var(--color-primario);
+}
+
+/* --- Región con scroll interno del nav (marca + los 8 grupos) —
+   independiente del toggle de ancho, que vive FUERA de esta región
+   como hermano y por lo tanto nunca se desplaza fuera de vista. --- */
+.sidebar--saas .sidebar__nav-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--espacio-4);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--espacio-2) var(--espacio-2) 0;
+    margin: calc(var(--espacio-2) * -1) calc(var(--espacio-2) * -1) 0;
+    /* Scroll funcional, barra visualmente oculta — nunca
+       `overflow: hidden` (eso eliminaría el desplazamiento, no solo
+       su barra). Mismo criterio ya usado en el Design Lab. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.sidebar--saas .sidebar__nav-scroll::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+/* --- Toggle de ancho (compacto 76px ↔ expandido 228px) — distinto del
+   toggle móvil (`.navbar__toggle`/`data-sidebar-toggle`, panel
+   off-canvas, sin relación). Oculto por defecto/en móvil-tablet
+   (<1025px, el sidebar ahí es el panel off-canvas a ancho completo,
+   sin necesidad de compactar); visible solo en escritorio, ver la
+   media query de arriba. --- */
+.sidebar__toggle-ancho {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: var(--espacio-2);
+    flex-shrink: 0;
+    width: calc(100% - 2 * var(--espacio-2));
+    margin: var(--espacio-2);
+    padding: var(--espacio-2);
+    border-radius: var(--radio-md);
+    border: 1px solid #22252C;
+    background: transparent;
+    color: #6D7078;
+    cursor: pointer;
+}
+.sidebar__toggle-ancho:hover {
+    background: rgb(255 255 255 / 0.06);
+    color: #AEB1BC;
+}
+.sidebar__toggle-ancho:focus-visible {
+    outline: 2px solid var(--color-primario);
+    outline-offset: 2px;
+}
+.sidebar__toggle-ancho .icono-svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    flex-shrink: 0;
+    transition: transform .16s ease;
+}
+.shell--saas[data-sidebar-modo="expandido"] .sidebar__toggle-ancho .icono-svg {
+    transform: rotate(180deg);
 }
 
 /* --- Topbar: sin buscador, bloque de usuario avatar+nombre+rol --- */
@@ -2549,7 +2727,7 @@ dialog.modal::backdrop {
 }
 
 .shell--saas .avatar-circulo {
-    background: #2563EB;
+    background: var(--color-primario);
     color: #fff;
 }
 
@@ -2702,9 +2880,7 @@ dialog.modal::backdrop {
     font-size: var(--texto-sm);
 }
 
-/* --- Tenant Detail: grid 2 columnas 5/7 (screenId
-   cebc37bd583a46e29d6b1a5011d22545, Master Screen aprobada desde el
-   inicio del proyecto — FASE 7.5A). --- */
+/* --- Tenant Detail: grid 2 columnas 5/7 --- */
 .saas-detalle-grid {
     display: grid;
     grid-template-columns: 5fr 7fr;
@@ -2716,30 +2892,31 @@ dialog.modal::backdrop {
     grid-template-columns: 1fr;
 }
 
+.saas-detalle-grid > .tarjeta {
+    min-width: 0;
+}
+
 @media (max-width: 900px) {
     .saas-detalle-grid {
         grid-template-columns: 1fr;
     }
 }
 
-.saas-tarjeta-encabezado {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--espacio-3);
-    padding-bottom: var(--espacio-3);
-    margin-bottom: var(--espacio-4);
-    border-bottom: 1px solid var(--gris-100);
-}
+/* FASE I — auditoría Tenant Detail: `.saas-tarjeta-encabezado`+`h2`
+   (eyebrow diminuto en mayúsculas) se retiró — era un SEGUNDO patrón
+   de "título de tarjeta" compitiendo con `.saas-card__encabezado` +
+   `.saas-card__titulo` (Dashboard, ya aprobado). Un tercer patrón,
+   `.tarjeta__encabezado` (barra simple sin slot para acción/badge),
+   también se dejó de usar en esta pantalla por el mismo motivo —
+   sigue existiendo para quien ya lo use en otras pantallas (fuera de
+   alcance tocarlo aquí). Ambas tarjetas de Tenant Detail ahora usan
+   el mismo componente de encabezado que Dashboard — nunca 3 patrones
+   distintos para la misma función. */
 
-.saas-tarjeta-encabezado h2 {
-    font-size: var(--texto-xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin: 0;
-}
-
+/* Cifra de negocio (precio) — docs/design-system-v1-hybrid.md §6: el
+   monto+moneda usa `.u-cifra` (mono/tabular-nums) vía un `<span>` en
+   el template; `/ mensual` (en `<small>`) queda fuera a propósito, no
+   es una cifra. */
 .saas-precio-grande {
     font-size: var(--texto-2xl);
     font-weight: 700;
@@ -2788,6 +2965,18 @@ dialog.modal::backdrop {
     padding-top: var(--espacio-4);
     margin-top: var(--espacio-4);
     border-top: 1px solid var(--gris-100);
+}
+
+/* FASE I: cuando es el ÚNICO contenido de la tarjeta (Tenant Detail
+   sin suscripción — la tarjeta de fallback solo tiene estos botones,
+   nada de qué separarse visualmente), el margen/borde superior no
+   tiene nada que justificarlo. Reutiliza el mismo componente en vez
+   de duplicarlo con otra clase — solo neutraliza el separador cuando
+   corresponde. */
+.tarjeta__cuerpo > .saas-acciones-tarjeta:first-child {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
 }
 
 .saas-acciones-tarjeta .btn {

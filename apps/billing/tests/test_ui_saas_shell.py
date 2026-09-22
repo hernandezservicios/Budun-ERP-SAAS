@@ -49,29 +49,78 @@ class ShellSaaSSeparadoDelErpTests(TestCase):
             self.assertNotContains(respuesta, texto)
 
     def test_sidebar_saas_agrupa_por_seccion_con_destinos_reales(self):
-        """FASE 7.2 — grupos alineados al diseño Stitch aprobado (branding
-        "Budun ERP" sin tagline, agrupación Inicio/Clientes y tenants/
-        Comercial/Facturación/Finanzas/Reportes/Integraciones). No existe
-        un enlace real de "Configuración" — el título de grupo homónimo
-        que agrupaba Cuentas bancarias+PayPal se dividió en "Finanzas"/
-        "Integraciones" para igualar Stitch; no se inventó ningún destino
-        ficticio para reemplazarlo."""
+        """FASE E — Master Shell (Design System V1 Hybrid,
+        docs/design-system-v1-hybrid.md §11): 8 grupos — los 7 aprobados
+        del Design System (Inicio/Clientes y tenants/Comercial/
+        Facturación/Finanzas/Reportes/Configuración y cuenta) más
+        "Integraciones" (PayPal), una funcionalidad real existente que
+        el usuario pidió conservar explícitamente aunque no estuviera en
+        la lista de 7 grupos de la galería de referencia — la regla
+        "funcionalidad real > restricción de la galería de demostración"
+        tiene prioridad. "Facturación" ahora agrupa solo Facturas;
+        Pagos/Transferencias/Reembolsos/Cuentas bancarias se movieron a
+        "Finanzas" (antes repartidos entre "Facturación" y "Finanzas").
+        "Mi perfil"/"Cambiar contraseña" ahora también viven en el
+        sidebar (grupo "Configuración / cuenta"), no solo en el dropdown
+        del topbar. No existe un enlace real de "Configuración general"
+        ni de "Notas de crédito" — no se inventó ningún destino ficticio."""
         respuesta = self.client.get(reverse("billing_admin:dashboard"))
         # Grupos reales — solo los que tienen destinos reales (nunca
         # enlaces ficticios).
-        for grupo in ["Inicio", "Clientes y tenants", "Comercial", "Facturación", "Finanzas", "Reportes", "Integraciones"]:
+        for grupo in [
+            "Inicio", "Clientes y tenants", "Comercial", "Facturación",
+            "Finanzas", "Reportes", "Configuración / cuenta", "Integraciones",
+        ]:
             self.assertContains(respuesta, grupo)
         self.assertContains(respuesta, "Budun ERP")
         self.assertNotContains(respuesta, "Budun SaaS")
         self.assertNotContains(respuesta, "Plataforma — Super Admin")
+        self.assertNotContains(respuesta, "Configuración general")
+        self.assertNotContains(respuesta, "Nota de crédito")
+        self.assertNotContains(respuesta, "Notas de crédito")
         # Cada destino real listado en admin_urls.py debe estar enlazado.
         for nombre_url in [
             "tenants_list", "customers_list", "plans_list", "subscriptions_list",
             "invoices_list", "payments_list", "transfers_queue",
             "refunds_list", "reports", "manual_sale", "bank_accounts_list",
+            "profile", "password_change",
         ]:
             self.assertContains(respuesta, reverse(f"billing_admin:{nombre_url}"))
         self.assertContains(respuesta, reverse("billing_platform:status"))
+
+    def test_sidebar_finanzas_agrupa_pagos_transferencias_reembolsos_y_cuentas(self):
+        """Reagrupación explícita del Design System V1: Facturación
+        contiene solo Facturas; Pagos/Transferencias/Reembolsos/Cuentas
+        bancarias viven en Finanzas — antes Facturación cargaba con los
+        primeros tres y Finanzas solo tenía Cuentas bancarias."""
+        respuesta = self.client.get(reverse("billing_admin:dashboard"))
+        contenido = respuesta.content.decode()
+        inicio_facturacion = contenido.index(">Facturación<")
+        inicio_finanzas = contenido.index(">Finanzas<")
+        inicio_reportes = contenido.index(">Reportes<")
+        self.assertLess(inicio_facturacion, inicio_finanzas)
+        bloque_facturacion = contenido[inicio_facturacion:inicio_finanzas]
+        bloque_finanzas = contenido[inicio_finanzas:inicio_reportes]
+        self.assertIn("Facturas</span>", bloque_facturacion)
+        self.assertNotIn("Pagos</span>", bloque_facturacion)
+        for texto in ["Pagos</span>", "Transferencias</span>", "Reembolsos</span>", "Cuentas bancarias</span>"]:
+            self.assertIn(texto, bloque_finanzas)
+
+    def test_sidebar_configuracion_cuenta_enlaza_perfil_y_cambiar_contrasena(self):
+        respuesta = self.client.get(reverse("billing_admin:dashboard"))
+        contenido = respuesta.content.decode()
+        inicio_grupo = contenido.index("Configuración / cuenta")
+        fin_grupo = contenido.index("Integraciones")
+        bloque = contenido[inicio_grupo:fin_grupo]
+        self.assertIn(reverse("billing_admin:profile"), bloque)
+        self.assertIn(reverse("billing_admin:password_change"), bloque)
+
+    def test_sidebar_tiene_el_toggle_de_ancho_real(self):
+        """FASE E — botón real (no decorativo) para alternar entre 76px
+        compacto y 228px expandido, distinto del toggle móvil off-canvas."""
+        respuesta = self.client.get(reverse("billing_admin:dashboard"))
+        self.assertContains(respuesta, "data-sidebar-ancho-toggle")
+        self.assertContains(respuesta, 'class="sidebar__nav-scroll"')
 
     def test_portal_del_tenant_conserva_el_shell_erp_normal(self):
         """El Portal (`billing_portal`) es la vista del PROPIO tenant sobre

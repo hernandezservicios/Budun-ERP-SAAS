@@ -17,117 +17,62 @@
 <div class="saas-kpi-grid u-mb-6">
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--azul">
-            {% icono "tarjeta" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Ingresos recurrentes mensuales</p>
-            <p class="saas-kpi-card__valor">$ {{ resumen.mrr|monto }}</p>
-        </div>
+        <p class="saas-kpi-card__etiqueta">Ingresos recurrentes mensuales</p>
+        <p class="saas-kpi-card__valor u-cifra">$ {{ resumen.mrr|monto }}</p>
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--morado">
-            {% icono "barras" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Ingresos recurrentes anuales</p>
-            <p class="saas-kpi-card__valor">$ {{ resumen.arr|monto }}</p>
-        </div>
+        <p class="saas-kpi-card__etiqueta">Ingresos recurrentes anuales</p>
+        <p class="saas-kpi-card__valor u-cifra">$ {{ resumen.arr|monto }}</p>
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--verde">
-            {% icono "usuarios" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Suscripciones activas</p>
-            <p class="saas-kpi-card__valor">{{ resumen.active_subscriptions }}</p>
-        </div>
+        <p class="saas-kpi-card__etiqueta">Suscripciones activas</p>
+        <p class="saas-kpi-card__valor u-cifra">{{ resumen.active_subscriptions }}</p>
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--rojo">
-            {% icono "alerta-triangulo" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Pagos atrasados</p>
-            <p class="saas-kpi-card__valor">{{ resumen.past_due_subscriptions }}</p>
-        </div>
+        <p class="saas-kpi-card__etiqueta">Pagos atrasados</p>
+        <p class="saas-kpi-card__valor u-cifra">{{ resumen.past_due_subscriptions }}</p>
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--naranja">
-            {% icono "pausa" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Suspendidas</p>
-            <p class="saas-kpi-card__valor">{{ resumen.suspended_subscriptions }}</p>
-        </div>
+        <p class="saas-kpi-card__etiqueta">Suspendidas</p>
+        <p class="saas-kpi-card__valor u-cifra">{{ resumen.suspended_subscriptions }}</p>
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--azul">
-            {% icono "usuario-mas" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Altas este mes</p>
-            <p class="saas-kpi-card__valor">{{ resumen.new_signups_this_month }}</p>
-            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.new_signups_change_pct invertido=False %}
-        </div>
+        <p class="saas-kpi-card__etiqueta">Altas este mes</p>
+        <p class="saas-kpi-card__valor u-cifra">{{ resumen.new_signups_this_month }}</p>
+        {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.new_signups_change_pct invertido=False %}
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--morado">
-            {% icono "equis-circulo" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Cancelaciones este mes</p>
-            <p class="saas-kpi-card__valor">{{ resumen.cancellations_this_month }}</p>
-            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.cancellations_change_pct invertido=True %}
-        </div>
+        <p class="saas-kpi-card__etiqueta">Cancelaciones este mes</p>
+        <p class="saas-kpi-card__valor u-cifra">{{ resumen.cancellations_this_month }}</p>
+        {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.cancellations_change_pct invertido=True %}
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--teal">
-            {% icono "banco" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Transferencias pendientes</p>
-            <p class="saas-kpi-card__valor">{{ resumen.pending_transfers }}</p>
-        </div>
+        <p class="saas-kpi-card__etiqueta">Transferencias pendientes</p>
+        <p class="saas-kpi-card__valor u-cifra">{{ resumen.pending_transfers }}</p>
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--verde">
-            {% icono "recibo" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Ingresos del mes</p>
-            <p class="saas-kpi-card__valor">$ {{ resumen.revenue_this_month|monto }}</p>
-            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.revenue_change_pct invertido=False %}
-        </div>
+        <p class="saas-kpi-card__etiqueta">Ingresos del mes</p>
+        <p class="saas-kpi-card__valor u-cifra">$ {{ resumen.revenue_this_month|monto }}</p>
+        {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.revenue_change_pct invertido=False %}
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--rojo">
-            {% icono "reembolso" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Reembolsos del mes</p>
-            <p class="saas-kpi-card__valor">$ {{ resumen.refunds_this_month|monto }}</p>
-            {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.refunds_change_pct invertido=True %}
-        </div>
+        <p class="saas-kpi-card__etiqueta">Reembolsos del mes</p>
+        <p class="saas-kpi-card__valor u-cifra">$ {{ resumen.refunds_this_month|monto }}</p>
+        {% include "billing/admin/_kpi_tendencia.html" with pct=resumen.refunds_change_pct invertido=True %}
     </div>
 
     <div class="saas-kpi-card">
-        <div class="saas-kpi-card__icono saas-kpi-card__icono--rojo">
-            {% icono "documento" %}
-        </div>
-        <div class="saas-kpi-card__cuerpo">
-            <p class="saas-kpi-card__etiqueta">Facturas vencidas</p>
-            <p class="saas-kpi-card__valor">{{ resumen.overdue_invoices }}</p>
-        </div>
+        <p class="saas-kpi-card__etiqueta">Facturas vencidas</p>
+        <p class="saas-kpi-card__valor u-cifra">{{ resumen.overdue_invoices }}</p>
     </div>
 
 </div>
@@ -177,7 +122,7 @@
             <div class="saas-dona-envoltorio">
                 <div class="saas-dona">
 
-                    <svg width="140" height="140" viewBox="0 0 100 100" role="img"
+                    <svg viewBox="0 0 100 100" role="img"
                         aria-label="Distribución de suscripciones por estado">
                         <circle cx="50" cy="50" r="{{ dona.radio }}" fill="none" class="saas-dona__pista"
                             stroke-width="12"></circle>
@@ -233,22 +178,11 @@
 
                     <div class="saas-actividad-item">
 
-                        <div class="saas-actividad-item__icono
-                                    {% if evento.tipo == 'suscripcion' %}
-                                        saas-kpi-card__icono--azul
-                                    {% elif evento.tipo == 'pago' %}
-                                        saas-kpi-card__icono--verde
-                                    {% elif evento.tipo == 'nota_credito' %}
-                                        saas-kpi-card__icono--gris
-                                    {% else %}
-                                        saas-kpi-card__icono--morado
-                                    {% endif %}">
+                        <div class="saas-actividad-item__icono">
                             {% if evento.tipo == 'suscripcion' %}
                             {% icono "repetir" %}
                             {% elif evento.tipo == 'pago' %}
                             {% icono "tarjeta" %}
-                            {% elif evento.tipo == 'nota_credito' %}
-                            {% icono "nota-mas" %}
                             {% else %}
                             {% icono "usuario-mas" %}
                             {% endif %}
@@ -306,7 +240,7 @@
                             <th>Número</th>
                             <th>Tenant</th>
                             <th>Fecha</th>
-                            <th>Total</th>
+                            <th class="u-text-derecha">Total</th>
                             <th>Estado</th>
                         </tr>
                     </thead>
@@ -324,7 +258,7 @@
 
                             <td>{{ factura.issue_date }}</td>
 
-                            <td>
+                            <td class="u-text-derecha u-cifra">
                                 {{ factura.total|monto }} {{ factura.currency }}
                             </td>
 
@@ -376,7 +310,7 @@
                     </div>
 
                     <div class="u-text-derecha">
-                        <p class="saas-actividad-item__titulo">
+                        <p class="saas-actividad-item__titulo u-cifra">
                             {{ factura.total|monto }} {{ factura.currency }}
                         </p>
 

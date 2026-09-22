@@ -205,16 +205,23 @@ Cada icono es decorativo por defecto (`aria-hidden="true"`); pasar
 (ej. el botón de menú móvil). Ver "Inline SVG Icon System" en
 `docs/project-status/SAAS_PLATFORM_KNOWLEDGE_KIT.md`.
 
-### KPI Card v2 (`.saas-kpi-card`)
+### KPI Card (`.saas-kpi-card`)
 Componente NUEVO — deliberadamente separado de `.kpi`/`.kpi-grid`
 (FASE 7), que sigue en uso activo en el dashboard del ERP y varias
-vistas de detalle de Ventas/Compras/Inventario/POS. Icono circular con
-color FIJO por identidad de métrica (`.saas-kpi-card__icono--azul/
--morado/-verde/-rojo/-naranja/-teal/-gris`, reutilizando familias de
-color existentes + dos nuevas — `--color-morado-*`/`--color-teal-*` —
-agregadas solo para este uso decorativo, nunca para el sistema
-semántico de badges). Tendencia opcional (`.saas-kpi-card__tendencia`,
-ver `apps/billing/templates/billing/admin/_kpi_tendencia.html`) SOLO
+vistas de detalle de Ventas/Compras/Inventario/POS. **Rediseñado en
+FASE F** (migración al Budun Design System V1 — Hybrid,
+`docs/design-system-v1-hybrid.md`): el icono circular con color fijo
+por métrica (`.saas-kpi-card__icono--azul/-morado/-verde/-rojo/
+-naranja/-teal/-gris`) se retiró — 7 colores sin significado semántico
+consistente (dos métricas de ingresos con colores distintos sin razón
+funcional) es exactamente el "color arbitrario"/"icono decorativo sin
+función" que Hybrid prohíbe. El componente actual es solo etiqueta +
+cifra (mono + tabular-nums, `.u-cifra`) + tendencia opcional — la
+jerarquía tipográfica distingue cada tarjeta, no un color. `--color-morado-*`/
+`--color-teal-*` (agregadas en FASE 7.3 solo para ese uso decorativo)
+quedan sin consumidor activo en este componente. Tendencia opcional
+(`.saas-kpi-card__tendencia`, ver
+`apps/billing/templates/billing/admin/_kpi_tendencia.html`) SOLO
 para métricas de "flujo" con una comparación real vs. mes anterior —
 nunca fabricada para métricas de "estado" (MRR, activas, atrasadas...)
 que no tienen un snapshot histórico real. Ver "SaaS KPI Card v2" y

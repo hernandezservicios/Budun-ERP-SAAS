@@ -12,38 +12,40 @@
         <a class="btn btn--contorno btn--sm" href="{% url 'billing_admin:dashboard' %}">← Volver al panel</a>
     </div>
 </div>
-<div class="tarjeta saas-formulario-tarjeta">
-    <form method="post" novalidate>
-        {% csrf_token %}
-        <div class="saas-formulario-seccion">
-            <div class="saas-formulario-seccion__encabezado">
-                <h2>Cliente SaaS</h2>
-                <p>Información fiscal y de contacto principal de la cuenta cliente en la plataforma.</p>
+<div class="tarjeta">
+    <div class="tarjeta__cuerpo">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="saas-formulario-seccion">
+                <div class="saas-formulario-seccion__encabezado">
+                    <h2>Cliente SaaS</h2>
+                    <p>Información fiscal y de contacto principal de la cuenta cliente en la plataforma.</p>
+                </div>
+                {% include "customers/_campo.html" with field=form.customer_name %}
+                {% include "customers/_campo.html" with field=form.customer_email %}
             </div>
-            {% include "customers/_campo.html" with field=form.customer_name %}
-            {% include "customers/_campo.html" with field=form.customer_email %}
-        </div>
 
-        <div class="saas-formulario-seccion">
-            <div class="saas-formulario-seccion__encabezado">
-                <h2>Tenant</h2>
-                <p>Instancia operativa y paquete de licenciamiento asignado para la nueva cuenta.</p>
+            <div class="saas-formulario-seccion">
+                <div class="saas-formulario-seccion__encabezado">
+                    <h2>Tenant</h2>
+                    <p>Instancia operativa y paquete de licenciamiento asignado para la nueva cuenta.</p>
+                </div>
+                {% include "customers/_campo.html" with field=form.tenant_name %}
+                {% include "customers/_campo.html" with field=form.plan_version %}
             </div>
-            {% include "customers/_campo.html" with field=form.tenant_name %}
-            {% include "customers/_campo.html" with field=form.plan_version %}
-        </div>
 
-        <div class="saas-formulario-seccion">
-            <div class="saas-formulario-seccion__encabezado">
-                <h2>Propietario (Owner)</h2>
-                <p>Usuario responsable asignado a la administración interna del tenant.</p>
+            <div class="saas-formulario-seccion">
+                <div class="saas-formulario-seccion__encabezado">
+                    <h2>Propietario (Owner)</h2>
+                    <p>Usuario responsable asignado a la administración interna del tenant.</p>
+                </div>
+                {% include "customers/_campo.html" with field=form.owner_email %}
             </div>
-            {% include "customers/_campo.html" with field=form.owner_email %}
-        </div>
 
-        <div class="saas-formulario-pie">
-            <button type="submit" class="btn btn--primario">Registrar venta manual</button>
-        </div>
-    </form>
+            <div class="saas-formulario-pie">
+                <button type="submit" class="btn btn--primario">Registrar venta manual</button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
