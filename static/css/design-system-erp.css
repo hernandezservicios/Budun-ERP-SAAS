@@ -1,0 +1,319 @@
+/*
+  Atlas — ERP Design System (FASE 5, ETAPA 1).
+
+  Aislamiento obligatorio: todo vive bajo el selector `.shell--erp`
+  (la misma clase se añade a `.shell` en `templates/layout_app.html`,
+  nunca a `.shell--saas`). Este archivo:
+    - NO modifica ninguna regla existente de static/css/design-system.css
+      ni de static/css/base.css.
+    - NO redeclara `:root` — ninguna página fuera de `.shell--erp`
+      (incluido el Super Admin SaaS, `.shell--saas`) puede verse
+      afectada, porque las custom properties aquí solo se resuelven
+      dentro del árbol DOM de `.shell--erp`, que nunca coexiste con
+      `.shell--saas` en la misma página.
+    - Reutiliza los componentes ya existentes en design-system.css
+      (.btn, .campo, .tarjeta, .badge, .alerta, .tabla, .dropdown,
+      .paginacion, .migas, .encabezado-pagina, .kpi-grid) por
+      SUSTITUCIÓN DE TOKEN, nunca reescribiéndolos — ver
+      docs/erp-redesign-implementation-plan.md, sección 5.
+    - Los radios (--radio-sm/md/lg/completo) y la escala de spacing
+      (--espacio-*) YA coinciden con Atlas — deliberadamente NO se
+      redeclaran aquí (instrucción explícita de ETAPA 1, punto 1).
+
+  Valores exactos de docs/erp-redesign-design-system.md — nunca los
+  colores aproximados que renderiza Stitch (#325f9b/#4d78b6 no son la
+  fuente de verdad, ver docs/erp-redesign-stitch-screen-map.md).
+*/
+
+.shell--erp {
+    /* --- Tipografía --------------------------------------------------
+       IBM Plex Sans vía Google Fonts (enlace en el bloque `extra_head`
+       de layout_app.html — dependencia de red documentada aquí; si no
+       carga, la pila de reserva de sistema ya declarada abajo asume la
+       tipografía sin romper el layout). IBM Plex Mono queda disponible
+       como `--fuente-mono` para `.u-cifra` (cifras financieras/de
+       inventario), igual que ya usa el Super Admin SaaS con su propia
+       mono (JetBrains Mono) — nunca la misma familia, por diseño. */
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
+    --fuente-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+    /* --- Color primario — el único valor de identidad que difiere de
+       la paleta compartida de base.css (--color-primario ahí es
+       #1d4ed8, azul del Super Admin SaaS). Exacto de Atlas: #1D4E89. */
+    --color-primario: #1D4E89;
+    --color-primario-hover: #123761;
+
+    /* --- Azul (badge azul, alerta info) — mismo azul primario, Atlas
+       no define un segundo acento para el ERP. */
+    --color-azul-50: #E4ECF6;
+    --color-azul-100: #E4ECF6;
+    --color-azul-200: #E4ECF6;
+    --color-azul-800: #123761;
+    --color-info-50: #E4ECF6;
+    --color-info-700: #1D4E89;
+
+    /* --- Verde (secundario, badge verde, alerta éxito) — success de Atlas. */
+    --color-secundario: #0F7A5C;
+    --color-secundario-hover: #0C6249;
+    --color-verde-50: #DFF3EC;
+    --color-verde-100: #DFF3EC;
+    --color-verde-200: #DFF3EC;
+    --color-verde-800: #0F7A5C;
+
+    /* --- Ámbar (badge advertencia, alerta advertencia) — warning de Atlas. */
+    --color-advertencia-50: #FBEFDC;
+    --color-advertencia-100: #FBEFDC;
+    --color-advertencia-800: #8F5A0B;
+
+    /* --- Rojo-terracota (badge peligro, alerta peligro, btn peligro,
+       borde de campo inválido) — danger de Atlas, nunca rojo puro. */
+    --color-peligro-50: #F9E4E0;
+    --color-peligro-100: #F9E4E0;
+    --color-peligro-700: #B3311F;
+    --color-peligro-800: #93281A;
+
+    /* --- Superficie y texto --- */
+    --color-fondo: #F5F6F8;
+    --color-superficie: #FFFFFF;
+    --color-borde: #D7DCE3;
+    --color-borde-fuerte: #B7C0CC;
+    --color-texto: #111827;
+    --color-texto-tenue: #5D6773;
+
+    /* --- Neutrales consumidos por .btn--contorno/.btn--fantasma,
+       .campo label, .tarjeta__pie, .badge--neutro, hover de fila --- */
+    --gris-50: #F5F6F8;
+    --gris-100: #EEF0F3;
+    --gris-400: #B7C0CC;
+    --gris-700: #3F4A5A;
+    --gris-900: #111827;
+
+    /* --- Ancho de sidebar propio del ERP: 228px expandido / 64px
+       compacto (nunca 76/228 del SaaS) — ver §5 más abajo. Por
+       defecto expandido; el toggle alterna el atributo. */
+    --ancho-sidebar: 228px;
+}
+
+.shell--erp[data-sidebar-modo="compacto"] {
+    --ancho-sidebar: 64px;
+}
+
+/* ============================================================
+   CIFRAS — utilidad para montos/cantidades/saldos/IDs (Atlas §2:
+   "nunca la misma familia de texto para una cifra"). Mismo criterio
+   que `.u-cifra` del SaaS, nunca la misma mono. Se aplicará a
+   contenido real pantalla por pantalla en la siguiente etapa — aquí
+   solo se define la utilidad base.
+   ============================================================ */
+.shell--erp .u-cifra {
+    font-family: var(--fuente-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Alineación de columnas numéricas en tablas (Atlas §10: "columnas
+   numéricas alineadas a la derecha"). Aplica al <th>/<td> de una
+   columna, nunca cambia el valor mostrado. */
+.shell--erp .u-num {
+    text-align: right;
+}
+
+/* Estados vacíos — ícono de línea SVG en vez de emoji (Atlas §15,
+   "nunca emoji"). `.estado-vacio__icono` ya centra y da margen; solo
+   se ajusta el tamaño para un <svg>, que no responde a font-size. */
+.shell--erp .estado-vacio__icono svg {
+    width: 32px;
+    height: 32px;
+    color: var(--color-borde-fuerte);
+}
+
+/* Grilla de 2 columnas reutilizable (ETAPA 4, QA responsive) — sustituye
+   el patrón `style="display:grid; grid-template-columns: 1fr 1fr; ..."`
+   ya usado varias veces en el ERP real (Nuevo gasto, Cobrar), que no
+   colapsaba en móvil por ser un estilo en línea (no se puede scopear un
+   @media a un `style=""`). Mismas 2 columnas en escritorio, 1 columna
+   por debajo de 640px — nunca oculta ni reordena campos, solo apila. */
+.shell--erp .u-grid-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--espacio-4);
+}
+
+@media (max-width: 640px) {
+    .shell--erp .u-grid-2col {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============================================================
+   SIDEBAR — riel claro agrupado en 8 dominios (Atlas §16). La
+   estructura HTML (.sidebar__grupo/.sidebar__grupo-titulo) reutiliza
+   literalmente las mismas clases que ya usa el sidebar del SaaS
+   (`.sidebar--saas .sidebar__grupo*` en design-system.css) — aquí se
+   define la variante clara para `.shell--erp`, nunca se toca la
+   variante oscura del SaaS.
+   ============================================================ */
+
+.shell--erp .sidebar {
+    background: #FFFFFF;
+    transition: width 0.15s ease;
+    overflow-x: hidden;
+}
+
+.shell--erp .sidebar__marca {
+    gap: var(--espacio-3);
+}
+
+.shell--erp .sidebar__marca__texto {
+    white-space: nowrap;
+}
+
+.shell--erp .sidebar__grupo + .sidebar__grupo {
+    margin-top: var(--espacio-3);
+}
+
+.shell--erp .sidebar__grupo-titulo {
+    padding: var(--espacio-2) var(--espacio-3) var(--espacio-1);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-texto-tenue);
+    white-space: nowrap;
+}
+
+.shell--erp .sidebar__enlace {
+    border-left: 3px solid transparent;
+    padding-left: calc(var(--espacio-3) - 3px);
+    gap: var(--espacio-3);
+}
+
+.shell--erp .sidebar__enlace[aria-current="page"] {
+    border-left-color: var(--color-primario);
+}
+
+.shell--erp .sidebar__enlace-icono {
+    display: flex;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: currentColor;
+}
+
+.shell--erp .sidebar__enlace-icono svg {
+    width: 100%;
+    height: 100%;
+}
+
+.shell--erp .sidebar__enlace-texto {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Modo compacto: solo íconos, texto y etiquetas de grupo ocultos —
+   nunca oculto con display:none puro en el <a> (mantiene el enlace
+   real accesible y navegable, solo se oculta el texto visual;
+   title="" nativo del navegador sigue disponible). */
+.shell--erp[data-sidebar-modo="compacto"] .sidebar__enlace-texto,
+.shell--erp[data-sidebar-modo="compacto"] .sidebar__grupo-titulo,
+.shell--erp[data-sidebar-modo="compacto"] .sidebar__marca__texto,
+.shell--erp[data-sidebar-modo="compacto"] .sidebar__toggle-ancho__texto {
+    display: none;
+}
+
+.shell--erp[data-sidebar-modo="compacto"] .sidebar__enlace {
+    justify-content: center;
+    padding-left: calc(var(--espacio-2) - 3px);
+    padding-right: var(--espacio-2);
+}
+
+.shell--erp .sidebar__toggle-ancho {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--espacio-2);
+    margin: var(--espacio-2) var(--espacio-3) var(--espacio-3);
+    padding: var(--espacio-2);
+    background: none;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    color: var(--color-texto-tenue);
+    font-family: inherit;
+    font-size: var(--texto-xs);
+    cursor: pointer;
+}
+
+.shell--erp .sidebar__toggle-ancho:hover {
+    background: var(--gris-100);
+}
+
+.shell--erp .sidebar__toggle-ancho-icono {
+    display: flex;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+}
+
+.shell--erp .sidebar__toggle-ancho-icono svg {
+    width: 100%;
+    height: 100%;
+    transition: transform 0.15s ease;
+}
+
+.shell--erp[data-sidebar-modo="compacto"] .sidebar__toggle-ancho-icono svg {
+    transform: rotate(180deg);
+}
+
+/* ============================================================
+   TOPBAR — mismo contenido real (toggle móvil, marca, badge de
+   tenant, menú de usuario), solo reestilizado. No se agrega
+   búsqueda/notificaciones/acciones que no existan hoy (instrucción
+   ETAPA 1, §6).
+   ============================================================ */
+
+.shell--erp .navbar__toggle-icono {
+    display: flex;
+    width: 18px;
+    height: 18px;
+}
+
+.shell--erp .navbar__toggle-icono svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* ============================================================
+   CONTENIDO PRINCIPAL — fondo de página propio de Atlas (#F5F6F8),
+   distinto del blanco del sidebar. `.main` no declara background hoy
+   (hereda de <body>, fuera del árbol de `.shell--erp`) — se fija
+   explícitamente aquí.
+   ============================================================ */
+.shell--erp .main {
+    background: var(--color-fondo);
+}
+
+/* ============================================================
+   RESPONSIVE — el mecanismo off-canvas (`.shell.sidebar-abierto`,
+   `data-sidebar-toggle`/`data-sidebar-backdrop`, breakpoints 1024px/
+   640px) ya es genérico y no está scopeado a `.shell--saas` ni a
+   `.shell--erp` — se hereda sin cambios. En compacto+móvil, el modo
+   compacto se ignora (el off-canvas siempre muestra el sidebar
+   completo cuando el usuario lo abre expresamente).
+   ============================================================ */
+@media (max-width: 1024px) {
+    .shell--erp[data-sidebar-modo="compacto"] .sidebar__enlace-texto,
+    .shell--erp[data-sidebar-modo="compacto"] .sidebar__grupo-titulo,
+    .shell--erp[data-sidebar-modo="compacto"] .sidebar__marca__texto {
+        display: block;
+    }
+
+    .shell--erp[data-sidebar-modo="compacto"] .sidebar__enlace {
+        justify-content: flex-start;
+        padding-left: calc(var(--espacio-3) - 3px);
+        padding-right: var(--espacio-3);
+    }
+
+    .shell--erp .sidebar__toggle-ancho {
+        display: none;
+    }
+}

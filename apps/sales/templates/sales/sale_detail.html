@@ -58,7 +58,7 @@
             <table class="tabla">
                 <thead>
                     <tr>
-                        <th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Impuesto</th><th>Total</th>
+                        <th>Descripción</th><th class="u-num">Cantidad</th><th class="u-num">Precio unitario</th><th class="u-num">Descuento</th><th class="u-num">Impuesto</th><th class="u-num">Total</th>
                         {% if sale.status == "draft" %}<th><span class="visualmente-oculto">Acciones</span></th>{% endif %}
                     </tr>
                 </thead>
@@ -66,11 +66,11 @@
                     {% for item in items %}
                     <tr>
                         <td>{{ item.description }} ({{ item.sku_snapshot }}){% if item.inventory_unit %} — {% firstof item.inventory_unit.serial item.inventory_unit.imei_1 %}{% endif %}</td>
-                        <td>{{ item.quantity|floatformat:"-3" }}</td>
-                        <td>${{ item.unit_price }}</td>
-                        <td>${{ item.discount_amount }}</td>
-                        <td>${{ item.tax_amount }}</td>
-                        <td>${{ item.total }}</td>
+                        <td class="u-num u-cifra">{{ item.quantity|floatformat:"-3" }}</td>
+                        <td class="u-num u-cifra">${{ item.unit_price }}</td>
+                        <td class="u-num u-cifra">${{ item.discount_amount }}</td>
+                        <td class="u-num u-cifra">${{ item.tax_amount }}</td>
+                        <td class="u-num u-cifra">${{ item.total }}</td>
                         {% if sale.status == "draft" %}
                         <td>
                             <form action="{% url 'sales:sale_item_delete' sale.pk item.pk %}" method="post">
@@ -85,14 +85,14 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin líneas todavía</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2.5h9l3 3v16H6z"/><path d="M9.5 8h6M9.5 11.5h6M9.5 15h4"/></svg></div><h3>Sin líneas todavía</h3></div>
         {% endif %}
 
         <div class="kpi-grid" style="margin: var(--espacio-6) 0;">
-            <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor">${{ sale.subtotal }}</p></div>
-            <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor">${{ sale.discount_total }}</p></div>
-            <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor">${{ sale.tax_total }}</p></div>
-            <div class="kpi"><p class="kpi__etiqueta">Total</p><p class="kpi__valor">${{ sale.total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor u-cifra">${{ sale.subtotal }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor u-cifra">${{ sale.discount_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor u-cifra">${{ sale.tax_total }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Total</p><p class="kpi__valor u-cifra">${{ sale.total }}</p></div>
         </div>
 
         {% if sale.status == "draft" %}
@@ -127,18 +127,18 @@
         </div>
         {% endif %}
         <div class="kpi-grid" style="margin-bottom: var(--espacio-4);">
-            <div class="kpi"><p class="kpi__etiqueta">Pagado</p><p class="kpi__valor">${{ paid_amount }}</p></div>
-            <div class="kpi"><p class="kpi__etiqueta">Saldo pendiente</p><p class="kpi__valor">${{ balance_due }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Pagado</p><p class="kpi__valor u-cifra">${{ paid_amount }}</p></div>
+            <div class="kpi"><p class="kpi__etiqueta">Saldo pendiente</p><p class="kpi__valor u-cifra">${{ balance_due }}</p></div>
         </div>
         {% if payments %}
         <div class="tabla-envoltorio">
             <table class="tabla">
-                <thead><tr><th>Método</th><th>Monto aplicado</th><th>Referencia</th><th>Estado</th><th>Usuario</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <thead><tr><th>Método</th><th class="u-num">Monto aplicado</th><th>Referencia</th><th>Estado</th><th>Usuario</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
                 <tbody>
                     {% for pago in payments %}
                     <tr>
                         <td>{{ pago.payment.get_method_display }}</td>
-                        <td>${{ pago.amount }}</td>
+                        <td class="u-num u-cifra">${{ pago.amount }}</td>
                         <td>{{ pago.payment.reference|default:"—" }}</td>
                         <td>
                             {% if pago.status == "active" %}<span class="badge badge--verde">Aplicado</span>{% else %}<span class="badge badge--neutro">Revertido</span>{% endif %}
@@ -159,7 +159,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💳</div><h3>Sin pagos todavía</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="5.5" width="19" height="13" rx="1.5"/><path d="M2.5 9.5h19"/></svg></div><h3>Sin pagos todavía</h3></div>
         {% endif %}
     </div>
 
@@ -181,7 +181,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">↩️</div><h3>Sin devoluciones todavía</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 11h11a5 5 0 0 1 0 10h-3"/><path d="M8 6.5 4 11l4 4.5"/></svg></div><h3>Sin devoluciones todavía</h3></div>
         {% endif %}
     </div>
 
@@ -221,7 +221,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos todavía</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16.5 6.5 8 15a3 3 0 0 0 4.24 4.24l8-8a5 5 0 0 0-7.07-7.07l-8 8a7 7 0 0 0 9.9 9.9"/></svg></div><h3>Sin documentos todavía</h3></div>
         {% endif %}
     </div>
 
@@ -243,7 +243,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕓</div><h3>Sin actividad registrada</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5.5l4 2"/></svg></div><h3>Sin actividad registrada</h3></div>
         {% endif %}
     </div>
 </div>

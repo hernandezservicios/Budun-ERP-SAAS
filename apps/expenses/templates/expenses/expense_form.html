@@ -15,15 +15,49 @@
     <h1>Nuevo gasto</h1>
 </div>
 
-<div class="tarjeta" style="max-width: 40rem;">
-    <div class="tarjeta__cuerpo">
-        <form method="post" novalidate>
-            {% csrf_token %}
-            {% for field in form %}
-            {% include "customers/_campo.html" with field=field %}
-            {% endfor %}
+<form method="post" novalidate>
+    {% csrf_token %}
+    <div class="tarjeta" style="max-width: 44rem;">
+        <div class="tarjeta__cuerpo">
+            <h3 class="panel-seccion__titulo">Información general</h3>
+            <div class="u-grid-2col">
+                {% include "customers/_campo.html" with field=form.category %}
+                {% include "customers/_campo.html" with field=form.supplier %}
+                {% include "customers/_campo.html" with field=form.expense_date %}
+                {% include "customers/_campo.html" with field=form.due_date %}
+                <div style="grid-column: 1 / -1;">
+                    {% include "customers/_campo.html" with field=form.description %}
+                </div>
+            </div>
+        </div>
+
+        <div class="tarjeta__cuerpo" style="border-top: 1px solid var(--color-borde);">
+            <h3 class="panel-seccion__titulo">Monto</h3>
+            <div class="u-grid-2col">
+                {% include "customers/_campo.html" with field=form.amount %}
+                {% include "customers/_campo.html" with field=form.currency %}
+                {% include "customers/_campo.html" with field=form.tax_amount %}
+                {% include "customers/_campo.html" with field=form.discount_amount %}
+                {% include "customers/_campo.html" with field=form.preferred_payment_method %}
+            </div>
+        </div>
+
+        <div class="tarjeta__cuerpo" style="border-top: 1px solid var(--color-borde);">
+            <h3 class="panel-seccion__titulo">Excepcionalidad</h3>
+            <div class="u-grid-2col">
+                {% include "customers/_campo.html" with field=form.is_exceptional %}
+                {% include "customers/_campo.html" with field=form.exceptional_reason %}
+            </div>
+        </div>
+
+        <div class="tarjeta__cuerpo" style="border-top: 1px solid var(--color-borde);">
+            <h3 class="panel-seccion__titulo">Notas</h3>
+            {% include "customers/_campo.html" with field=form.notes %}
+        </div>
+
+        <div class="tarjeta__pie" style="display:flex; justify-content:flex-end;">
             <button type="submit" class="btn btn--primario">Crear gasto</button>
-        </form>
+        </div>
     </div>
-</div>
+</form>
 {% endblock %}

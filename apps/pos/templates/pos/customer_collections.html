@@ -19,8 +19,8 @@
 </div>
 
 <div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
-    <div class="kpi"><p class="kpi__etiqueta">Saldo a favor</p><p class="kpi__valor">${{ resumen.balance }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Facturas pendientes</p><p class="kpi__valor">{{ pending_sales|length }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Saldo a favor</p><p class="kpi__valor u-cifra">${{ resumen.balance }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Facturas pendientes</p><p class="kpi__valor u-cifra">{{ pending_sales|length }}</p></div>
 </div>
 
 <h2 class="panel-seccion__titulo">Facturas pendientes</h2>
@@ -31,14 +31,14 @@
             {% csrf_token %}
             <div class="tabla-envoltorio">
                 <table class="tabla">
-                    <thead><tr><th></th><th>Factura</th><th>Total</th><th>Saldo pendiente</th></tr></thead>
+                    <thead><tr><th></th><th>Factura</th><th class="u-num">Total</th><th class="u-num">Saldo pendiente</th></tr></thead>
                     <tbody>
                         {% for fila in pending_sales %}
                         <tr>
                             <td><input type="checkbox" name="sale_ids" value="{{ fila.sale.pk }}"></td>
                             <td><a href="{% url 'sales:sale_detail' fila.sale.pk %}">{{ fila.sale.number }}</a></td>
-                            <td>${{ fila.sale.total }}</td>
-                            <td>${{ fila.balance_due }}</td>
+                            <td class="u-num u-cifra">${{ fila.sale.total }}</td>
+                            <td class="u-num u-cifra">${{ fila.balance_due }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -53,10 +53,10 @@
     </div>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">✅</div><h3>Sin facturas pendientes</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 12.5l3 3 6-6.5"/></svg></div><h3>Sin facturas pendientes</h3></div>
 {% endif %}
 
-<div style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--espacio-6);">
+<div class="u-grid-2col">
     <div class="tarjeta">
         <div class="tarjeta__cuerpo">
             <h3 class="panel-seccion__titulo">Registrar anticipo</h3>
@@ -105,13 +105,13 @@
 {% if pagos %}
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Método</th><th>Monto</th><th>Disponible sin aplicar</th><th>Fecha</th><th></th></tr></thead>
+        <thead><tr><th>Método</th><th class="u-num">Monto</th><th class="u-num">Disponible sin aplicar</th><th>Fecha</th><th></th></tr></thead>
         <tbody>
             {% for fila in pagos %}
             <tr>
                 <td>{{ fila.payment.get_method_display }}</td>
-                <td>${{ fila.payment.amount }}</td>
-                <td>${{ fila.disponible }}</td>
+                <td class="u-num u-cifra">${{ fila.payment.amount }}</td>
+                <td class="u-num u-cifra">${{ fila.disponible }}</td>
                 <td>{{ fila.payment.created_at|date:"d M Y" }}</td>
                 <td>
                     {% if fila.disponible > 0 %}
@@ -128,6 +128,6 @@
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">💳</div><h3>Sin pagos todavía</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="5.5" width="19" height="13" rx="1.5"/><path d="M2.5 9.5h19"/></svg></div><h3>Sin pagos todavía</h3></div>
 {% endif %}
 {% endblock %}

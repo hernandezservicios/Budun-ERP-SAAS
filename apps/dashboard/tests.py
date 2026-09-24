@@ -72,11 +72,11 @@ class DashboardIsolationTests(TestCase):
     def test_kpi_de_miembros_no_mezcla_tenants(self):
         self.client.login(username="panel.a@example.com", password="clave-de-prueba-987")
         respuesta_a = self.client.get(reverse("dashboard:panel"))
-        self.assertContains(respuesta_a, '<p class="kpi__valor">1</p>')  # solo el owner en tenant A
+        self.assertContains(respuesta_a, '<p class="kpi__valor u-cifra">1</p>')  # solo el owner en tenant A
 
         self.client.login(username="panel.b@example.com", password="clave-de-prueba-987")
         respuesta_b = self.client.get(reverse("dashboard:panel"))
-        self.assertContains(respuesta_b, '<p class="kpi__valor">4</p>')  # owner + 3 miembros en tenant B
+        self.assertContains(respuesta_b, '<p class="kpi__valor u-cifra">4</p>')  # owner + 3 miembros en tenant B
 
     def test_actividad_reciente_no_expone_usuarios_de_otro_tenant(self):
         self.client.login(username="panel.a@example.com", password="clave-de-prueba-987")
@@ -222,7 +222,7 @@ class DashboardInventoryIntegrationTests(TestCase):
         Product.objects.create(tenant=self.tenant, name="Producto Real 2", sku="REAL-2")
 
         respuesta = self.client.get(reverse("dashboard:panel"))
-        self.assertContains(respuesta, '<p class="kpi__valor">2</p>')
+        self.assertContains(respuesta, '<p class="kpi__valor u-cifra">2</p>')
 
         # Con stock por debajo del mínimo, debe aparecer la alerta.
         services.register_stock_in(product=producto, quantity=Decimal("3"), user=self.user)

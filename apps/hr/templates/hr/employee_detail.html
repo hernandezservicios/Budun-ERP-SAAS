@@ -58,7 +58,10 @@
                 <p><strong>Salario base:</strong> {{ empleado.currency }} {{ empleado.base_salary }}</p>
                 <p><strong>Banco:</strong> {{ empleado.bank_name|default:"—" }} · <strong>Cuenta:</strong> {{ empleado.bank_account_number|default:"—" }}</p>
                 {% else %}
-                <div class="alerta alerta--info" style="margin-top: var(--espacio-4);">Salario y datos bancarios visibles solo para el propietario del tenant.</div>
+                <div style="display:flex; align-items:center; gap: var(--espacio-2); margin-top: var(--espacio-4); color: var(--color-texto-tenue); font-size: var(--texto-sm);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7.5 10V7a4.5 4.5 0 0 1 9 0v3"/></svg>
+                    <span>Salario y datos bancarios visibles solo para el propietario del tenant.</span>
+                </div>
                 {% endif %}
 
                 {% if empleado.notes %}<p><strong>Notas:</strong> {{ empleado.notes }}</p>{% endif %}
@@ -85,14 +88,14 @@
         {% if contracts %}
         <div class="tabla-envoltorio">
             <table class="tabla">
-                <thead><tr><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Salario</th><th>Estado</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <thead><tr><th>Tipo</th><th>Inicio</th><th>Fin</th><th class="u-num">Salario</th><th>Estado</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
                 <tbody>
                     {% for contrato in contracts %}
                     <tr>
                         <td>{{ contrato.get_contract_type_display }}</td>
                         <td>{{ contrato.start_date|date:"d M Y" }}</td>
                         <td>{{ contrato.end_date|date:"d M Y"|default:"—" }}</td>
-                        <td>{{ contrato.currency }} {{ contrato.salary }}</td>
+                        <td class="u-num u-cifra">{{ contrato.currency }} {{ contrato.salary }}</td>
                         <td>
                             {% if contrato.status == "active" %}<span class="badge badge--verde">Activo</span>
                             {% elif contrato.status == "draft" %}<span class="badge badge--neutro">Borrador</span>
@@ -113,7 +116,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📄</div><h3>Sin contratos todavía</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2.5h9l3 3v16H6z"/><path d="M9.5 8h6M9.5 11.5h6M9.5 15h4"/></svg></div><h3>Sin contratos todavía</h3></div>
         {% endif %}
 
         <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 36rem;">
@@ -154,7 +157,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">📎</div><h3>Sin documentos adjuntos</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16.5 6.5 8 15a3 3 0 0 0 4.24 4.24l8-8a5 5 0 0 0-7.07-7.07l-8 8a7 7 0 0 0 9.9 9.9"/></svg></div><h3>Sin documentos adjuntos</h3></div>
         {% endif %}
 
         <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
@@ -175,15 +178,15 @@
         {% if asistencias %}
         <div class="tabla-envoltorio">
             <table class="tabla">
-                <thead><tr><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Retraso (min)</th><th>Horas</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <thead><tr><th>Fecha</th><th>Entrada</th><th>Salida</th><th class="u-num">Retraso (min)</th><th class="u-num">Horas</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
                 <tbody>
                     {% for asistencia in asistencias %}
                     <tr>
                         <td>{{ asistencia.date|date:"d M Y" }}</td>
                         <td>{{ asistencia.check_in|time:"H:i"|default:"—" }}</td>
                         <td>{{ asistencia.check_out|time:"H:i"|default:"—" }}</td>
-                        <td>{{ asistencia.late_minutes }}</td>
-                        <td>{{ asistencia.worked_hours|default:"—" }}</td>
+                        <td class="u-num u-cifra">{{ asistencia.late_minutes }}</td>
+                        <td class="u-num u-cifra">{{ asistencia.worked_hours|default:"—" }}</td>
                         <td>
                             {% if asistencia.check_in and not asistencia.check_out %}
                             <form action="{% url 'hr:attendance_check_out' empleado.pk asistencia.pk %}" method="post" style="display:inline-flex; gap: var(--espacio-2);">
@@ -199,7 +202,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕒</div><h3>Sin registros de asistencia</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5.5l4 2"/></svg></div><h3>Sin registros de asistencia</h3></div>
         {% endif %}
 
         <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
@@ -220,14 +223,14 @@
         {% if ausencias %}
         <div class="tabla-envoltorio">
             <table class="tabla">
-                <thead><tr><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Días</th><th>Estado</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <thead><tr><th>Tipo</th><th>Inicio</th><th>Fin</th><th class="u-num">Días</th><th>Estado</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
                 <tbody>
                     {% for ausencia in ausencias %}
                     <tr>
                         <td>{{ ausencia.leave_type.name }}</td>
                         <td>{{ ausencia.start_date|date:"d M Y" }}</td>
                         <td>{{ ausencia.end_date|date:"d M Y" }}</td>
-                        <td>{{ ausencia.duration_days }}</td>
+                        <td class="u-num u-cifra">{{ ausencia.duration_days }}</td>
                         <td>
                             {% if ausencia.status == "approved" %}<span class="badge badge--verde">Aprobada</span>
                             {% elif ausencia.status == "rejected" or ausencia.status == "canceled" %}<span class="badge badge--peligro">{{ ausencia.get_status_display }}</span>
@@ -257,7 +260,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🌴</div><h3>Sin ausencias registradas</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></div><h3>Sin ausencias registradas</h3></div>
         {% endif %}
 
         <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
@@ -292,7 +295,7 @@
             </table>
         </div>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">⚠️</div><h3>Sin incidentes registrados</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3 21.5 20H2.5z"/><path d="M12 9.5v5"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg></div><h3>Sin incidentes registrados</h3></div>
         {% endif %}
 
         <div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 32rem;">
@@ -317,7 +320,7 @@
             {% endfor %}
         </ul>
         {% else %}
-        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🕒</div><h3>Sin actividad registrada</h3></div>
+        <div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5.5l4 2"/></svg></div><h3>Sin actividad registrada</h3></div>
         {% endif %}
     </div>
 </div>

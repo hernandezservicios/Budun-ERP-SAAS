@@ -75,6 +75,51 @@
         });
     }
 
+    /* --- Sidebar ERP: ancho compacto/expandido (FASE 5, ETAPA 1 — Atlas)
+       ------------------------------------------------------------------
+       Mismo patrón que `initSidebarAnchoToggle` de arriba (SaaS), pero
+       una función completamente independiente y con su propia clave de
+       localStorage — nunca toca `.shell--saas` ni la función anterior,
+       por aislamiento explícito entre ambos shells. Atributo
+       `data-sidebar-ancho-toggle-erp` (nunca `data-sidebar-ancho-toggle`,
+       que es exclusivo del SaaS) alterna `data-sidebar-modo` en
+       `.shell--erp` (64px ↔ 228px, ver static/css/design-system-erp.css). */
+    function initSidebarAnchoToggleErp() {
+        var shell = document.querySelector(".shell--erp");
+        var boton = document.querySelector("[data-sidebar-ancho-toggle-erp]");
+        if (!shell || !boton) return;
+
+        var CLAVE_ALMACEN = "budun-erp-sidebar-modo";
+
+        function aplicar(modo) {
+            shell.setAttribute("data-sidebar-modo", modo);
+            var expandido = modo === "expandido";
+            boton.setAttribute("aria-expanded", expandido ? "true" : "false");
+            boton.setAttribute("aria-label", expandido ? "Contraer navegación" : "Expandir navegación");
+        }
+
+        var guardado = null;
+        try {
+            guardado = localStorage.getItem(CLAVE_ALMACEN);
+        } catch (e) {
+            /* localStorage no disponible — modo expandido por defecto
+               sin persistencia. */
+        }
+        aplicar(guardado === "compacto" ? "compacto" : "expandido");
+
+        boton.addEventListener("click", function () {
+            var actual = shell.getAttribute("data-sidebar-modo") === "compacto" ? "compacto" : "expandido";
+            var siguiente = actual === "expandido" ? "compacto" : "expandido";
+            aplicar(siguiente);
+            try {
+                localStorage.setItem(CLAVE_ALMACEN, siguiente);
+            } catch (e) {
+                /* Sin persistencia disponible — el toggle sigue
+                   funcionando dentro de la misma carga de página. */
+            }
+        });
+    }
+
     /* --- Dropdown ------------------------------------------------------ */
     function initDropdowns() {
         var dropdowns = document.querySelectorAll("[data-dropdown]");
@@ -214,6 +259,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         initSidebar();
         initSidebarAnchoToggle();
+        initSidebarAnchoToggleErp();
         initDropdowns();
         initModals();
         initTabs();

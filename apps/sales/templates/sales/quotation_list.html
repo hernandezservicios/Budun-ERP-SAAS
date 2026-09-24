@@ -48,7 +48,7 @@
                 <th>Cliente</th>
                 <th>Fecha</th>
                 <th>Vencimiento</th>
-                <th>Total</th>
+                <th class="u-num">Total</th>
                 <th>Estado</th>
             </tr>
         </thead>
@@ -59,8 +59,18 @@
                 <td>{% if quotation.customer %}{{ quotation.customer.display_name }}{% else %}Consumidor final{% endif %}</td>
                 <td>{{ quotation.issue_date|date:"d M Y" }}</td>
                 <td>{% if quotation.expiry_date %}{{ quotation.expiry_date|date:"d M Y" }}{% else %}—{% endif %}</td>
-                <td>${{ quotation.total }}</td>
-                <td><span class="badge badge--azul">{{ quotation.get_status_display }}</span></td>
+                <td class="u-num u-cifra">${{ quotation.total }}</td>
+                <td>
+                    {% if quotation.status == "accepted" or quotation.status == "converted" %}
+                    <span class="badge badge--verde">{{ quotation.get_status_display }}</span>
+                    {% elif quotation.status == "rejected" or quotation.status == "expired" or quotation.status == "canceled" %}
+                    <span class="badge badge--peligro">{{ quotation.get_status_display }}</span>
+                    {% elif quotation.status == "sent" %}
+                    <span class="badge badge--azul">{{ quotation.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge--neutro">{{ quotation.get_status_display }}</span>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -86,7 +96,7 @@
 
 {% else %}
 <div class="estado-vacio tarjeta">
-    <div class="estado-vacio__icono" aria-hidden="true">📄</div>
+    <div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2.5h9l3 3v16H6z"/><path d="M9.5 8h6M9.5 11.5h6M9.5 15h4"/></svg></div>
     <h3>Todavía no tienes cotizaciones</h3>
     <p>Crea tu primera cotización para empezar el flujo comercial.</p>
     <a class="btn btn--primario" href="{% url 'sales:quotation_create' %}">Nueva cotización</a>

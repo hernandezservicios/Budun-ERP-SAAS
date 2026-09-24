@@ -32,7 +32,7 @@
         {% for kpi in kpis %}
         <div class="kpi {% if kpi.estado == 'vacio' %}kpi--vacio{% endif %}">
             <p class="kpi__etiqueta">{{ kpi.etiqueta }}</p>
-            <p class="kpi__valor">{{ kpi.valor }}</p>
+            <p class="kpi__valor u-cifra">{{ kpi.valor }}</p>
             {% if kpi.ayuda %}<p class="kpi__ayuda">{{ kpi.ayuda }}</p>{% endif %}
         </div>
         {% endfor %}
@@ -65,7 +65,7 @@
     </div>
     {% else %}
     <div class="estado-vacio tarjeta">
-        <div class="estado-vacio__icono" aria-hidden="true">✅</div>
+        <div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 12.5l3 3 6-6.5"/></svg></div>
         <h3>Sin alertas</h3>
         <p>No hay nada que requiera tu atención en este momento.</p>
     </div>
@@ -88,7 +88,7 @@
     </div>
     {% else %}
     <div class="estado-vacio tarjeta">
-        <div class="estado-vacio__icono" aria-hidden="true">🕓</div>
+        <div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5.5l4 2"/></svg></div>
         <h3>Aún no hay actividad reciente</h3>
         <p>Cuando invites a tu equipo o empieces a operar, la actividad aparecerá aquí.</p>
     </div>

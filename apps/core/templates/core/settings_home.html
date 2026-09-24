@@ -17,35 +17,37 @@
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-4);">
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--espacio-4);">
+<div class="tarjeta">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">🔑 Roles y Permisos</h3>
+        <h3 class="panel-seccion__titulo" style="display:flex; align-items:center; gap: var(--espacio-2);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7.5 10V7a4.5 4.5 0 0 1 9 0v3"/></svg>Roles y Permisos</h3>
         <p>Personaliza qué puede hacer cada rol y define excepciones para usuarios específicos.</p>
         <a class="btn btn--contorno" href="{% url 'permissions:index' %}">Administrar</a>
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-4);">
+<div class="tarjeta">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">📋 Auditoría</h3>
+        <h3 class="panel-seccion__titulo" style="display:flex; align-items:center; gap: var(--espacio-2);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.5-4.5"/></svg>Auditoría</h3>
         <p>Busca cualquier evento del tenant: inicios de sesión, cambios de permisos, actividad de cada módulo y acceso a la API.</p>
         <a class="btn btn--contorno" href="{% url 'audit:search' %}">Ver auditoría</a>
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem; margin-bottom: var(--espacio-4);">
+<div class="tarjeta">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">🔌 API de Inventario</h3>
+        <h3 class="panel-seccion__titulo" style="display:flex; align-items:center; gap: var(--espacio-2);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M15 7a4 4 0 1 1 4 4l-1.5 1.5M9 17a4 4 0 1 1-4-4l1.5-1.5"/><path d="M9.5 14.5l5-5"/></svg>API de Inventario</h3>
         <p>Genera y administra la clave de API administrativa de solo lectura (productos/inventario) para integraciones externas y agentes CRM/IA.</p>
         <a class="btn btn--contorno" href="{% url 'api_config:config' %}">Administrar</a>
     </div>
 </div>
 
-<div class="tarjeta" style="max-width: 32rem;">
+<div class="tarjeta">
     <div class="tarjeta__cuerpo">
-        <h3 class="panel-seccion__titulo">🛒 Integraciones (Catalog API)</h3>
+        <h3 class="panel-seccion__titulo" style="display:flex; align-items:center; gap: var(--espacio-2);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2.5 3.5h2.2l2 12.5h11.6l1.7-8.5H6.2"/></svg>Integraciones (Catalog API)</h3>
         <p>Conecta CRM/agentes IA externos (p. ej. WACRM) a la Catalog API comercial (catálogo, disponibilidad, imágenes) — capa independiente de la API de Inventario.</p>
         <a class="btn btn--contorno" href="{% url 'api_integrations:list' %}">Administrar</a>
     </div>
+</div>
 </div>
 {% endblock %}

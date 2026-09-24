@@ -32,14 +32,14 @@
 <div class="tabla-envoltorio" style="margin-bottom: var(--espacio-6);">
     <table class="tabla">
         <tbody>
-            <tr><th>Cantidad de ventas</th><td>{{ reporte.summary.count }}</td></tr>
-            <tr><th>Subtotal</th><td>{{ reporte.summary.subtotal }}</td></tr>
-            <tr><th>Descuentos</th><td>{{ reporte.summary.discounts }}</td></tr>
-            <tr><th>Impuestos</th><td>{{ reporte.summary.taxes }}</td></tr>
-            <tr><th>Total</th><td>{{ reporte.summary.total }}</td></tr>
-            <tr><th>Costo (COGS)</th><td>{{ reporte.summary.cost_total }}</td></tr>
-            <tr><th>Margen bruto</th><td>{{ reporte.summary.margin }}</td></tr>
-            <tr><th>Devoluciones / Refunds / Notas de crédito (período)</th><td>{{ reporte.summary.returns_count }} / {{ reporte.summary.refunds_count }} / {{ reporte.summary.credit_notes_count }}</td></tr>
+            <tr><th>Cantidad de ventas</th><td class="u-num u-cifra">{{ reporte.summary.count }}</td></tr>
+            <tr><th>Subtotal</th><td class="u-num u-cifra">{{ reporte.summary.subtotal }}</td></tr>
+            <tr><th>Descuentos</th><td class="u-num u-cifra">{{ reporte.summary.discounts }}</td></tr>
+            <tr><th>Impuestos</th><td class="u-num u-cifra">{{ reporte.summary.taxes }}</td></tr>
+            <tr><th>Total</th><td class="u-num u-cifra">{{ reporte.summary.total }}</td></tr>
+            <tr><th>Costo (COGS)</th><td class="u-num u-cifra">{{ reporte.summary.cost_total }}</td></tr>
+            <tr><th>Margen bruto</th><td class="u-num u-cifra">{{ reporte.summary.margin }}</td></tr>
+            <tr><th>Devoluciones / Refunds / Notas de crédito (período)</th><td class="u-num u-cifra">{{ reporte.summary.returns_count }} / {{ reporte.summary.refunds_count }} / {{ reporte.summary.credit_notes_count }}</td></tr>
         </tbody>
     </table>
 </div>
@@ -47,7 +47,7 @@
 {% if reporte.rows %}
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Total</th></tr></thead>
+        <thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th>Estado</th><th class="u-num">Total</th></tr></thead>
         <tbody>
             {% for venta in reporte.rows %}
             <tr>
@@ -55,13 +55,13 @@
                 <td>{{ venta.issue_date|date:"d M Y" }}</td>
                 <td>{{ venta.customer.display_name|default:"Mostrador" }}</td>
                 <td>{{ venta.get_status_display }}</td>
-                <td>{{ venta.currency }} {{ venta.total }}</td>
+                <td class="u-num u-cifra">{{ venta.currency }} {{ venta.total }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🧾</div><h3>Sin ventas en este filtro</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2.5h9l3 3v16H6z"/><path d="M9.5 8h6M9.5 11.5h6M9.5 15h4"/></svg></div><h3>Sin ventas en este filtro</h3></div>
 {% endif %}
 {% endblock %}

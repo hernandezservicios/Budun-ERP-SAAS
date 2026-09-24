@@ -18,7 +18,7 @@
         <p class="encabezado-pagina__descripcion">
             {{ nomina.department_snapshot|default:"—" }} · {{ nomina.position_snapshot|default:"—" }}
             · <span class="badge badge--azul">{{ nomina.get_status_display }}</span>
-            · Neto: {{ nomina.currency }} {{ nomina.net_total }}
+            · Neto: <span class="u-cifra">{{ nomina.currency }} {{ nomina.net_total }}</span>
         </p>
     </div>
 </div>
@@ -29,22 +29,22 @@
         {% if lineas %}
         <div class="tabla-envoltorio">
             <table class="tabla">
-                <thead><tr><th>Categoría</th><th>Concepto</th><th>Descripción</th><th>Monto</th></tr></thead>
+                <thead><tr><th>Categoría</th><th>Concepto</th><th>Descripción</th><th class="u-num">Monto</th></tr></thead>
                 <tbody>
                     {% for linea in lineas %}
                     <tr>
                         <td>{% if linea.category == "earning" %}<span class="badge badge--verde">Ingreso</span>{% else %}<span class="badge badge--peligro">Deducción</span>{% endif %}</td>
                         <td>{{ linea.get_concept_display }}</td>
                         <td>{{ linea.description|default:"—" }}</td>
-                        <td>{{ nomina.currency }} {{ linea.amount }}</td>
+                        <td class="u-num u-cifra">{{ nomina.currency }} {{ linea.amount }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% endif %}
-        <p><strong>Bruto:</strong> {{ nomina.currency }} {{ nomina.gross_total }} · <strong>Deducciones:</strong> {{ nomina.currency }} {{ nomina.deductions_total }} · <strong>Neto:</strong> {{ nomina.currency }} {{ nomina.net_total }}</p>
-        <p><strong>Saldo pendiente de pago:</strong> {{ nomina.currency }} {{ saldo_pendiente }}</p>
+        <p><strong>Bruto:</strong> <span class="u-cifra">{{ nomina.currency }} {{ nomina.gross_total }}</span> · <strong>Deducciones:</strong> <span class="u-cifra">{{ nomina.currency }} {{ nomina.deductions_total }}</span> · <strong>Neto:</strong> <span class="u-cifra">{{ nomina.currency }} {{ nomina.net_total }}</span></p>
+        <p><strong>Saldo pendiente de pago:</strong> <span class="u-cifra">{{ nomina.currency }} {{ saldo_pendiente }}</span></p>
     </div>
 </div>
 
@@ -69,12 +69,12 @@
         {% if pagos %}
         <div class="tabla-envoltorio">
             <table class="tabla">
-                <thead><tr><th>Método</th><th>Monto</th><th>Estado</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
+                <thead><tr><th>Método</th><th class="u-num">Monto</th><th>Estado</th><th>Fecha</th><th><span class="visualmente-oculto">Acciones</span></th></tr></thead>
                 <tbody>
                     {% for pago in pagos %}
                     <tr>
                         <td>{{ pago.get_method_display }}</td>
-                        <td>{{ pago.currency }} {{ pago.amount }}</td>
+                        <td class="u-num u-cifra">{{ pago.currency }} {{ pago.amount }}</td>
                         <td>{% if pago.status == "voided" %}<span class="badge badge--peligro">Anulado</span>{% else %}<span class="badge badge--verde">Confirmado</span>{% endif %}</td>
                         <td>{{ pago.created_at|date:"d M Y H:i" }}</td>
                         <td>

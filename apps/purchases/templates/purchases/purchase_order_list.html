@@ -44,7 +44,7 @@
 <div class="tabla-envoltorio">
     <table class="tabla">
         <thead>
-            <tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th></tr>
+            <tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th class="u-num">Total</th><th>Estado</th></tr>
         </thead>
         <tbody>
             {% for orden in ordenes %}
@@ -52,7 +52,7 @@
                 <td><a href="{% url 'purchases:purchase_order_detail' orden.pk %}">{{ orden.number }}</a></td>
                 <td>{{ orden.supplier.display_name }}</td>
                 <td>{{ orden.issue_date|date:"d M Y" }}</td>
-                <td>${{ orden.total }}</td>
+                <td class="u-num u-cifra">${{ orden.total }}</td>
                 <td>
                     {% if orden.status == "received" or orden.status == "closed" %}
                     <span class="badge badge--verde">{{ orden.get_status_display }}</span>
@@ -89,7 +89,7 @@
 
 {% else %}
 <div class="estado-vacio tarjeta">
-    <div class="estado-vacio__icono" aria-hidden="true">📦</div>
+    <div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg></div>
     <h3>Todavía no tienes órdenes de compra</h3>
     <p>Crea una orden de compra para empezar a recibir mercancía de tus proveedores.</p>
     <a class="btn btn--primario" href="{% url 'purchases:purchase_order_create' %}">Nueva orden de compra</a>

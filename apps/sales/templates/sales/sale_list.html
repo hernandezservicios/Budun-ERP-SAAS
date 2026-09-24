@@ -57,7 +57,7 @@
                 <th>Número</th>
                 <th>Cliente</th>
                 <th>Fecha</th>
-                <th>Total</th>
+                <th class="u-num">Total</th>
                 <th>Estado</th>
                 <th>Pago</th>
             </tr>
@@ -68,7 +68,7 @@
                 <td><a href="{% url 'sales:sale_detail' sale.pk %}">{{ sale.number }}</a></td>
                 <td>{% if sale.customer %}{{ sale.customer.display_name }}{% else %}Consumidor final{% endif %}</td>
                 <td>{{ sale.issue_date|date:"d M Y" }}</td>
-                <td>${{ sale.total }}</td>
+                <td class="u-num u-cifra">${{ sale.total }}</td>
                 <td>
                     {% if sale.status == "confirmed" %}
                     <span class="badge badge--verde">{{ sale.get_status_display }}</span>
@@ -112,7 +112,7 @@
 
 {% else %}
 <div class="estado-vacio tarjeta">
-    <div class="estado-vacio__icono" aria-hidden="true">🧾</div>
+    <div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2.5h9l3 3v16H6z"/><path d="M9.5 8h6M9.5 11.5h6M9.5 15h4"/></svg></div>
     <h3>Todavía no tienes ventas</h3>
     <p>Crea una venta directa o convierte una cotización/proforma.</p>
     <a class="btn btn--primario" href="{% url 'sales:sale_create' %}">Nueva venta directa</a>

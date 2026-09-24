@@ -39,20 +39,20 @@
 <div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
     <div class="kpi {% if is_low_stock %}kpi--vacio{% endif %}">
         <p class="kpi__etiqueta">{% if is_serialized %}Unidades en stock{% else %}Stock actual{% endif %}</p>
-        <p class="kpi__valor">{{ current_stock|floatformat:"-3" }}</p>
+        <p class="kpi__valor u-cifra">{{ current_stock|floatformat:"-3" }}</p>
     </div>
     <div class="kpi">
         <p class="kpi__etiqueta">Precio de compra</p>
-        <p class="kpi__valor">${{ product.purchase_price }}</p>
+        <p class="kpi__valor u-cifra">${{ product.purchase_price }}</p>
     </div>
     <div class="kpi">
         <p class="kpi__etiqueta">Precio de venta</p>
-        <p class="kpi__valor">${{ product.sale_price }}</p>
+        <p class="kpi__valor u-cifra">${{ product.sale_price }}</p>
     </div>
     {% if not is_serialized %}
     <div class="kpi">
         <p class="kpi__etiqueta">Stock mínimo</p>
-        <p class="kpi__valor">{{ product.min_stock|floatformat:"-3" }}</p>
+        <p class="kpi__valor u-cifra">{{ product.min_stock|floatformat:"-3" }}</p>
     </div>
     {% endif %}
 </div>
@@ -71,7 +71,7 @@
                 <tr>
                     <th>Identificador</th>
                     <th>Estado</th>
-                    <th>Costo unitario</th>
+                    <th class="u-num">Costo unitario</th>
                     <th>Ingreso</th>
                     <th>Garantía hasta</th>
                     <th>Último cambio por</th>
@@ -95,7 +95,7 @@
                         <span class="badge badge--neutro">{{ unit.get_status_display }}</span>
                         {% endif %}
                     </td>
-                    <td>${{ unit.unit_cost }}</td>
+                    <td class="u-num u-cifra">${{ unit.unit_cost }}</td>
                     <td><time datetime="{{ unit.entry_date|date:'c' }}">{{ unit.entry_date|date:"d M Y" }}</time></td>
                     <td>{% if unit.warranty_until %}{{ unit.warranty_until|date:"d M Y" }}{% else %}—{% endif %}</td>
                     <td>{% firstof unit.status_changed_by.get_full_name unit.status_changed_by.email "—" %}</td>
@@ -117,7 +117,7 @@
     </div>
     {% else %}
     <div class="estado-vacio tarjeta">
-        <div class="estado-vacio__icono" aria-hidden="true">🔖</div>
+        <div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h9l7 7-9 9-7-7z"/><circle cx="9" cy="9" r="1.5"/></svg></div>
         <h3>Sin unidades todavía</h3>
         <p>Registra la primera unidad (IMEI o número de serie) para empezar.</p>
     </div>
@@ -140,9 +140,9 @@
                 <tr>
                     <th>Fecha</th>
                     <th>Tipo</th>
-                    <th>Cantidad</th>
-                    <th>Stock anterior</th>
-                    <th>Stock posterior</th>
+                    <th class="u-num">Cantidad</th>
+                    <th class="u-num">Stock anterior</th>
+                    <th class="u-num">Stock posterior</th>
                     <th>Usuario</th>
                     <th>Notas</th>
                 </tr>
@@ -160,9 +160,9 @@
                         <span class="badge badge--azul">Ajuste</span>
                         {% endif %}
                     </td>
-                    <td>{{ movement.quantity|floatformat:"-3" }}</td>
-                    <td>{{ movement.stock_before|floatformat:"-3" }}</td>
-                    <td>{{ movement.stock_after|floatformat:"-3" }}</td>
+                    <td class="u-num u-cifra">{{ movement.quantity|floatformat:"-3" }}</td>
+                    <td class="u-num u-cifra">{{ movement.stock_before|floatformat:"-3" }}</td>
+                    <td class="u-num u-cifra">{{ movement.stock_after|floatformat:"-3" }}</td>
                     <td>{% firstof movement.user.get_full_name movement.user.email "—" %}</td>
                     <td>{{ movement.notes|default:"—" }}</td>
                 </tr>
@@ -172,7 +172,7 @@
     </div>
     {% else %}
     <div class="estado-vacio tarjeta">
-        <div class="estado-vacio__icono" aria-hidden="true">🕓</div>
+        <div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5.5l4 2"/></svg></div>
         <h3>Sin movimientos todavía</h3>
         <p>Registra una entrada de stock para empezar.</p>
     </div>
@@ -212,7 +212,7 @@
         </table>
     </div>
     {% else %}
-    <div class="estado-vacio tarjeta" style="margin-bottom: var(--espacio-4);"><div class="estado-vacio__icono" aria-hidden="true">🖼️</div><h3>Sin imágenes todavía</h3></div>
+    <div class="estado-vacio tarjeta" style="margin-bottom: var(--espacio-4);"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="9" cy="10" r="1.75"/><path d="M21 16l-5.5-5.5L6 19"/></svg></div><h3>Sin imágenes todavía</h3></div>
     {% endif %}
     <div class="tarjeta" style="max-width: 28rem;">
         <div class="tarjeta__cuerpo">

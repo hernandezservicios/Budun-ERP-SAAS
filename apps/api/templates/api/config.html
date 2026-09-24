@@ -29,9 +29,9 @@
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Conexión</h3>
         <dl>
-            <dt>Base URL</dt><dd><code>{{ base_url }}</code></dd>
+            <dt>Base URL</dt><dd><code class="u-cifra">{{ base_url }}</code></dd>
             {% if api_key %}
-            <dt>Clave</dt><dd><code>{{ api_key.key_prefix }}···</code></dd>
+            <dt>Clave</dt><dd><code class="u-cifra">{{ api_key.key_prefix }}···</code></dd>
             <dt>Estado</dt><dd><span class="badge {% if api_key.is_active %}badge--verde{% else %}badge--peligro{% endif %}">{{ api_key.get_status_display }}</span></dd>
             <dt>Creada</dt><dd>{{ api_key.created_at|date:"d M Y H:i" }}</dd>
             <dt>Última rotación</dt><dd>{{ api_key.rotated_at|default:"—" }}</dd>
