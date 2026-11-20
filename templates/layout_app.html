@@ -4,10 +4,13 @@
 {% block extra_head %}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="{% static 'css/design-system-erp.css' %}">
+{% if request.resolver_match.url_name == 'register_list' or request.resolver_match.url_name|slice:":7" == 'session' or request.resolver_match.app_name == 'pos' and request.resolver_match.url_name|slice:":8" == 'terminal' %}
+<link rel="stylesheet" href="{% static 'css/design-system-pos.css' %}">
+{% endif %}
 {% endblock %}
 
 {% block body %}
-<div class="shell shell--erp" data-sidebar-modo="expandido">
+<div class="shell shell--erp{% if request.resolver_match.url_name == 'register_list' or request.resolver_match.url_name|slice:":7" == 'session' or request.resolver_match.app_name == 'pos' and request.resolver_match.url_name|slice:":8" == 'terminal' %} shell--pos{% endif %}" data-sidebar-modo="expandido">
     <div class="sidebar__respaldo" data-sidebar-backdrop></div>
     <aside class="sidebar" aria-label="Navegación principal">
         <a class="sidebar__marca" href="{% url 'core:home' %}"><span class="sidebar__marca__texto">ERP SaaS</span></a>

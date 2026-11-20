@@ -18,13 +18,13 @@
 </div>
 
 {% if cajas %}
-<div class="tabla-envoltorio">
+<div class="tabla-envoltorio pos-cajas">
     <table class="tabla">
         <thead><tr><th>Código</th><th>Nombre</th><th>Terminal</th><th>Estado</th></tr></thead>
         <tbody>
             {% for caja in cajas %}
             <tr>
-                <td>{{ caja.code }}</td>
+                <td class="u-cifra">{{ caja.code }}</td>
                 <td>{{ caja.name }}</td>
                 <td>{{ caja.terminal|default:"—" }}</td>
                 <td>{% if caja.status == "active" %}<span class="badge badge--verde">Activa</span>{% else %}<span class="badge badge--neutro">Inactiva</span>{% endif %}</td>
@@ -34,10 +34,10 @@
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🏪</div><h3>Sin cajas todavía</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M3 12h18"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg></div><h3>Sin cajas todavía</h3></div>
 {% endif %}
 
-<div class="tarjeta" style="margin-top: var(--espacio-6); max-width: 28rem;">
+<div class="tarjeta pos-crear-caja" style="margin-top: var(--espacio-6); max-width: 28rem;">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Crear caja</h3>
         <form method="post" novalidate>

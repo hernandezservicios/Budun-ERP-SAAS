@@ -17,12 +17,12 @@
     </div>
 </div>
 
-<div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
-    <div class="kpi"><p class="kpi__etiqueta">Fondo inicial</p><p class="kpi__valor">${{ sesion.opening_amount }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Efectivo esperado</p><p class="kpi__valor">${{ esperado }}</p></div>
+<div class="kpi-grid pos-resumen-caja" style="margin-bottom: var(--espacio-6);">
+    <div class="kpi"><p class="kpi__etiqueta">Fondo inicial</p><p class="kpi__valor u-cifra">${{ sesion.opening_amount }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Efectivo esperado</p><p class="kpi__valor u-cifra">${{ esperado }}</p></div>
 </div>
 
-<div class="tarjeta" style="max-width: 28rem; margin-bottom: var(--espacio-6);">
+<div class="tarjeta pos-cierre" style="max-width: 28rem; margin-bottom: var(--espacio-6);">
     <div class="tarjeta__cuerpo">
         <form method="post" novalidate>
             {% csrf_token %}
@@ -38,12 +38,12 @@
 <h2 class="panel-seccion__titulo">Movimientos de la sesión</h2>
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Tipo</th><th>Monto</th><th>Motivo</th><th>Usuario</th><th>Fecha</th></tr></thead>
+        <thead><tr><th>Tipo</th><th class="u-num">Monto</th><th>Motivo</th><th>Usuario</th><th>Fecha</th></tr></thead>
         <tbody>
             {% for movimiento in movimientos %}
             <tr>
                 <td>{{ movimiento.get_movement_type_display }}</td>
-                <td>${{ movimiento.amount }}</td>
+                <td class="u-num u-cifra">${{ movimiento.amount }}</td>
                 <td>{{ movimiento.reason|default:"—" }}</td>
                 <td>{% firstof movimiento.user.get_full_name movimiento.user.email "—" %}</td>
                 <td>{{ movimiento.created_at|date:"d M Y H:i" }}</td>

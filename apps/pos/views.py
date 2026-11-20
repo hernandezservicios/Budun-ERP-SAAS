@@ -44,6 +44,7 @@ from .forms import (
     PosAddItemForm,
     PosSearchForm,
     RefundForm,
+    UpdateQuantityForm,
 )
 from .models import CashMovement, CashRegister, CashSession
 
@@ -141,6 +142,7 @@ class CashSessionCloseView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class CashSessionSummaryView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request, pk):
+        require_permission(request, "cash.view")
         sesion = get_object_or_404(CashSession, pk=pk, tenant=request.tenant)
         movimientos = CashMovement.all_objects.filter(tenant=request.tenant, cash_session=sesion).order_by("created_at")
         return render(request, "pos/session_summary.html", {"sesion": sesion, "movimientos": movimientos})
@@ -179,6 +181,7 @@ class TerminalStartView(LoginRequiredMixin, TenantRequiredMixin, View):
     cajero a la vez."""
 
     def get(self, request):
+        require_permission(request, "pos.use")
         carrito = Sale.objects.filter(salesperson=request.user, status=Sale.Status.DRAFT).order_by("-created_at").first()
         if carrito is None:
             carrito = services.start_cart(request.tenant, user=request.user)
@@ -187,6 +190,7 @@ class TerminalStartView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class TerminalDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request, pk):
+        require_permission(request, "pos.use")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
         query = request.GET.get("q", "")
         resultados = services.search(request.tenant, query) if query else []
@@ -203,6 +207,7 @@ class TerminalDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
             }),
             "payment_formset": CheckoutPaymentFormSet(),
             "sesion": sesion,
+            "cash_movement_form": CashMovementForm() if sesion else None,
             "solicitudes_aprobadas": ApprovalRequest.all_objects.filter(
                 tenant=request.tenant, document_type="sale", document_id=sale.pk,
                 status=ApprovalRequest.Status.APPROVED, consumed_at__isnull=True,
@@ -213,6 +218,7 @@ class TerminalDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class AddItemView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "pos.use")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
         form = PosAddItemForm(request.POST)
         if not form.is_valid():
@@ -259,6 +265,7 @@ class AddItemView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class RemoveItemView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk, item_pk):
+        require_permission(request, "pos.use")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
         item = get_object_or_404(sales_services.get_sale_items(sale), pk=item_pk)
         services.remove_cart_item(item)
@@ -266,8 +273,26 @@ class RemoveItemView(LoginRequiredMixin, TenantRequiredMixin, View):
         return redirect("pos:terminal_detail", pk=sale.pk)
 
 
+class UpdateItemQuantityView(LoginRequiredMixin, TenantRequiredMixin, View):
+    def post(self, request, pk, item_pk):
+        require_permission(request, "pos.use")
+        sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
+        item = get_object_or_404(sales_services.get_sale_items(sale), pk=item_pk)
+        form = UpdateQuantityForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Cantidad inválida.")
+            return redirect("pos:terminal_detail", pk=sale.pk)
+        try:
+            services.update_cart_item_quantity(item, form.cleaned_data["quantity"])
+            messages.success(request, "Cantidad actualizada.")
+        except ValidationError as error:
+            messages.error(request, _mensaje_error(error))
+        return redirect("pos:terminal_detail", pk=sale.pk)
+
+
 class SetCustomerView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "pos.use")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
         form = CustomerSelectForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -280,6 +305,7 @@ class SetCustomerView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class SetGlobalDiscountView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "pos.use")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
         form = GlobalDiscountForm(request.POST)
         if form.is_valid():
@@ -308,6 +334,7 @@ class SetGlobalDiscountView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class CancelCartView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "pos.use")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
         sales_services.cancel_sale(sale, request.user, reason="Cancelada desde el POS")
         messages.success(request, "Carrito cancelado.")
@@ -316,6 +343,7 @@ class CancelCartView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class CheckoutView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "pos.use")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant, status=Sale.Status.DRAFT)
         formset = CheckoutPaymentFormSet(request.POST)
         if not formset.is_valid():
@@ -323,7 +351,13 @@ class CheckoutView(LoginRequiredMixin, TenantRequiredMixin, View):
             return redirect("pos:terminal_detail", pk=sale.pk)
 
         pagos = [
-            {"method": fila["method"], "amount": fila["amount"]}
+            # `amount_received` captura lo que el cliente entregó en
+            # esta línea ANTES de descontar el cambio (FASE 7 — BLOQUE
+            # B) — el propio formulario ya etiqueta `amount` como
+            # "Monto recibido" (ver `CheckoutPaymentForm`). `amount` se
+            # reduce más abajo si esta línea termina absorbiendo el
+            # cambio; `amount_received` nunca se toca después de aquí.
+            {"method": fila["method"], "amount": fila["amount"], "amount_received": fila["amount"], "change_amount": Decimal("0")}
             for fila in formset.cleaned_data if fila.get("method") and fila.get("amount")
         ]
         if not pagos:
@@ -339,6 +373,7 @@ class CheckoutView(LoginRequiredMixin, TenantRequiredMixin, View):
             # Se descuenta el cambio del último método en efectivo indicado.
             for fila in reversed(pagos):
                 if fila["method"] == "cash" and fila["amount"] >= exceso:
+                    fila["change_amount"] = exceso
                     fila["amount"] -= exceso
                     exceso = Decimal("0")
                     break
@@ -411,6 +446,7 @@ class CustomerCollectionsView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class CollectPaymentView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, customer_pk):
+        require_permission(request, "payments.create")
         customer = get_object_or_404(Customer, pk=customer_pk, tenant=request.tenant)
         form = CollectPaymentForm(request.POST)
         sale_ids = request.POST.getlist("sale_ids")
@@ -442,6 +478,7 @@ class CollectPaymentView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class AdvanceView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, customer_pk):
+        require_permission(request, "payments.create")
         customer = get_object_or_404(Customer, pk=customer_pk, tenant=request.tenant)
         form = CustomerAdvanceForm(request.POST)
         if form.is_valid():
@@ -461,6 +498,7 @@ class AdvanceView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class ApplyCreditView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, customer_pk, sale_pk):
+        require_permission(request, "credit.apply")
         customer = get_object_or_404(Customer, pk=customer_pk, tenant=request.tenant)
         sale = get_object_or_404(Sale, pk=sale_pk, tenant=request.tenant, customer=customer)
         form = ApplyCreditForm(request.POST)
@@ -477,6 +515,7 @@ class ApplyCreditView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class IssueCreditNoteView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, customer_pk):
+        require_permission(request, "credit_note.create")
         customer = get_object_or_404(Customer, pk=customer_pk, tenant=request.tenant)
         form = IssueCreditNoteForm(request.POST)
         if form.is_valid():
@@ -495,6 +534,7 @@ class IssueCreditNoteView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class RefundView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, customer_pk, payment_pk):
+        require_permission(request, "payments.reverse")
         customer = get_object_or_404(Customer, pk=customer_pk, tenant=request.tenant)
         payment = get_object_or_404(Payment, pk=payment_pk, tenant=request.tenant, customer=customer)
         form = RefundForm(request.POST)

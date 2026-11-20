@@ -6,7 +6,7 @@ from django.urls import reverse
 from apps.inventory.models import InventoryUnit
 from apps.pos import services
 from apps.pos.models import CashMovement
-from apps.sales.models import Sale
+from apps.sales.models import Payment, Sale
 
 from ._helpers import PosTestCase
 
@@ -163,6 +163,75 @@ class TerminalHttpViewTests(PosTestCase):
         # (efecto neto), nunca el monto bruto entregado por el cliente.
         movimiento_cash = CashMovement.all_objects.get(tenant=self.tenant, movement_type="sale_cash", reference_type="payment")
         self.assertEqual(movimiento_cash.amount, total)
+
+        # FASE 7 — BLOQUE B: el cambio queda persistido en el Payment,
+        # no solo en el mensaje flash.
+        pago = Payment.all_objects.get(tenant=self.tenant, method="cash", reference="", amount=total)
+        self.assertEqual(pago.amount_received, monto_entregado)
+        self.assertEqual(pago.change_amount, Decimal("6.40"))
+
+    def test_pago_exacto_no_genera_cambio(self):
+        respuesta = self.client.get(reverse("pos:terminal_start"))
+        sale = Sale.all_objects.get(tenant=self.tenant, salesperson=self.cajero, status=Sale.Status.DRAFT)
+        self.client.post(reverse("pos:add_item", args=[sale.pk]), {
+            "product_id": self.producto.pk, "quantity": "1", "unit_identifier": "", "discount_percent": "", "discount_amount": "",
+        })
+        sale.refresh_from_db()
+        total = sale.total
+
+        respuesta = self.client.post(reverse("pos:checkout", args=[sale.pk]), {
+            "form-TOTAL_FORMS": "2", "form-INITIAL_FORMS": "0", "form-MIN_NUM_FORMS": "0", "form-MAX_NUM_FORMS": "1000",
+            "form-0-method": "cash", "form-0-amount": str(total), "form-1-method": "", "form-1-amount": "",
+        })
+        self.assertRedirects(respuesta, reverse("sales:sale_receipt", args=[sale.pk]))
+
+        mensajes = [str(m) for m in get_messages(respuesta.wsgi_request)]
+        self.assertTrue(any("cobrada correctamente" in m for m in mensajes), mensajes)
+        self.assertFalse(any("Cambio a entregar" in m for m in mensajes), mensajes)
+
+        pago = Payment.all_objects.get(tenant=self.tenant, method="cash", amount=total)
+        self.assertEqual(pago.amount_received, total)
+        self.assertEqual(pago.change_amount, Decimal("0"))
+
+    def test_venta_a_credito_con_pago_parcial_no_genera_cambio(self):
+        # Pago inferior al total (cliente con crédito habilitado): no
+        # debe generarse ningún cambio — el saldo restante queda como
+        # cuenta por cobrar, nunca convertido en otra operación.
+        sale = services.start_cart(self.tenant, user=self.cajero)
+        services.set_cart_customer(sale, self.customer)
+        services.add_item_to_cart(sale, product=self.producto, quantity=Decimal("1"), user=self.cajero, tenant=self.tenant)
+        sale.refresh_from_db()
+        parcial = Decimal("5.00")
+
+        venta, pagos = services.checkout_sale(
+            sale, user=self.cajero, tenant=self.tenant, payments=[{"method": "cash", "amount": parcial, "amount_received": parcial, "change_amount": Decimal("0")}],
+        )
+        self.assertEqual(venta.payment_status, Sale.PaymentStatus.PARTIALLY_PAID)
+        pago = pagos[0]
+        pago.refresh_from_db()
+        self.assertEqual(pago.amount_received, parcial)
+        self.assertEqual(pago.change_amount, Decimal("0"))
+
+    def test_tenant_a_no_puede_cobrar_carrito_de_tenant_b(self):
+        from apps.tenants.models import Membership, Tenant
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        tenant_b = Tenant.objects.create(name="Otro tenant checkout", slug="otro-tenant-checkout")
+        user_b = User.objects.create_user(email="otro.checkout@example.com", password="clave-de-prueba-987")
+        Membership.objects.create(user=user_b, tenant=tenant_b, role=Membership.Role.OWNER)
+        from apps.sales import services as sales_services
+
+        sale_b = sales_services.create_sale(tenant_b, user=user_b)
+        sales_services.add_sale_item(sale_b, product=self.producto, quantity=Decimal("1"), user=user_b)
+
+        respuesta = self.client.post(reverse("pos:checkout", args=[sale_b.pk]), {
+            "form-TOTAL_FORMS": "1", "form-INITIAL_FORMS": "0", "form-MIN_NUM_FORMS": "0", "form-MAX_NUM_FORMS": "1000",
+            "form-0-method": "cash", "form-0-amount": "1000",
+        })
+        self.assertEqual(respuesta.status_code, 404)
+        sale_b.refresh_from_db()
+        self.assertEqual(sale_b.status, Sale.Status.DRAFT)
 
     def test_tenant_a_no_puede_ver_carrito_de_tenant_b(self):
         from apps.tenants.models import Membership, Tenant

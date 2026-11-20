@@ -19,6 +19,19 @@
     Caja <strong>{{ sesion.cash_register.code }}</strong> abierta desde {{ sesion.opened_at|date:"d M Y H:i" }}.
     <a href="{% url 'pos:session_close' %}">Cerrar caja</a>
 </div>
+
+<div class="tarjeta pos-movimiento-caja" style="margin-bottom: var(--espacio-4);">
+    <div class="tarjeta__cuerpo">
+        <h3 class="panel-seccion__titulo">Movimiento de caja</h3>
+        <form method="post" action="{% url 'pos:cash_movement_create' %}" novalidate>
+            {% csrf_token %}
+            {% for field in cash_movement_form %}
+            {% include "customers/_campo.html" with field=field %}
+            {% endfor %}
+            <button type="submit" class="btn btn--contorno">Registrar movimiento</button>
+        </form>
+    </div>
+</div>
 {% else %}
 <div class="alerta alerta--advertencia" style="margin-bottom: var(--espacio-4);">
     No tienes una sesión de caja abierta. <a href="{% url 'pos:session_open' %}">Abrir caja</a> antes de cobrar.
@@ -32,10 +45,10 @@
 </div>
 {% endif %}
 
-<div class="tarjeta" style="margin-bottom: var(--espacio-6);">
+<div class="tarjeta pos-busqueda" style="margin-bottom: var(--espacio-6);">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Buscar producto</h3>
-        <form method="get" style="display:flex; gap: var(--espacio-3); align-items:flex-end;">
+        <form method="get" class="pos-busqueda__form">
             {% for field in search_form %}
             {% include "customers/_campo.html" with field=field %}
             {% endfor %}
@@ -43,15 +56,15 @@
         </form>
 
         {% if resultados %}
-        <div class="tabla-envoltorio" style="margin-top: var(--espacio-4);">
+        <div class="tabla-envoltorio pos-resultados" style="margin-top: var(--espacio-4);">
             <table class="tabla">
-                <thead><tr><th>Producto</th><th>SKU</th><th>Precio</th><th>Unidad</th><th>Cantidad</th><th>Descuento %</th><th>Descuento $</th><th></th></tr></thead>
+                <thead><tr><th>Producto</th><th>SKU</th><th class="u-num">Precio</th><th>Unidad</th><th>Cantidad</th><th>Descuento %</th><th>Descuento $</th><th></th></tr></thead>
                 <tbody>
                     {% for resultado in resultados %}
                     <tr>
                         <td>{{ resultado.product.name }}</td>
                         <td>{{ resultado.product.sku }}</td>
-                        <td>${{ resultado.product.sale_price }}</td>
+                        <td class="u-num u-cifra">${{ resultado.product.sale_price }}</td>
                         <td>
                             {% if resultado.requires_unit_selection %}
                             <span class="badge badge--advertencia">Requiere IMEI/serie</span>
@@ -60,18 +73,22 @@
                             {% else %}—{% endif %}
                         </td>
                         <td colspan="3">
-                            <form method="post" action="{% url 'pos:add_item' sale.pk %}" style="display:flex; gap: var(--espacio-2); align-items:center;">
+                            <form method="post" action="{% url 'pos:add_item' sale.pk %}" class="pos-fila-alta">
                                 {% csrf_token %}
                                 <input type="hidden" name="product_id" value="{{ resultado.product.pk }}">
                                 {% if resultado.unit %}
                                 <input type="hidden" name="unit_identifier" value="{% firstof resultado.unit.serial resultado.unit.imei_1 %}">
                                 {% elif resultado.requires_unit_selection %}
-                                <input type="text" name="unit_identifier" placeholder="IMEI/serie" required style="width:9rem;">
+                                <label for="pos-imei-{{ resultado.product.pk }}" class="visualmente-oculto">IMEI o número de serie</label>
+                                <input type="text" id="pos-imei-{{ resultado.product.pk }}" name="unit_identifier" placeholder="IMEI/serie" required class="pos-fila-alta__campo pos-fila-alta__campo--ancho">
                                 {% endif %}
-                                <input type="number" name="quantity" value="1" min="0.001" step="0.001" style="width:5rem;">
-                                <input type="number" name="discount_percent" placeholder="%" min="0" max="100" step="0.01" style="width:5rem;">
-                                <input type="number" name="discount_amount" placeholder="$" min="0" step="0.01" style="width:5rem;">
-                                <button type="submit" class="btn btn--primario btn--sm">Agregar</button>
+                                <label for="pos-cantidad-{{ resultado.product.pk }}" class="visualmente-oculto">Cantidad</label>
+                                <input type="number" id="pos-cantidad-{{ resultado.product.pk }}" name="quantity" value="1" min="0.001" step="0.001" class="pos-fila-alta__campo">
+                                <label for="pos-desc-pct-{{ resultado.product.pk }}" class="visualmente-oculto">Descuento en porcentaje</label>
+                                <input type="number" id="pos-desc-pct-{{ resultado.product.pk }}" name="discount_percent" placeholder="%" min="0" max="100" step="0.01" class="pos-fila-alta__campo">
+                                <label for="pos-desc-monto-{{ resultado.product.pk }}" class="visualmente-oculto">Descuento en monto</label>
+                                <input type="number" id="pos-desc-monto-{{ resultado.product.pk }}" name="discount_amount" placeholder="$" min="0" step="0.01" class="pos-fila-alta__campo">
+                                <button type="submit" class="btn btn--primario btn--sm pos-boton-agregar">Agregar</button>
                             </form>
                         </td>
                     </tr>
@@ -87,23 +104,34 @@
 
 <h2 class="panel-seccion__titulo">Carrito</h2>
 {% if items %}
-<div class="tabla-envoltorio">
+<div class="tabla-envoltorio pos-carrito">
     <table class="tabla">
-        <thead><tr><th>Producto</th><th>Unidad</th><th>Cant.</th><th>Precio</th><th>Descuento</th><th>Impuesto</th><th>Total</th><th></th></tr></thead>
+        <thead><tr><th>Producto</th><th>Unidad</th><th class="u-num">Cant.</th><th class="u-num">Precio</th><th class="u-num">Descuento</th><th class="u-num">Impuesto</th><th class="u-num">Total</th><th></th></tr></thead>
         <tbody>
             {% for item in items %}
             <tr>
                 <td>{{ item.description }}</td>
                 <td>{% if item.inventory_unit %}···{{ item.inventory_unit.serial|default:item.inventory_unit.imei_1|slice:"-4:" }}{% else %}—{% endif %}</td>
-                <td>{{ item.quantity|floatformat:"-3" }}</td>
-                <td>${{ item.unit_price }}</td>
-                <td>${{ item.discount_amount }}</td>
-                <td>${{ item.tax_amount }}</td>
-                <td>${{ item.total }}</td>
+                <td class="u-num u-cifra">
+                    {% if item.inventory_unit %}
+                    {{ item.quantity|floatformat:"-3" }}
+                    {% else %}
+                    <form method="post" action="{% url 'pos:update_item_quantity' sale.pk item.pk %}" class="pos-fila-alta">
+                        {% csrf_token %}
+                        <label for="pos-cant-{{ item.pk }}" class="visualmente-oculto">Cantidad</label>
+                        <input type="number" id="pos-cant-{{ item.pk }}" name="quantity" value="{{ item.quantity|floatformat:"-3" }}" min="0.001" step="0.001" class="pos-fila-alta__campo">
+                        <button type="submit" class="btn btn--contorno btn--sm">Actualizar</button>
+                    </form>
+                    {% endif %}
+                </td>
+                <td class="u-num u-cifra">${{ item.unit_price }}</td>
+                <td class="u-num u-cifra">${{ item.discount_amount }}</td>
+                <td class="u-num u-cifra">${{ item.tax_amount }}</td>
+                <td class="u-num u-cifra">${{ item.total }}</td>
                 <td>
                     <form method="post" action="{% url 'pos:remove_item' sale.pk item.pk %}">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn--contorno btn--sm">Quitar</button>
+                        <button type="submit" class="btn btn--contorno btn--sm pos-boton-quitar">Quitar</button>
                     </form>
                 </td>
             </tr>
@@ -112,18 +140,18 @@
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🛒</div><h3>Carrito vacío</h3><p>Busca un producto arriba para agregarlo.</p></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="20" r="1.25"/><circle cx="18" cy="20" r="1.25"/><path d="M2.5 3h2.5l2.3 12.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L21 7H6"/></svg></div><h3>Carrito vacío</h3><p>Busca un producto arriba para agregarlo.</p></div>
 {% endif %}
 
-<div class="kpi-grid" style="margin: var(--espacio-6) 0;">
-    <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor">${{ sale.subtotal }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor">${{ sale.discount_total }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor">${{ sale.tax_total }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Total</p><p class="kpi__valor">${{ sale.total }}</p></div>
+<div class="kpi-grid pos-resumen" style="margin: var(--espacio-6) 0;">
+    <div class="kpi"><p class="kpi__etiqueta">Subtotal</p><p class="kpi__valor u-cifra">${{ sale.subtotal }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Descuento</p><p class="kpi__valor u-cifra">${{ sale.discount_total }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Impuesto</p><p class="kpi__valor u-cifra">${{ sale.tax_total }}</p></div>
+    <div class="kpi pos-total"><p class="kpi__etiqueta">Total</p><p class="kpi__valor u-cifra">${{ sale.total }}</p></div>
 </div>
 
-<div style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--espacio-6);">
-    <div class="tarjeta">
+<div class="u-grid-2col">
+    <div class="tarjeta pos-cliente">
         <div class="tarjeta__cuerpo">
             <h3 class="panel-seccion__titulo">Cliente</h3>
             <p class="campo__ayuda">Actual: {% if sale.customer %}{{ sale.customer.display_name }}{% else %}Consumidor final{% endif %}</p>
@@ -137,7 +165,7 @@
         </div>
     </div>
 
-    <div class="tarjeta">
+    <div class="tarjeta pos-descuento">
         <div class="tarjeta__cuerpo">
             <h3 class="panel-seccion__titulo">Descuento global</h3>
             <form method="post" action="{% url 'pos:set_global_discount' sale.pk %}" novalidate>
@@ -151,20 +179,20 @@
     </div>
 </div>
 
-<div class="tarjeta" style="margin-top: var(--espacio-6);">
+<div class="tarjeta pos-checkout" style="margin-top: var(--espacio-6);">
     <div class="tarjeta__cuerpo">
         <h3 class="panel-seccion__titulo">Cobrar</h3>
         <form method="post" action="{% url 'pos:checkout' sale.pk %}" novalidate>
             {% csrf_token %}
             {{ payment_formset.management_form }}
             {% for pago_form in payment_formset %}
-            <div style="display:flex; gap: var(--espacio-3); margin-bottom: var(--espacio-2);">
+            <div class="pos-fila-pago">
                 {% for field in pago_form %}
                 {% include "customers/_campo.html" with field=field %}
                 {% endfor %}
             </div>
             {% endfor %}
-            <button type="submit" class="btn btn--primario">Confirmar y cobrar</button>
+            <button type="submit" class="btn btn--primario pos-boton-cobrar">Confirmar y cobrar</button>
         </form>
     </div>
 </div>

@@ -15,6 +15,7 @@ from django.views import View
 from django.views.generic import ListView
 
 from apps.customers.file_validation import nombre_original_seguro
+from apps.permissions.services import require_permission
 from apps.tenants.permissions import TenantRequiredMixin
 
 from . import services
@@ -387,6 +388,7 @@ class SaleCreateView(LoginRequiredMixin, TenantRequiredMixin, View):
         return render(request, "sales/sale_form.html", {"form": form})
 
     def post(self, request):
+        require_permission(request, "sales.create")
         form = SaleHeaderForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             sale = services.create_sale(request.tenant, user=request.user, **form.cleaned_data)
@@ -416,6 +418,7 @@ class SaleDetailView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class SaleItemAddView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "sales.update")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         form = SaleItemForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -435,6 +438,7 @@ class SaleItemAddView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class SaleItemDeleteView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk, item_pk):
+        require_permission(request, "sales.update")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         item = get_object_or_404(SaleItem, pk=item_pk, tenant=request.tenant, sale=sale)
         try:
@@ -447,6 +451,7 @@ class SaleItemDeleteView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class SaleConfirmView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "sales.update")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         try:
             services.confirm_sale(sale, request.user)
@@ -458,6 +463,7 @@ class SaleConfirmView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class SaleCancelView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "sales.cancel")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         try:
             services.cancel_sale(sale, request.user, reason=request.POST.get("reason", ""))
@@ -469,6 +475,7 @@ class SaleCancelView(LoginRequiredMixin, TenantRequiredMixin, View):
 
 class SalePaymentAddView(LoginRequiredMixin, TenantRequiredMixin, View):
     def post(self, request, pk):
+        require_permission(request, "payments.create")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         form = PaymentForm(request.POST)
         if form.is_valid():
@@ -491,6 +498,7 @@ class SalePaymentReverseView(LoginRequiredMixin, TenantRequiredMixin, View):
     ese monto al saldo sin aplicar del pago."""
 
     def post(self, request, pk, allocation_pk):
+        require_permission(request, "payments.reverse")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         allocation = get_object_or_404(PaymentAllocation, pk=allocation_pk, tenant=request.tenant, sale=sale)
         services.reverse_allocation(allocation, request.user)
@@ -508,6 +516,7 @@ class SaleReturnCreateView(LoginRequiredMixin, TenantRequiredMixin, View):
         return render(request, "sales/return_form.html", {"sale": sale, "filas": filas, "formset": formset, "reason_form": ReturnForm()})
 
     def post(self, request, pk):
+        require_permission(request, "sales.refund")
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
         items_by_id = {item.pk: item for item in services.get_sale_items(sale)}
         formset = ReturnItemFormSet(request.POST)
@@ -540,14 +549,19 @@ class SaleReturnCreateView(LoginRequiredMixin, TenantRequiredMixin, View):
 class SaleReceiptView(LoginRequiredMixin, TenantRequiredMixin, View):
     def get(self, request, pk):
         sale = get_object_or_404(Sale, pk=pk, tenant=request.tenant)
+        pagos = PaymentAllocation.objects.filter(
+            sale=sale, status=PaymentAllocation.Status.ACTIVE, payment__status=Payment.Status.CONFIRMED
+        ).select_related("payment")
         return render(
             request, "sales/sale_receipt.html",
             {
                 "sale": sale,
                 "items": services.get_sale_items(sale),
-                "payments": PaymentAllocation.objects.filter(
-                    sale=sale, status=PaymentAllocation.Status.ACTIVE, payment__status=Payment.Status.CONFIRMED
-                ).select_related("payment"),
+                "payments": pagos,
+                # FASE 7 — BLOQUE B: columnas Recibido/Cambio solo se
+                # muestran cuando algún pago de esta venta realmente
+                # tuvo cambio — nunca una sección redundante en cero.
+                "hubo_cambio": pagos.filter(payment__change_amount__gt=0).exists(),
             },
         )
 

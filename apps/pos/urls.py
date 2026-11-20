@@ -16,6 +16,7 @@ urlpatterns = [
     path("terminal/<int:pk>/", views.TerminalDetailView.as_view(), name="terminal_detail"),
     path("terminal/<int:pk>/agregar/", views.AddItemView.as_view(), name="add_item"),
     path("terminal/<int:pk>/lineas/<int:item_pk>/eliminar/", views.RemoveItemView.as_view(), name="remove_item"),
+    path("terminal/<int:pk>/lineas/<int:item_pk>/cantidad/", views.UpdateItemQuantityView.as_view(), name="update_item_quantity"),
     path("terminal/<int:pk>/cliente/", views.SetCustomerView.as_view(), name="set_customer"),
     path("terminal/<int:pk>/descuento/", views.SetGlobalDiscountView.as_view(), name="set_global_discount"),
     path("terminal/<int:pk>/cancelar/", views.CancelCartView.as_view(), name="cancel_cart"),

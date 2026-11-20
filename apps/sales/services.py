@@ -153,7 +153,7 @@ def _recalculate_item(item):
     if item.discount_percent and item.discount_percent > 0:
         descuento = (line_subtotal * item.discount_percent / Decimal("100")).quantize(Decimal("0.01"))
     else:
-        descuento = item.discount_amount or Decimal("0")
+        descuento = min(item.discount_amount or Decimal("0"), line_subtotal)  # nunca más que el subtotal de la línea (mismo criterio que el descuento global)
     base_imponible = line_subtotal - descuento
     impuesto = (base_imponible * item.tax_rate / Decimal("100")).quantize(Decimal("0.01"))
 
@@ -785,6 +785,30 @@ def remove_sale_item(item):
 
 
 @transaction.atomic
+def update_sale_item_quantity(item, quantity):
+    """Modifica ÚNICAMENTE `item.quantity` de una línea ya existente —
+    precio, descuento, impuesto, producto y unidad de inventario quedan
+    intactos como snapshot. Reutiliza literalmente `_recalculate_item`/
+    `recalculate_document_totals` (nunca una fórmula paralela). Nunca
+    toca inventario: para QUANTITY el stock solo se mueve en
+    `confirm_sale`, y esta operación solo existe mientras la venta sigue
+    en DRAFT. Rechaza líneas SERIALIZED (`inventory_unit_id` presente):
+    una unidad de inventario serializada representa una única unidad
+    física, nunca una cantidad arbitraria."""
+    if quantity is None or quantity <= 0:
+        raise InvalidSalesOperation("La cantidad debe ser mayor que cero.")
+    sale = item.sale
+    _require_editable_sale(sale)
+    if item.inventory_unit_id is not None:
+        raise InvalidSalesOperation("No se puede editar la cantidad de una línea con unidad serializada (IMEI/serie).")
+    item.quantity = quantity
+    _recalculate_item(item)
+    item.save()
+    recalculate_document_totals(sale)
+    return item
+
+
+@transaction.atomic
 def set_sale_global_discount(sale, *, percent=None, amount=None):
     """Actualiza el descuento GLOBAL de una venta en `DRAFT` (usado por
     FASE 11/POS, donde el descuento puede decidirse en cualquier
@@ -1048,13 +1072,19 @@ def get_customer_pending_sales(customer):
 
 
 @transaction.atomic
-def create_payment(tenant, *, customer=None, method, amount, user, currency=None, reference="", idempotency_key="", notes=""):
+def create_payment(tenant, *, customer=None, method, amount, user, currency=None, reference="", idempotency_key="", notes="", amount_received=None, change_amount=None):
     """Registra dinero recibido de un cliente SIN aplicarlo todavía a
     ninguna factura — queda disponible como saldo sin aplicar
     (`get_unallocated_payment_amount`) hasta llamar a
     `allocate_payment`/`apply_payment_to_sales`/`record_payment_for_sale`.
     Idempotente por `idempotency_key`: un reintento con la misma clave
-    devuelve el pago ya existente en vez de crear uno duplicado."""
+    devuelve el pago ya existente en vez de crear uno duplicado.
+
+    `amount_received`/`change_amount` (FASE 7 — BLOQUE B): opcionales,
+    exclusivos del checkout POS (`apps.pos.services.checkout_sale`) —
+    todo otro llamador (cobros, anticipos, pago directo de factura) los
+    omite, dejando `amount_received=None`/`change_amount=0` (el
+    significado de `amount` no cambia: sigue siendo el monto aplicado)."""
     if idempotency_key:
         existente = Payment.all_objects.filter(tenant=tenant, idempotency_key=idempotency_key).first()
         if existente:
@@ -1066,6 +1096,7 @@ def create_payment(tenant, *, customer=None, method, amount, user, currency=None
         tenant=tenant, customer=customer, method=method, amount=amount,
         currency=currency or (customer.currency if customer else "USD"),
         reference=reference, idempotency_key=idempotency_key, user=user, notes=notes,
+        amount_received=amount_received, change_amount=change_amount if change_amount is not None else Decimal("0"),
     )
     log_activity(
         tenant, entity_type="payment", entity_id=payment.pk,
@@ -1158,20 +1189,21 @@ def apply_payment_to_sales(payment, allocations, user):
 
 
 @transaction.atomic
-def record_payment_for_sale(sale, *, method, amount, user, currency=None, reference="", idempotency_key="", notes=""):
+def record_payment_for_sale(sale, *, method, amount, user, currency=None, reference="", idempotency_key="", notes="", amount_received=None, change_amount=None):
     """Atajo para el caso más común: un pago que se cobra y se aplica de
     inmediato a una sola venta (usado por la vista de "registrar pago"
-    de FASE 10). Crea el `Payment` (con el cliente de la venta) y lo
-    aplica en su totalidad en un solo paso atómico, para que las vistas
-    que solo cobran una venta no necesiten conocer el ledger de
-    asignaciones. Idempotente: un reintento con la misma
-    `idempotency_key` reutiliza el `Payment` ya creado y, si ya fue
-    aplicado, no vuelve a aplicarlo (nunca duplica ni la creación ni la
-    aplicación)."""
+    de FASE 10, y por el checkout POS de FASE 11/BLOQUE B). Crea el
+    `Payment` (con el cliente de la venta) y lo aplica en su totalidad
+    en un solo paso atómico, para que las vistas que solo cobran una
+    venta no necesiten conocer el ledger de asignaciones. Idempotente:
+    un reintento con la misma `idempotency_key` reutiliza el `Payment`
+    ya creado y, si ya fue aplicado, no vuelve a aplicarlo (nunca
+    duplica ni la creación ni la aplicación)."""
     locked_sale = Sale.all_objects.select_for_update().get(pk=sale.pk, tenant=sale.tenant)
     payment = create_payment(
         locked_sale.tenant, customer=locked_sale.customer, method=method, amount=amount, user=user,
         currency=currency or locked_sale.currency, reference=reference, idempotency_key=idempotency_key, notes=notes,
+        amount_received=amount_received, change_amount=change_amount,
     )
     disponible = get_unallocated_payment_amount(payment)
     if disponible > 0:

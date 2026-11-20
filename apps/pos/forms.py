@@ -35,6 +35,16 @@ class PosAddItemForm(forms.Form):
     )
 
 
+class UpdateQuantityForm(forms.Form):
+    """Editar la cantidad de UNA línea ya existente del carrito (FASE 7
+    — Bloque A). Mismo campo `quantity` que `PosAddItemForm` — nunca
+    permite 0 ni negativos."""
+
+    quantity = forms.DecimalField(
+        label="Cantidad", max_digits=12, decimal_places=3, min_value=Decimal("0.001")
+    )
+
+
 class CustomerSelectForm(forms.Form):
     customer = forms.ModelChoiceField(
         label="Cliente", queryset=Customer.objects.none(), required=False, empty_label="Consumidor final",

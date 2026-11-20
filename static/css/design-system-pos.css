@@ -1,0 +1,210 @@
+/*
+  Atlas — POS (FASE 7, ETAPA 7, BLOQUE 0 — Infraestructura aislada).
+
+  Namespace: `.shell--pos`, aplicado siempre en CONVIVENCIA con
+  `.shell--erp` (nunca en su reemplazo — ver
+  docs/pos-redesign-final-direction.md §4, arquitectura ya aprobada):
+
+      .shell--erp
+          └── .shell--pos
+                  └── .pos-*
+
+  Alcance de este archivo, deliberadamente igual al de
+  `static/css/design-system-erp.css` sobre `static/css/design-system.css`
+  en FASE 5 — SUSTITUCIÓN DE TOKEN, nunca reescritura de componente:
+    - NO redeclara `:root` — ninguna página fuera de `.shell--pos`
+      puede verse afectada.
+    - NO modifica ninguna regla existente de `design-system.css`,
+      `base.css` ni `design-system-erp.css`.
+    - Todo token que `.shell--pos` necesite y que `.shell--erp` ya
+      resuelva (color, tipografía, radios, sombras, spacing) se hereda
+      por cascada — el POS ya vive dentro de `.shell--erp` en el DOM
+      real (docs/pos-redesign-discovery.md §9), nunca se duplica aquí.
+      Ningún token nuevo (`--pos-color-primario`, etc.) se declara sin
+      que exista una necesidad de especialización real documentada en
+      docs/pos-redesign-design-system.md §4-6.
+
+  Bloque 0 (esta etapa) es únicamente infraestructura: declara el
+  namespace y el mecanismo de carga condicional
+  (`templates/layout_app.html`, solo en las 5 pantallas POS en alcance
+  — terminal, register_list, session_open, session_close,
+  session_summary; `collections_search`/`customer_collections` quedan
+  fuera, ya migradas/fuera de alcance según
+  docs/pos-redesign-migration-matrix.md). Ningún componente visual
+  (densidad de carrito, prominencia del Total, objetivo táctil, fixes
+  de responsive) se implementa todavía — eso corresponde a los
+  Bloques 1-7, cada uno con su propia autorización.
+*/
+
+.shell--pos {
+    /* Namespace base — intencionalmente sin declaraciones todavía.
+       Bloques posteriores añaden aquí, nunca fuera de este selector
+       (o de `.shell--pos .pos-*`), cualquier especialización POS. */
+}
+
+/* ============================================================
+   BLOQUE 2 — Terminal: Búsqueda / Resultados / alta rápida de
+   producto (docs/pos-redesign-implementation-plan.md §20). Alcance
+   exclusivo de esta sección: `.pos-busqueda`, `.pos-resultados`,
+   `.pos-fila-alta`, `.pos-boton-agregar` — nunca `.pos-carrito`,
+   `.pos-total`, etc. (Bloques 3/4, no implementados todavía).
+   ============================================================ */
+
+/* Formulario de búsqueda: mismo layout flex de hoy, con flex-wrap
+   real (el original no lo tenía — se añade aquí porque esta fila se
+   reescribe de estilo en línea a clase en este mismo cambio, no es el
+   fix de responsive de Cliente/Descuento ni de las filas de pago,
+   que siguen pendientes de sus propios Bloques 3/4). */
+.shell--pos .pos-busqueda__form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--espacio-3);
+    align-items: flex-end;
+}
+
+/* Densidad de fila POS (Direction A) para la tabla de resultados de
+   búsqueda — más compacta que la densidad estándar de `.tabla` en el
+   resto del ERP Atlas, sin tocar `.tabla` en sí (queda compartida). */
+.shell--pos .pos-resultados .tabla th,
+.shell--pos .pos-resultados .tabla td {
+    padding-top: var(--espacio-2);
+    padding-bottom: var(--espacio-2);
+}
+
+/* Fila de alta rápida (cantidad/descuento/IMEI por resultado): mismo
+   layout flex de hoy, con flex-wrap real. Los anchos fijos ya
+   existían como `style="width:...rem"`; se conservan como clases. */
+.shell--pos .pos-fila-alta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--espacio-2);
+    align-items: center;
+}
+
+.shell--pos .pos-fila-alta__campo {
+    width: 5rem;
+}
+
+.shell--pos .pos-fila-alta__campo--ancho {
+    width: 9rem;
+}
+
+/* Objetivo táctil ampliado — "Agregar" es uno de los 3 controles de
+   alta frecuencia definidos en docs/pos-redesign-final-direction.md
+   §18 (Agregar/Quitar/Confirmar y cobrar). Quitar y Confirmar y
+   cobrar pertenecen al carrito/checkout (Bloques 3/4), no se tocan
+   aquí. */
+.shell--pos .pos-boton-agregar {
+    min-height: 44px;
+    padding-left: var(--espacio-4);
+    padding-right: var(--espacio-4);
+}
+
+/* ============================================================
+   BLOQUE 3 — Terminal: Carrito / Cliente / Descuento
+   (docs/pos-redesign-implementation-plan.md §20). Alcance exclusivo:
+   `.pos-carrito`, `.pos-boton-quitar`, `.pos-cliente`, `.pos-descuento`
+   — nunca `.pos-total`/`.pos-checkout` (Bloque 4, no implementado).
+   El grid Cliente/Descuento ya no usa `style="display:grid;
+   grid-template-columns:1fr 1fr"` inline (sustituido por la utilidad
+   `.u-grid-2col` ya existente en design-system-erp.css desde FASE 5,
+   mismo fix ya probado en customer_collections.html — corrige el
+   anti-patrón real documentado desde Etapa 1 de este proceso, sin
+   duplicar la clase aquí).
+   ============================================================ */
+
+/* Densidad de fila POS (Direction A) para el carrito — mismo criterio
+   que `.pos-resultados` del Bloque 2, sin tocar `.tabla` compartida. */
+.shell--pos .pos-carrito .tabla th,
+.shell--pos .pos-carrito .tabla td {
+    padding-top: var(--espacio-2);
+    padding-bottom: var(--espacio-2);
+}
+
+/* Objetivo táctil ampliado — "Quitar" es el segundo de los 3
+   controles de alta frecuencia (docs/pos-redesign-final-direction.md
+   §18). "Confirmar y cobrar" pertenece al checkout (Bloque 4). */
+.shell--pos .pos-boton-quitar {
+    min-height: 44px;
+    padding-left: var(--espacio-3);
+    padding-right: var(--espacio-3);
+}
+
+/* ============================================================
+   BLOQUE 4 — Terminal: Checkout / Payment
+   (docs/pos-redesign-implementation-plan.md §20). Alcance exclusivo:
+   `.pos-resumen`, `.pos-total`, `.pos-checkout`, `.pos-fila-pago`,
+   `.pos-boton-cobrar` — nunca Cash/Receipt (Bloques 5/6).
+   ============================================================ */
+
+/* Prominencia del Total (docs/pos-redesign-final-direction.md §11):
+   mismo `.kpi-grid`/`.kpi` de Atlas, sin duplicar el componente — solo
+   el valor del Total crece y toma el color primario. Subtotal/
+   Descuento/Impuesto conservan el tratamiento `.kpi` estándar. */
+.shell--pos .pos-total .kpi__valor {
+    font-size: var(--texto-3xl);
+    color: var(--color-primario);
+}
+
+/* Filas de pago del formset: mismo layout flex de hoy, con
+   `flex-wrap: wrap` real — corrige el riesgo real documentado desde
+   Etapa 1 (filas de pago sin flex-wrap, migration-matrix.md fila
+   "Terminal — Checkout"). */
+.shell--pos .pos-fila-pago {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--espacio-3);
+    margin-bottom: var(--espacio-2);
+}
+
+/* Objetivo táctil ampliado y ancho completo — "Confirmar y cobrar" es
+   el tercero de los 3 controles de alta frecuencia
+   (docs/pos-redesign-final-direction.md §18), y cierra visualmente el
+   flujo de venta ("franja de cierre", Etapa 3 §8 / Etapa 4 §7). */
+.shell--pos .pos-boton-cobrar {
+    min-height: 44px;
+    width: 100%;
+}
+
+/* ============================================================
+   BLOQUE 5 — Cash: Register List / Session Open / Session Close /
+   Session Summary (docs/pos-redesign-implementation-plan.md §20).
+   Alcance exclusivo: `.pos-cajas`, `.pos-crear-caja`, `.pos-apertura`,
+   `.pos-cierre`, `.pos-resumen-caja`, `.pos-diferencia--positiva/
+   --negativa` — nunca Receipt (Bloque 6). Ningún selector aquí
+   introduce una acción nueva (crear/abrir/cerrar/mover caja): son
+   namespaces de estructura y color condicional sobre valores ya
+   calculados por el servicio real (`sesion.difference`).
+   ============================================================ */
+
+/* Color condicional de la diferencia de cierre
+   (docs/pos-redesign-final-direction.md §15) — lee el signo de
+   `sesion.difference`, ya calculado por `close_cash_session`; nunca
+   un cálculo nuevo ni un campo nuevo. */
+.shell--pos .pos-diferencia--positiva {
+    color: var(--color-secundario);
+}
+
+.shell--pos .pos-diferencia--negativa {
+    color: var(--color-peligro-700);
+}
+
+/* ============================================================
+   BLOQUE 7 — Responsive / Touch (auditoría, sin nuevo componente).
+   Se releyeron las 6 pantallas y este archivo completo. Hallazgo
+   único no cubierto todavía: la fila de botones "Imprimir/Volver" de
+   `sale_receipt.html` sin `flex-wrap` — corregida en ese mismo archivo
+   (fuera de `.shell--pos`, ver su propio `<style>` local, mismo
+   criterio del Bloque 6). Ningún otro `display:flex` sin `flex-wrap`
+   quedó pendiente en las 6 pantallas — `.pos-busqueda__form`,
+   `.pos-fila-alta` y `.pos-fila-pago` ya lo tenían desde los Bloques
+   2 y 4. El resto de riesgos de overflow ya estaba resuelto por
+   mecanismos globales ya existentes: `.tabla-envoltorio{overflow-x:
+   auto}` (todas las tablas de esta pantalla), `.u-grid-2col` (Cliente/
+   Descuento, colapsa bajo 640px), `.kpi-grid` (auto-fit). Objetivo
+   táctil: se mantienen exactamente los 3 controles ya definidos en
+   docs/pos-redesign-final-direction.md §18 (Agregar/Quitar/Confirmar y
+   cobrar) — deliberadamente no se amplían más botones (seleccionar
+   cliente, abrir/cerrar caja, etc.), coherente con esa misma decisión
+   ya aprobada de evitar "todo son botones gigantes".
+   ============================================================ */

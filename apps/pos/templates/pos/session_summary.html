@@ -17,11 +17,11 @@
     </div>
 </div>
 
-<div class="kpi-grid" style="margin-bottom: var(--espacio-6);">
-    <div class="kpi"><p class="kpi__etiqueta">Fondo inicial</p><p class="kpi__valor">${{ sesion.opening_amount }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Efectivo esperado</p><p class="kpi__valor">${{ sesion.expected_cash }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Efectivo contado</p><p class="kpi__valor">${{ sesion.counted_cash }}</p></div>
-    <div class="kpi"><p class="kpi__etiqueta">Diferencia</p><p class="kpi__valor">${{ sesion.difference }}</p></div>
+<div class="kpi-grid pos-resumen-caja" style="margin-bottom: var(--espacio-6);">
+    <div class="kpi"><p class="kpi__etiqueta">Fondo inicial</p><p class="kpi__valor u-cifra">${{ sesion.opening_amount }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Efectivo esperado</p><p class="kpi__valor u-cifra">${{ sesion.expected_cash }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Efectivo contado</p><p class="kpi__valor u-cifra">${{ sesion.counted_cash }}</p></div>
+    <div class="kpi"><p class="kpi__etiqueta">Diferencia</p><p class="kpi__valor u-cifra{% if sesion.difference > 0 %} pos-diferencia--positiva{% elif sesion.difference < 0 %} pos-diferencia--negativa{% endif %}">${{ sesion.difference }}</p></div>
 </div>
 
 {% if sesion.closing_notes %}<p class="campo__ayuda">Observaciones: {{ sesion.closing_notes }}</p>{% endif %}
@@ -30,12 +30,12 @@
 {% if movimientos %}
 <div class="tabla-envoltorio">
     <table class="tabla">
-        <thead><tr><th>Tipo</th><th>Monto</th><th>Motivo</th><th>Usuario</th><th>Fecha</th></tr></thead>
+        <thead><tr><th>Tipo</th><th class="u-num">Monto</th><th>Motivo</th><th>Usuario</th><th>Fecha</th></tr></thead>
         <tbody>
             {% for movimiento in movimientos %}
             <tr>
                 <td>{{ movimiento.get_movement_type_display }}</td>
-                <td>${{ movimiento.amount }}</td>
+                <td class="u-num u-cifra">${{ movimiento.amount }}</td>
                 <td>{{ movimiento.reason|default:"—" }}</td>
                 <td>{% firstof movimiento.user.get_full_name movimiento.user.email "—" %}</td>
                 <td>{{ movimiento.created_at|date:"d M Y H:i" }}</td>
@@ -45,6 +45,6 @@
     </table>
 </div>
 {% else %}
-<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true">🗂️</div><h3>Sin movimientos</h3></div>
+<div class="estado-vacio tarjeta"><div class="estado-vacio__icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v4h4"/><path d="M8 12.5h8M8 16h5"/></svg></div><h3>Sin movimientos</h3></div>
 {% endif %}
 {% endblock %}

@@ -530,6 +530,21 @@ class Payment(TenantScopedModel):
     )
     method = models.CharField("método", max_length=20, choices=PaymentMethod.choices)
     amount = models.DecimalField("monto", max_digits=12, decimal_places=2)
+    # FASE 7 — BLOQUE B (POS): distinción entre lo que el cliente
+    # entregó y lo efectivamente aplicado — `amount` sigue significando
+    # exactamente lo mismo que antes (el monto aplicado/neto). Solo el
+    # checkout POS declara `amount_received`; el resto de los orígenes
+    # de `Payment` (cobros, anticipos, pago directo de factura) lo dejan
+    # vacío, porque ese flujo nunca calculó un "recibido" distinto del
+    # aplicado — no hay cambio que representar allí.
+    amount_received = models.DecimalField(
+        "monto recibido", max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Solo para checkout POS: lo que el cliente entregó antes de descontar el cambio. Vacío cuando no aplica.",
+    )
+    change_amount = models.DecimalField(
+        "cambio entregado", max_digits=12, decimal_places=2, default=Decimal("0"),
+        help_text="Cambio en efectivo entregado al cliente para este pago — 0 cuando no aplica.",
+    )
     currency = models.CharField("moneda", max_length=3, default="USD")
     reference = models.CharField("referencia", max_length=255, blank=True)
     idempotency_key = models.CharField(
@@ -556,6 +571,7 @@ class Payment(TenantScopedModel):
         ordering = ["-created_at", "-id"]
         constraints = [
             models.CheckConstraint(check=models.Q(amount__gt=0), name="payment_monto_positivo"),
+            models.CheckConstraint(check=models.Q(change_amount__gte=0), name="payment_cambio_no_negativo"),
             models.UniqueConstraint(
                 fields=["tenant", "idempotency_key"],
                 condition=models.Q(idempotency_key__gt=""),

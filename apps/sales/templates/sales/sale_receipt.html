@@ -7,37 +7,63 @@
     .documento-imprimible { max-width: 800px; margin: var(--espacio-8) auto; padding: 0 var(--espacio-4); }
     @media print {
         .no-imprimir { display: none !important; }
+        /* FASE 7 — BLOQUE C: `.toasts` (mensajes flash, ver
+           templates/base.html) no tiene ninguna regla de impresión en
+           todo el proyecto — sin esto, el mensaje de checkout ("Venta
+           X cobrada. Cambio a entregar: Y.") se imprimiría flotando
+           sobre el recibo si el cajero imprime justo después de
+           cobrar, el flujo real más común. */
+        .toasts { display: none !important; }
         .documento-imprimible { margin: 0; max-width: none; }
     }
+    /* Tratamiento POS del recibo — reglas locales, no dependientes de
+       `.shell--erp`/`.shell--pos`: este documento extiende `base.html`
+       directamente (documento imprimible aislado, sin sidebar/topbar),
+       arquitectura ya confirmada y deliberadamente sin resolver en
+       docs/pos-redesign-final-direction.md §16. `.recibo-total` usa el
+       valor real de `--color-primario` de Atlas (#1D4E89, el mismo de
+       design-system-erp.css) escrito literal porque esa variable no
+       está disponible fuera de `.shell--erp` — no es un color nuevo. */
+    .recibo-num { text-align: right; }
+    .recibo-cifra { font-variant-numeric: tabular-nums; }
+    .recibo-total { font-size: 1.375rem; font-weight: 700; color: #1D4E89; }
+    .recibo-resumen { display: grid; grid-template-columns: auto 1fr; gap: var(--espacio-1) var(--espacio-3); margin: var(--espacio-4) 0; }
+    .recibo-resumen dt { color: var(--color-texto-tenue); }
+    .recibo-resumen dd { margin: 0; }
+    /* Bloque 7 — fila de acciones (Imprimir/Volver): mismo defecto real
+       ya corregido en Bloques 2 y 4 (flex sin flex-wrap), aplicado aquí
+       con el mismo criterio de reglas locales del Bloque 6. */
+    .recibo-acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); margin-bottom: var(--espacio-4); }
 </style>
 <div class="documento-imprimible">
-    <div class="no-imprimir" style="margin-bottom: var(--espacio-4); display:flex; gap: var(--espacio-2);">
+    <div class="no-imprimir recibo-acciones">
         <button type="button" class="btn btn--primario" onclick="window.print()">Imprimir / Guardar PDF</button>
         <a class="btn btn--contorno" href="{% url 'sales:sale_detail' sale.pk %}">Volver</a>
+        <a class="btn btn--contorno" href="{% url 'sales:sale_return_create' sale.pk %}">Registrar devolución</a>
     </div>
 
     <h1>{{ request.tenant.name }}</h1>
     <h2>Recibo — Venta {{ sale.number }}</h2>
-    <p>
-        <strong>Cliente:</strong> {% if sale.customer %}{{ sale.customer.display_name }}{% else %}Consumidor final{% endif %}<br>
-        <strong>Fecha:</strong> {{ sale.issue_date|date:"d M Y" }}<br>
-        <strong>Vendedor:</strong> {% firstof sale.salesperson.get_full_name sale.salesperson.email "—" %}<br>
-        <strong>Estado:</strong> {{ sale.get_status_display }} · {{ sale.get_payment_status_display }}
-    </p>
+    <dl class="recibo-resumen">
+        <dt>Cliente</dt><dd>{% if sale.customer %}{{ sale.customer.display_name }}{% else %}Consumidor final{% endif %}</dd>
+        <dt>Fecha</dt><dd>{{ sale.issue_date|date:"d M Y" }}</dd>
+        <dt>Vendedor</dt><dd>{% firstof sale.salesperson.get_full_name sale.salesperson.email "—" %}</dd>
+        <dt>Estado</dt><dd><span class="badge badge--azul">{{ sale.get_status_display }}</span> <span class="badge badge--azul">{{ sale.get_payment_status_display }}</span></dd>
+    </dl>
 
     <div class="tabla-envoltorio">
         <table class="tabla">
-            <thead><tr><th>Producto</th><th>IMEI/Serie</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Impuesto</th><th>Total</th></tr></thead>
+            <thead><tr><th>Producto</th><th>IMEI/Serie</th><th class="recibo-num">Cantidad</th><th class="recibo-num">Precio unitario</th><th class="recibo-num">Descuento</th><th class="recibo-num">Impuesto</th><th class="recibo-num">Total</th></tr></thead>
             <tbody>
                 {% for item in items %}
                 <tr>
                     <td>{{ item.description }} ({{ item.sku_snapshot }})</td>
                     <td>{% if item.inventory_unit %}{% firstof item.inventory_unit.serial item.inventory_unit.imei_1 %}{% else %}—{% endif %}</td>
-                    <td>{{ item.quantity|floatformat:"-3" }}</td>
-                    <td>${{ item.unit_price }}</td>
-                    <td>${{ item.discount_amount }}</td>
-                    <td>${{ item.tax_amount }}</td>
-                    <td>${{ item.total }}</td>
+                    <td class="recibo-num recibo-cifra">{{ item.quantity|floatformat:"-3" }}</td>
+                    <td class="recibo-num recibo-cifra">${{ item.unit_price }}</td>
+                    <td class="recibo-num recibo-cifra">${{ item.discount_amount }}</td>
+                    <td class="recibo-num recibo-cifra">${{ item.tax_amount }}</td>
+                    <td class="recibo-num recibo-cifra">${{ item.total }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -45,20 +71,28 @@
     </div>
 
     <p style="text-align:right; margin-top: var(--espacio-4);">
-        Subtotal: ${{ sale.subtotal }}<br>
-        Descuento: ${{ sale.discount_total }}<br>
-        Impuesto: ${{ sale.tax_total }}<br>
-        <strong>Total: ${{ sale.total }} {{ sale.currency }}</strong>
+        <span class="recibo-cifra">Subtotal: ${{ sale.subtotal }}</span><br>
+        <span class="recibo-cifra">Descuento: ${{ sale.discount_total }}</span><br>
+        <span class="recibo-cifra">Impuesto: ${{ sale.tax_total }}</span><br>
+        <strong class="recibo-cifra recibo-total">Total: ${{ sale.total }} {{ sale.currency }}</strong>
     </p>
 
     <div class="tabla-envoltorio">
         <table class="tabla">
-            <thead><tr><th>Pagos</th><th>Método</th><th>Monto</th></tr></thead>
+            <thead><tr><th>Pagos</th><th>Método</th><th class="recibo-num">Monto</th>{% if hubo_cambio %}<th class="recibo-num">Recibido</th><th class="recibo-num">Cambio</th>{% endif %}</tr></thead>
             <tbody>
                 {% for pago in payments %}
-                <tr><td></td><td>{{ pago.payment.get_method_display }}</td><td>${{ pago.amount }}</td></tr>
+                <tr>
+                    <td></td>
+                    <td>{{ pago.payment.get_method_display }}</td>
+                    <td class="recibo-num recibo-cifra">${{ pago.amount }}</td>
+                    {% if hubo_cambio %}
+                    <td class="recibo-num recibo-cifra">{% if pago.payment.amount_received %}${{ pago.payment.amount_received }}{% else %}—{% endif %}</td>
+                    <td class="recibo-num recibo-cifra">${{ pago.payment.change_amount }}</td>
+                    {% endif %}
+                </tr>
                 {% empty %}
-                <tr><td colspan="3">Sin pagos registrados</td></tr>
+                <tr><td colspan="{% if hubo_cambio %}5{% else %}3{% endif %}">Sin pagos registrados</td></tr>
                 {% endfor %}
             </tbody>
         </table>

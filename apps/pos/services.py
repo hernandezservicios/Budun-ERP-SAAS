@@ -424,6 +424,10 @@ def remove_cart_item(item):
     return sales_services.remove_sale_item(item)
 
 
+def update_cart_item_quantity(item, quantity):
+    return sales_services.update_sale_item_quantity(item, quantity)
+
+
 def set_cart_customer(sale, customer):
     """Cambiar el cliente de un carrito en `DRAFT` — venta de mostrador
     (`customer=None`) sigue siendo válida en cualquier momento."""
@@ -489,6 +493,7 @@ def checkout_sale(sale, *, user, tenant, payments, cash_session=None, use_credit
         payment = sales_services.record_payment_for_sale(
             venta_confirmada, method=pago["method"], amount=pago["amount"], user=user,
             reference=pago.get("reference", ""),
+            amount_received=pago.get("amount_received"), change_amount=pago.get("change_amount"),
         )
         pagos_creados.append(payment)
         if pago["method"] == PaymentMethod.CASH:

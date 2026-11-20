@@ -91,6 +91,45 @@ class PaymentServiceTests(SalesTestCase):
         self.assertIn(SalesActivityLog.Action.PAYMENT_RECORDED, acciones_pago)
 
 
+class PaymentChangeAmountTests(SalesTestCase):
+    """FASE 7 — BLOQUE B: `amount_received`/`change_amount` son
+    exclusivos del checkout POS (`apps.pos.services.checkout_sale`) —
+    `create_payment`/`record_payment_for_sale` solo los PERSISTEN, la
+    computación real vive en `CheckoutView` (ver `apps/pos/tests/`).
+    Aquí se prueba únicamente que el ledger los conserva correctamente
+    y que todo otro llamador (cobros, anticipos, pago directo de
+    factura) que no los indica sigue funcionando exactamente igual que
+    antes de este bloque."""
+
+    def setUp(self):
+        super().setUp()
+        self.sale = services.create_sale(self.tenant, user=self.user, customer=self.customer)
+        services.add_sale_item(self.sale, product=self.producto_cantidad, quantity=Decimal("1"), user=self.user)  # total = 23.60
+        self.sale = services.confirm_sale(self.sale, self.user)
+
+    def test_persiste_amount_received_y_change_amount_cuando_se_indican(self):
+        payment = services.record_payment_for_sale(
+            self.sale, method="cash", amount=self.sale.total, user=self.user,
+            amount_received=Decimal("30.00"), change_amount=Decimal("6.40"),
+        )
+        payment.refresh_from_db()
+        self.assertEqual(payment.amount_received, Decimal("30.00"))
+        self.assertEqual(payment.change_amount, Decimal("6.40"))
+        self.assertIsInstance(payment.change_amount, Decimal)
+        self.assertIsInstance(payment.amount_received, Decimal)
+        # `amount` (lo aplicado a la venta) nunca cambia de significado.
+        self.assertEqual(payment.amount, self.sale.total)
+
+    def test_sin_indicarlos_amount_received_queda_nulo_y_change_amount_en_cero(self):
+        # Mismo patrón que un cobro/anticipo/pago directo de factura
+        # (ninguno de esos flujos pasa estos kwargs) — no debe romperse
+        # ni inventar un cambio donde no se declaró ninguno.
+        payment = services.record_payment_for_sale(self.sale, method="cash", amount=Decimal("10"), user=self.user)
+        payment.refresh_from_db()
+        self.assertIsNone(payment.amount_received)
+        self.assertEqual(payment.change_amount, Decimal("0"))
+
+
 class PaymentAllocationServiceTests(SalesTestCase):
     """Cobertura directa de la extensión "Payment / PaymentAllocation":
     un pago aplicado a varias facturas del mismo cliente, límites de
