@@ -19,6 +19,7 @@ entre sí — sí garantiza, en ambos casos, que el contenido es realmente
 un documento de ese formato general y no un ejecutable/script disfrazado.
 """
 
+import ntpath
 import os
 
 from django.core.exceptions import ValidationError
@@ -105,7 +106,9 @@ def nombre_original_seguro(nombre):
     valor (ver `models._ruta_documento_cliente`/`_ruta_documento_proveedor`,
     que generan un nombre aleatorio). Elimina separadores de ruta
     (defensa contra path traversal) y caracteres no imprimibles."""
-    nombre = os.path.basename((nombre or "").strip())
+    # Usar ntpath.basename para extraer el nombre base soportando tanto
+    # separadores Windows ('\') como Unix ('/') en cualquier sistema operativo.
+    nombre = ntpath.basename((nombre or "").strip())
     nombre = nombre.replace("\\", "_").replace("/", "_")
     nombre = "".join(caracter for caracter in nombre if caracter.isprintable())
     return nombre[:255] or "documento"
