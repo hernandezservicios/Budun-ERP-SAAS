@@ -176,11 +176,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": os.environ.get("DB_ENGINE", "django.db.backends.postgresql"),
-        "NAME": os.environ.get("DB_NAME", "erp_saas_dev"),
-        "USER": os.environ.get("DB_USER", "erp_saas_app"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-        "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
-        "PORT": os.environ.get("DB_PORT", "5432"),
+        "NAME": os.environ.get("DB_NAME") or os.environ.get("POSTGRES_DB", "erp_saas_dev"),
+        "USER": os.environ.get("DB_USER") or os.environ.get("POSTGRES_USER", "erp_saas_app"),
+        "PASSWORD": os.environ.get("DB_PASSWORD") or os.environ.get("POSTGRES_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST") or os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("DB_PORT") or os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
 
